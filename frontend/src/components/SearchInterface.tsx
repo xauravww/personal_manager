@@ -1,0 +1,430 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Search,
+  Menu,
+  X,
+  History,
+  BookOpen,
+  Zap,
+  Brain,
+  GraduationCap,
+  ChevronDown,
+  ExternalLink,
+  FileText,
+  Image,
+  StickyNote,
+  Tag,
+  Loader2,
+  Bot,
+  User,
+  Plus
+} from 'lucide-react';
+import { apiClient } from '../api/client';
+
+interface SearchResult {
+  id: string;
+  title: string;
+  type: 'document' | 'image' | 'note' | 'task';
+  content: string;
+  tags: string[];
+  createdAt: string;
+  relevance: number;
+  url?: string;
+}
+
+interface Citation {
+  id: string;
+  title: string;
+  url: string;
+  snippet: string;
+}
+
+interface ConversationMessage {
+  id: string;
+  type: 'user' | 'ai';
+  content: string;
+  timestamp: Date;
+  results?: SearchResult[];
+  citations?: Citation[];
+  structuredAnswer?: string;
+}
+
+type FocusMode = 'general' | 'deep-research' | 'quick-search' | 'academic';
+
+const SearchInterface: React.FC = () => {
+  const [query, setQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [focusMode, setFocusMode] = useState<FocusMode>('general');
+  const [enabledModes, setEnabledModes] = useState<FocusMode[]>(['general', 'deep-research', 'quick-search', 'academic']);
+  const [searchHistory, setSearchHistory] = useState<string[]>([]);
+  const [conversation, setConversation] = useState<ConversationMessage[]>([
+    {
+      id: '1',
+      type: 'ai',
+      content: 'Hello! I\'m your AI assistant. Ask me anything about your resources, and I\'ll help you find what you need.',
+      timestamp: new Date()
+    }
+  ]);
+
+  const focusModes = [
+    { id: 'general' as FocusMode, label: 'General', icon: BookOpen, description: 'Balanced search across all resources' },
+    { id: 'deep-research' as FocusMode, label: 'Deep Research', icon: Brain, description: 'In-depth analysis and comprehensive results' },
+    { id: 'quick-search' as FocusMode, label: 'Quick Search', icon: Zap, description: 'Fast results for immediate needs' },
+    { id: 'academic' as FocusMode, label: 'Academic', icon: GraduationCap, description: 'Scholarly sources and detailed citations' }
+  ];
+
+  useEffect(() => {
+    const history = localStorage.getItem('searchHistory');
+    if (history) {
+      setSearchHistory(JSON.parse(history));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!enabledModes.includes(focusMode)) {
+      setFocusMode('general');
+    }
+  }, [enabledModes, focusMode]);
+
+  const handleSearch = async (searchQuery: string) => {
+    if (!searchQuery.trim()) return;
+
+    setIsLoading(true);
+
+    // Add to history
+    const newHistory = [searchQuery, ...searchHistory.filter(h => h !== searchQuery)].slice(0, 10);
+    setSearchHistory(newHistory);
+    localStorage.setItem('searchHistory', JSON.stringify(newHistory));
+
+    // Add user message
+    const userMessage: ConversationMessage = {
+      id: Date.now().toString(),
+      type: 'user',
+      content: searchQuery,
+      timestamp: new Date()
+    };
+
+    setConversation(prev => [...prev, userMessage]);
+
+    try {
+      // Call the search API with focus mode consideration
+      const searchParams: any = {
+        q: searchQuery,
+        limit: focusMode === 'deep-research' ? 20 : 10
+      };
+
+      // Adjust search based on focus mode
+      if (focusMode === 'academic') {
+        searchParams.type = 'document';
+      }
+
+      const response = await apiClient.searchResources(searchParams);
+
+      let aiContent = '';
+      let structuredAnswer = '';
+      let results: SearchResult[] = [];
+      let citations: Citation[] = [];
+
+      if (response.success && response.data) {
+        const searchResults = response.data.resources;
+        results = searchResults.map(resource => ({
+          id: resource.id,
+          title: resource.title,
+          type: resource.type as SearchResult['type'],
+          content: resource.content || resource.description || '',
+          tags: resource.tags.map(tag => tag.name),
+          createdAt: new Date(resource.created_at).toLocaleDateString(),
+          relevance: 0.9,
+          url: resource.url
+        }));
+
+        // Generate structured answer based on focus mode
+        if (focusMode === 'deep-research') {
+          structuredAnswer = `Based on a comprehensive search, I found ${results.length} relevant resources. Here's a detailed analysis:\n\n**Key Findings:**\n${results.slice(0, 3).map(r => `- ${r.title}: ${r.content.substring(0, 100)}...`).join('\n')}`;
+          aiContent = structuredAnswer;
+        } else if (focusMode === 'academic') {
+          aiContent = `Academic search results for "${searchQuery}". Found ${results.length} scholarly resources with detailed citations.`;
+        } else {
+          aiContent = `I found ${results.length} resources related to "${searchQuery}".`;
+        }
+
+        // Generate citations
+        citations = results.map((result, index) => ({
+          id: (index + 1).toString(),
+          title: result.title,
+          url: result.url || '#',
+          snippet: result.content.substring(0, 150) + '...'
+        }));
+      } else {
+        aiContent = `I couldn't find any resources related to "${searchQuery}". Try different keywords or adjust your focus mode.`;
+      }
+
+      const aiMessage: ConversationMessage = {
+        id: (Date.now() + 1).toString(),
+        type: 'ai',
+        content: aiContent,
+        structuredAnswer,
+        timestamp: new Date(),
+        results: results.length > 0 ? results : undefined,
+        citations: citations.length > 0 ? citations : undefined
+      };
+
+      setConversation(prev => [...prev, aiMessage]);
+    } catch (error) {
+      const aiMessage: ConversationMessage = {
+        id: (Date.now() + 1).toString(),
+        type: 'ai',
+        content: 'Sorry, I encountered an error while searching. Please try again.',
+        timestamp: new Date()
+      };
+
+      setConversation(prev => [...prev, aiMessage]);
+    } finally {
+      setIsLoading(false);
+      setQuery('');
+    }
+  };
+
+  const handleHistoryClick = (historyQuery: string) => {
+    setQuery(historyQuery);
+    handleSearch(historyQuery);
+  };
+
+  const removeHistoryItem = (item: string) => {
+    const newHistory = searchHistory.filter(h => h !== item);
+    setSearchHistory(newHistory);
+    localStorage.setItem('searchHistory', JSON.stringify(newHistory));
+  };
+
+  const getTypeIcon = (type: SearchResult['type']) => {
+    switch (type) {
+      case 'document':
+        return <FileText className="w-5 h-5 text-blue-500" strokeWidth={1.5} />;
+      case 'image':
+        return <Image className="w-5 h-5 text-green-500" strokeWidth={1.5} />;
+      case 'note':
+        return <StickyNote className="w-5 h-5 text-yellow-500" strokeWidth={1.5} />;
+      default:
+        return <FileText className="w-5 h-5 text-gray-500" strokeWidth={1.5} />;
+    }
+  };
+
+  const renderCitations = (citations: Citation[]) => (
+    <div className="mt-4 border-t border-gray-200 pt-4">
+      <h4 className="text-sm font-medium text-gray-700 mb-2">Sources</h4>
+      <div className="space-y-2">
+        {citations.map((citation) => (
+          <div key={citation.id} className="flex items-start gap-2 text-sm">
+            <span className="text-blue-500 font-medium">[{citation.id}]</span>
+            <div className="flex-1">
+              <a href={citation.url} className="text-blue-600 hover:underline flex items-center gap-1">
+                {citation.title}
+                <ExternalLink className="w-3 h-3" strokeWidth={1.5} />
+              </a>
+              <p className="text-gray-600 mt-1">{citation.snippet}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex">
+      {/* Sidebar */}
+      <div className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} fixed inset-y-0 left-0 z-50 w-80 bg-white border-r border-gray-200 transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0`}>
+        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-900">Search Options</h2>
+          <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-gray-500 hover:text-gray-700">
+            <X className="w-6 h-6" strokeWidth={1.5} />
+          </button>
+        </div>
+
+        <div className="p-4 space-y-6">
+          {/* Search History */}
+          <div>
+            <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
+              <History className="w-4 h-4" strokeWidth={1.5} />
+              Recent Searches
+            </h3>
+            <div className="space-y-1">
+              {searchHistory.slice(0, 5).map((item, index) => (
+                <div key={index} className="flex items-center justify-between p-2 text-sm text-gray-600 hover:bg-gray-50 rounded transition-colors">
+                  <button
+                    onClick={() => handleHistoryClick(item)}
+                    className="flex-1 text-left truncate"
+                  >
+                    {item}
+                  </button>
+                  <button
+                    onClick={() => removeHistoryItem(item)}
+                    className="text-gray-400 hover:text-red-500 ml-2"
+                  >
+                    <X className="w-4 h-4" strokeWidth={1.5} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col">
+        {/* Header */}
+        <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between lg:px-6">
+          <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-gray-500 hover:text-gray-700">
+            <Menu className="w-6 h-6" strokeWidth={1.5} />
+          </button>
+          <div className="flex-1 max-w-2xl mx-auto">
+            <h1 className="text-xl font-semibold text-gray-900 text-center">Personal Resource Manager</h1>
+          </div>
+          <div className="w-6 lg:w-0"></div> {/* Spacer */}
+        </header>
+
+        {/* Search Bar */}
+        <div className="bg-white border-b border-gray-200 px-4 py-8 lg:px-6">
+          <div className="max-w-2xl mx-auto">
+            <div className="relative">
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyPress={(e) => e.key === 'Enter' && handleSearch(query)}
+                placeholder="Ask me anything about your resources..."
+                className="w-full px-6 py-4 bg-gray-50 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg shadow-sm"
+              />
+              <button
+                onClick={() => handleSearch(query)}
+                className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-blue-500 transition-colors"
+              >
+                <Search className="w-6 h-6" strokeWidth={1.5} />
+              </button>
+            </div>
+            <div className="flex items-center justify-center mt-4 text-sm text-gray-500">
+              <span className="px-3 py-1 bg-gray-100 rounded-full">{focusModes.find(m => m.id === focusMode)?.label}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Focus Mode Capsules */}
+        <div className="bg-white border-b border-gray-200 px-4 py-4 lg:px-6">
+          <div className="max-w-2xl mx-auto">
+            <div className="flex items-center gap-2 flex-wrap">
+              {enabledModes.map((modeId) => {
+                const mode = focusModes.find(m => m.id === modeId);
+                if (!mode) return null;
+                return (
+                  <button
+                    key={modeId}
+                    onClick={() => setFocusMode(modeId)}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-full text-sm transition-colors ${
+                      focusMode === modeId ? 'bg-blue-100 text-blue-800 border border-blue-300' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    <mode.icon className="w-4 h-4" strokeWidth={1.5} />
+                    {mode.label}
+                    <X
+                      className="w-3 h-3 ml-1 hover:text-red-500"
+                      strokeWidth={1.5}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEnabledModes(enabledModes.filter(m => m !== modeId));
+                      }}
+                    />
+                  </button>
+                );
+              })}
+              {enabledModes.length < focusModes.length && (
+                <button
+                  onClick={() => setEnabledModes(focusModes.map(m => m.id))}
+                  className="flex items-center gap-2 px-3 py-2 rounded-full text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                >
+                  <Plus className="w-4 h-4" strokeWidth={1.5} />
+                  Add Mode
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Conversation */}
+        <div className="flex-1 overflow-y-auto px-4 py-6 lg:px-6">
+          <div className="max-w-4xl mx-auto space-y-6">
+            {conversation.map((message) => (
+              <div key={message.id} className="flex gap-4">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                  message.type === 'user' ? 'bg-blue-500 text-white' : 'bg-green-500 text-white'
+                }`}>
+                  {message.type === 'user' ? <User className="w-4 h-4" strokeWidth={1.5} /> : <Bot className="w-4 h-4" strokeWidth={1.5} />}
+                </div>
+                <div className="flex-1 space-y-4">
+                  <div className="prose prose-gray max-w-none">
+                    <p className="text-gray-800 leading-relaxed">{message.content}</p>
+                  </div>
+
+                  {message.results && (
+                    <div className="grid gap-3 md:grid-cols-2">
+                      {message.results.map((result) => (
+                        <div key={result.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer">
+                          <div className="flex items-start gap-3">
+                            {getTypeIcon(result.type)}
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-medium text-gray-900 truncate">{result.title}</h4>
+                              <p className="text-sm text-gray-600 mt-1 line-clamp-2">{result.content}</p>
+                              <div className="flex items-center justify-between mt-3">
+                                <span className="text-xs text-gray-500">{result.createdAt}</span>
+                                <div className="flex gap-1">
+                                  {result.tags.slice(0, 2).map((tag) => (
+                                    <span key={tag} className="inline-flex items-center px-2 py-1 rounded-full text-xs bg-blue-100 text-blue-800">
+                                      <Tag className="w-3 h-3 mr-1" strokeWidth={1.5} />
+                                      {tag}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {message.citations && renderCitations(message.citations)}
+
+                  <div className="text-xs text-gray-500">
+                    {message.timestamp.toLocaleTimeString()}
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {/* Loading State */}
+            {isLoading && (
+              <div className="flex gap-4">
+                <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-white">
+                  <Bot className="w-4 h-4" strokeWidth={1.5} />
+                </div>
+                <div className="flex-1 space-y-2">
+                  <div className="animate-pulse bg-gray-200 h-4 rounded w-3/4"></div>
+                  <div className="animate-pulse bg-gray-200 h-4 rounded w-1/2"></div>
+                  <div className="animate-pulse bg-gray-200 h-4 rounded w-2/3"></div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Overlay for mobile sidebar */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" onClick={() => setSidebarOpen(false)}></div>
+      )}
+    </div>
+  );
+};
+
+export default SearchInterface;

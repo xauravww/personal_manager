@@ -53,7 +53,7 @@ function decodeResponseData(data: any, contentType?: string): string {
         try {
           const decompressed = zlib.inflateSync(data);
           return decompressed.toString('utf-8');
-        } catch (deflateError) {
+          } catch {
           // Not deflate, try as raw buffer
           return data.toString('utf-8');
         }
@@ -76,11 +76,11 @@ function decodeResponseData(data: any, contentType?: string): string {
         // For non-UTF-8 charsets, convert using Buffer
         // This handles cases where axios incorrectly assumes UTF-8
         const buffer = Buffer.from(data, 'latin1'); // Use latin1 for binary-like data
-        return buffer.toString(charset as BufferEncoding);
-      } catch (error) {
-        console.warn(`Failed to decode with charset ${charset}, falling back to UTF-8:`, error);
-        return data; // Return original data as fallback
-      }
+        return buffer.toString(charset as any);
+    } catch (_error) {
+         console.warn(`Failed to decode with charset ${charset}, falling back to UTF-8:`, _error);
+         return data; // Return original data as fallback
+       }
     }
   }
 
@@ -256,11 +256,11 @@ export async function readUrlContent(
   let parsedUrl: URL;
   try {
     parsedUrl = new URL(url);
-  } catch (error) {
-    const errorMsg = `Invalid URL format: ${url}. Please provide a valid URL starting with http:// or https://.`;
-    console.error(errorMsg);
-    throw new Error(errorMsg);
-  }
+   } catch {
+     const errorMsg = `Invalid URL format: ${url}. Please provide a valid URL starting with http:// or https://.`;
+     console.error(errorMsg);
+     throw new Error(errorMsg);
+   }
 
   try {
     const fetchContent = async () => {

@@ -88,6 +88,13 @@ const SearchInterface: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
   const [query, setQuery] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [researchProgress, setResearchProgress] = useState<{
+    active: boolean;
+    phase: string;
+    step: number;
+    totalSteps: number;
+    details: string;
+  } | null>(null);
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const [conversation, setConversation] = useState<ConversationMessage[]>([
@@ -108,6 +115,7 @@ const SearchInterface: React.FC = () => {
         timestamp: new Date()
       }
     ]);
+    setResearchProgress(null);
   };
 
   useEffect(() => {
@@ -124,6 +132,7 @@ const SearchInterface: React.FC = () => {
     if (!searchQuery.trim()) return;
 
     setIsLoading(true);
+    setResearchProgress(null); // Clear any previous progress
 
     // Add to history
     const newHistory = [searchQuery, ...searchHistory.filter(h => h !== searchQuery)].slice(0, 10);
@@ -140,7 +149,28 @@ const SearchInterface: React.FC = () => {
 
     setConversation(prev => [...prev, userMessage]);
 
+    // Initialize progress for deep research mode
+    if (focusMode === 'deep-research') {
+      setResearchProgress({
+        active: true,
+        phase: 'Initializing Research',
+        step: 1,
+        totalSteps: 5,
+        details: 'Analyzing your query and planning research approach...'
+      });
+    }
+
     try {
+      // Update progress for URL detection
+      if (focusMode === 'deep-research') {
+        setResearchProgress(prev => prev ? {
+          ...prev,
+          phase: 'Query Analysis',
+          step: 2,
+          details: 'Checking if this is a direct URL or search query...'
+        } : null);
+      }
+
       // Check if query is JUST a URL
       const urlRegex = /^https?:\/\/[^\s]+$/i;
       const trimmedQuery = searchQuery.trim();
@@ -168,6 +198,16 @@ const SearchInterface: React.FC = () => {
 
         setConversation(prev => [...prev, aiMessage]);
       } else {
+        // Update progress for search execution
+        if (focusMode === 'deep-research') {
+          setResearchProgress(prev => prev ? {
+            ...prev,
+            phase: 'Executing Search',
+            step: 3,
+            details: 'Searching your resources and analyzing with AI...'
+          } : null);
+        }
+
         // Use AI-enhanced search that determines intent and combines sources
         const response = await apiClient.searchResources({
           q: searchQuery,
@@ -213,6 +253,16 @@ const SearchInterface: React.FC = () => {
               console.log('Web search failed, continuing with local results only:', webError);
             }
           }
+        }
+
+        // Update progress for results processing
+        if (focusMode === 'deep-research') {
+          setResearchProgress(prev => prev ? {
+            ...prev,
+            phase: 'Processing Results',
+            step: 4,
+            details: 'Analyzing search results and preparing comprehensive response...'
+          } : null);
         }
 
         // Generate AI-enhanced response
@@ -263,6 +313,20 @@ const SearchInterface: React.FC = () => {
 
         setConversation(prev => [...prev, aiMessage]);
       }
+
+      // Final progress update
+      if (focusMode === 'deep-research') {
+        setResearchProgress(prev => prev ? {
+          ...prev,
+          phase: 'Research Complete',
+          step: 5,
+          totalSteps: 5,
+          details: 'Research completed successfully!'
+        } : null);
+
+        // Clear progress after a short delay
+        setTimeout(() => setResearchProgress(null), 2000);
+      }
     } catch (error) {
       const aiMessage: ConversationMessage = {
         id: (Date.now() + 1).toString(),
@@ -272,6 +336,9 @@ const SearchInterface: React.FC = () => {
       };
 
       setConversation(prev => [...prev, aiMessage]);
+
+      // Clear progress on error
+      setResearchProgress(null);
     } finally {
       setIsLoading(false);
       setQuery('');
@@ -499,6 +566,36 @@ const SearchInterface: React.FC = () => {
             )}
           </div>
         </div>
+
+        {/* Research Progress Indicator */}
+        {researchProgress?.active && (
+          <div className="bg-white border-b border-gray-200 px-4 py-4 lg:px-6">
+            <div className="max-w-2xl mx-auto">
+              <div className="flex items-center gap-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex-shrink-0">
+                  <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
+                    <Brain className="w-4 h-4 text-white animate-pulse" strokeWidth={1.5} />
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-sm font-medium text-blue-800">{researchProgress.phase}</h3>
+                    <span className="text-xs text-blue-600">
+                      Step {researchProgress.step} of {researchProgress.totalSteps}
+                    </span>
+                  </div>
+                  <div className="w-full bg-blue-200 rounded-full h-2 mb-2">
+                    <div
+                      className="bg-blue-500 h-2 rounded-full transition-all duration-300 ease-out"
+                      style={{ width: `${(researchProgress.step / researchProgress.totalSteps) * 100}%` }}
+                    ></div>
+                  </div>
+                  <p className="text-xs text-blue-700">{researchProgress.details}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Main Content Area */}
         <div className="flex-1 px-4 py-6 lg:px-6 overflow-y-auto">

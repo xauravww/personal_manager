@@ -160,7 +160,7 @@ class AIService {
           { role: 'user', content: userQuery }
         ],
         temperature: 0.3,
-        max_tokens: 200,
+
       });
 
       const content = response.choices[0]?.message?.content;
@@ -210,7 +210,6 @@ class AIService {
           }
         ],
         temperature: 0.5,
-        max_tokens: 100,
       });
 
       const content = response.choices[0]?.message?.content?.trim();
@@ -220,7 +219,7 @@ class AIService {
           return Array.isArray(suggestions) ? suggestions.slice(0, 5) : [];
         } catch {
           // Fallback: extract from text
-          return content.split(',').map(s => s.trim().replace(/["\[\]]/g, '')).filter(s => s.length > 0).slice(0, 5);
+            return content.split(',').map(s => s.trim().replace(/["[\]]/g, '')).filter(s => s.length > 0).slice(0, 5);
         }
       }
       return [];
@@ -244,11 +243,11 @@ class AIService {
       weekday: 'long'
     });
 
-    const systemPrompt = `You are a deep research assistant for a personal resource manager.
+    const systemPrompt = `You are a friendly deep research assistant for a personal resource manager.
     Current date and time: ${currentDateTime}
     The user is in deep research mode, which means they want comprehensive, sequential research on their query.
-    Provide a thoughtful response that acknowledges the research approach and offers to help with systematic investigation.
-    Keep responses informative but not overwhelming. Focus on the research methodology.`;
+    Provide a thoughtful, friendly response that offers to help with systematic investigation.
+    Keep responses informative but not overwhelming. Be conversational and engaging.`;
 
     try {
       const response = await this.createChatCompletion({
@@ -258,7 +257,6 @@ class AIService {
           { role: 'user', content: userQuery }
         ],
         temperature: 0.6,
-        max_tokens: 200,
       });
 
       return response.choices[0]?.message?.content?.trim() || "I'll help you conduct deep research on this topic. Let me gather comprehensive information for you.";
@@ -285,7 +283,7 @@ class AIService {
 
     let modeSpecificInstructions = '';
     if (focusMode === 'deep-research') {
-      modeSpecificInstructions = 'You are in deep research mode. Provide comprehensive, well-researched responses. Acknowledge that you\'re using sequential thinking and thorough analysis.';
+      modeSpecificInstructions = 'You are in deep research mode. Provide comprehensive, well-researched responses in a friendly, conversational tone. Be helpful and engaging.';
     } else if (focusMode === 'quick-search') {
       modeSpecificInstructions = 'You are in quick search mode. Provide fast, direct answers focused on immediate needs. Keep responses brief and to the point.';
     } else if (focusMode === 'academic') {
@@ -294,7 +292,7 @@ class AIService {
       modeSpecificInstructions = 'You are in general mode. Provide balanced, helpful responses suitable for everyday use.';
     }
 
-    let systemPrompt = `You are a helpful AI assistant for a personal resource manager application.
+    let systemPrompt = `You are a friendly AI assistant for a personal resource manager application.
     Users can store and search through their notes, documents, videos, links, and other resources.
     Current date and time: ${currentDateTime}
     Focus mode: ${focusMode || 'general'}
@@ -317,7 +315,6 @@ class AIService {
           { role: 'user', content: userQuery }
         ],
         temperature: 0.7,
-        max_tokens: 150,
       });
 
       return response.choices[0]?.message?.content?.trim() || "I'm here to help you with your personal resources!";
@@ -342,7 +339,6 @@ class AIService {
           }
         ],
         temperature: 0.3,
-        max_tokens: 100,
       });
 
       return response.choices[0]?.message?.content?.trim() || content.substring(0, maxLength);
@@ -368,7 +364,6 @@ class AIService {
           }
         ],
         temperature: 0.3,
-        max_tokens: 50,
       });
 
       const tagsString = response.choices[0]?.message?.content?.trim() || '';
@@ -384,12 +379,16 @@ class AIService {
    */
   async generateResearchQueries(originalQuery: string, context?: string): Promise<string[]> {
     try {
-      const systemPrompt = `You are a research assistant helping to generate follow-up search queries for deep research.
+      let systemPrompt = `You are a research assistant helping to generate follow-up search queries for deep research.
       The user asked: "${originalQuery}"
       Generate 2-3 specific, relevant follow-up search queries that would provide deeper insights or related information.
       Focus on queries that would complement the original search and provide comprehensive coverage.
       Return only a JSON array of strings, like: ["query1", "query2", "query3"]
       Make queries specific and actionable.`;
+
+      if (context) {
+        systemPrompt += `\n\nRecent context: ${context}`;
+      }
 
       const response = await this.createChatCompletion({
         model: this.config.model,
@@ -398,7 +397,6 @@ class AIService {
           { role: 'user', content: originalQuery }
         ],
         temperature: 0.7,
-        max_tokens: 150,
       });
 
       const content = response.choices[0]?.message?.content?.trim();
@@ -408,7 +406,7 @@ class AIService {
           return Array.isArray(queries) ? queries.slice(0, 3) : [];
         } catch {
           // Fallback: extract from text
-          return content.split(',').map(q => q.trim().replace(/["\[\]]/g, '')).filter(q => q.length > 0).slice(0, 3);
+           return content.split(',').map(q => q.trim().replace(/["[\]]/g, '')).filter(q => q.length > 0).slice(0, 3);
         }
       }
       return [];
@@ -444,7 +442,6 @@ class AIService {
           { role: 'user', content: `Search results:\n${resultsText}` }
         ],
         temperature: 0.3,
-        max_tokens: 300,
       });
 
       const content = response.choices[0]?.message?.content?.trim();
@@ -491,7 +488,7 @@ class AIService {
           { role: 'user', content: `Content:\n${content.substring(0, 4000)}` } // Limit content length
         ],
         temperature: 0.1,
-        max_tokens: 200,
+
       });
 
       const content_response = response.choices[0]?.message?.content?.trim();
@@ -519,7 +516,12 @@ class AIService {
   /**
    * Execute sequential thinking for complex research tasks
    */
-  async executeSequentialThinking(query: string, context?: string): Promise<{
+  async executeSequentialThinking(query: string, context?: string, progressCallback?: (progress: {
+    phase: string;
+    step: number;
+    totalSteps: number;
+    details: string;
+  }) => void): Promise<{
     finalAnswer: string;
     thoughtProcess: Array<{
       thoughtNumber: number;
@@ -557,8 +559,24 @@ class AIService {
       weekday: 'long'
     });
 
+    // Initial progress update
+    progressCallback?.({
+      phase: 'Initializing Sequential Thinking',
+      step: 1,
+      totalSteps: totalThoughts,
+      details: 'Planning research approach and breaking down the problem...'
+    });
+
     try {
       while (nextThoughtNeeded && currentThought <= 15) { // Safety limit
+        // Progress update for current thought
+        progressCallback?.({
+          phase: `Executing Thought ${currentThought}`,
+          step: currentThought,
+          totalSteps: totalThoughts,
+          details: `Analyzing and planning next research step...`
+        });
+
         const systemPrompt = `You are executing sequential thinking for research. Current date/time: ${currentDateTime}
 
 Query: "${query}"
@@ -569,30 +587,31 @@ ${thoughtProcess.map(t => `Thought ${t.thoughtNumber}: ${t.thought}${t.action ? 
 Current thought: ${currentThought}/${totalThoughts}
 
 Instructions:
-1. Analyze the query and determine what information is needed
+1. Analyze the query and determine what specific information is needed
 2. Plan a research strategy with specific, actionable steps
 3. Execute searches, read URLs, or analyze data as needed
-4. Revise your approach if initial attempts fail
-5. Continue until you have a confident answer
+4. Synthesize information from multiple sources when possible
+5. Revise your approach if initial attempts fail
+6. Only provide a finalAnswer when you have concrete, verifiable information
 
 For this thought step, provide:
 {
-  "thought": "Your current analysis or plan",
+  "thought": "Your current analysis or plan - be specific about what you're looking for",
   "action": "Specific action to take (search, read_url, analyze, conclude)",
   "actionDetails": "Details for the action (search query, URL to read, etc.)",
   "nextThoughtNeeded": true/false,
   "totalThoughts": estimated_total_thoughts,
   "confidence": 0-100,
-  "finalAnswer": "only provide if confident in the answer"
+  "finalAnswer": "ONLY provide a concise, direct answer when you have high confidence (80%+) and concrete evidence. Keep it brief and factual."
 }
 
 Actions available:
 - "search": Perform a web search with the query
 - "read_url": Read and analyze a specific URL
-- "analyze": Analyze previous results
-- "conclude": Provide final answer
+- "analyze": Analyze previous results or synthesize information
+- "conclude": Provide final answer (only when confident)
 
-Be methodical and thorough. Don't rush to conclusions.`;
+Be methodical and thorough. Don't provide finalAnswer unless you have concrete evidence from your research.`;
 
         const response = await this.createChatCompletion({
           model: this.config.model,
@@ -601,7 +620,6 @@ Be methodical and thorough. Don't rush to conclusions.`;
             { role: 'user', content: `Execute thought step ${currentThought} for: ${query}` }
           ],
           temperature: 0.3,
-          max_tokens: 400,
         });
 
         const content = response.choices[0]?.message?.content?.trim();
@@ -613,6 +631,12 @@ Be methodical and thorough. Don't rush to conclusions.`;
           // Execute the action if specified
           let actionResult = '';
           if (thoughtResult.action && thoughtResult.actionDetails) {
+            progressCallback?.({
+              phase: `Executing Action: ${thoughtResult.action}`,
+              step: currentThought,
+              totalSteps: totalThoughts,
+              details: `Performing ${thoughtResult.action} with: ${thoughtResult.actionDetails.substring(0, 50)}...`
+            });
             actionResult = await this.executeThoughtAction(thoughtResult.action, thoughtResult.actionDetails, query);
           }
 
@@ -640,11 +664,28 @@ Be methodical and thorough. Don't rush to conclusions.`;
         }
       }
 
-      return {
-        finalAnswer: finalAnswer || 'Unable to find a confident answer through sequential thinking',
-        thoughtProcess,
-        confidence
-      };
+       // Final progress update
+       progressCallback?.({
+         phase: 'Sequential Thinking Complete',
+         step: totalThoughts,
+         totalSteps: totalThoughts,
+         details: confidence > 70 ? `Found confident answer with ${confidence}% certainty` : 'Synthesizing final answer from research...'
+       });
+
+       // If no high-confidence answer was found during thinking, try to synthesize one
+       if (!finalAnswer || confidence <= 70) {
+         const synthesis = await this.synthesizeFinalAnswer(query, thoughtProcess);
+         if (synthesis.confidence > confidence) {
+           finalAnswer = synthesis.answer;
+           confidence = synthesis.confidence;
+         }
+       }
+
+       return {
+         finalAnswer: finalAnswer || 'Unable to find a confident answer through sequential thinking',
+         thoughtProcess,
+         confidence
+       };
     } catch (error) {
       console.warn('Error in sequential thinking:', error);
       return {
@@ -658,10 +699,10 @@ Be methodical and thorough. Don't rush to conclusions.`;
   /**
    * Execute a specific action from sequential thinking
    */
-  private async executeThoughtAction(action: string, actionDetails: string, originalQuery: string): Promise<string> {
+  private async executeThoughtAction(action: string, actionDetails: string, _originalQuery: string): Promise<string> {
     try {
       switch (action) {
-        case 'search':
+        case 'search': {
           // Perform web search
           const searchUrl = `${process.env.WEB_SEARCH_URL}?q=${encodeURIComponent(actionDetails)}&format=json&pageno=1&time_range=month&categories=it,news&engines=duckduckgo,wikipedia&enabled_engines=duckduckgo,wikipedia&language=en&safesearch=1`;
           const searchResponse = await fetch(searchUrl, {
@@ -677,8 +718,9 @@ Be methodical and thorough. Don't rush to conclusions.`;
             return `Found ${results.length} results: ${results.map((r: any) => r.title).join(', ')}`;
           }
           return 'Search failed';
+        }
 
-        case 'read_url':
+        case 'read_url': {
           // Read URL content
           const { readUrlContent } = await import('../utils/urlReader');
           const content = await readUrlContent(actionDetails, 15000, {
@@ -686,6 +728,7 @@ Be methodical and thorough. Don't rush to conclusions.`;
             maxLength: 2000,
           });
           return `Content read (${content.length} chars): ${content.substring(0, 200)}...`;
+        }
 
         case 'analyze':
           return `Analysis completed for: ${actionDetails}`;
@@ -700,40 +743,102 @@ Be methodical and thorough. Don't rush to conclusions.`;
   }
 
   /**
-   * Get current date and time information
-   */
-  getCurrentDateTime(timezone: string = 'UTC'): {
-    full: string;
-    date: string;
-    time: string;
-    day: string;
-    timestamp: number;
-  } {
-    const now = new Date();
-    const options: Intl.DateTimeFormatOptions = {
-      timeZone: timezone,
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      weekday: 'long'
-    };
+    * Synthesize a final answer from the thought process
+    */
+   async synthesizeFinalAnswer(query: string, thoughtProcess: Array<{
+     thoughtNumber: number;
+     thought: string;
+     action?: string;
+     result?: string;
+     nextThoughtNeeded: boolean;
+   }>): Promise<{answer: string, confidence: number}> {
+     try {
+       const thoughtsText = thoughtProcess.map(t =>
+         `Thought ${t.thoughtNumber}: ${t.thought}${t.action ? ` | Action: ${t.action}` : ''}${t.result ? ` | Result: ${t.result}` : ''}`
+       ).join('\n');
 
-    const full = now.toLocaleString('en-US', options);
-    const date = now.toLocaleDateString('en-US', { timeZone: timezone, year: 'numeric', month: 'long', day: 'numeric' });
-    const time = now.toLocaleTimeString('en-US', { timeZone: timezone, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    const day = now.toLocaleDateString('en-US', { timeZone: timezone, weekday: 'long' });
+       const systemPrompt = `You are a research synthesizer. Analyze the thought process below and extract a concise, final answer to the query: "${query}"
 
-    return {
-      full,
-      date,
-      time,
-      day,
-      timestamp: now.getTime()
-    };
-  }
+Thought Process:
+${thoughtsText}
+
+Instructions:
+1. Look for concrete answers, facts, or conclusions reached during the research
+2. If multiple answers exist, choose the most reliable one based on evidence
+3. If no clear answer was found, state that clearly
+4. Provide a confidence score based on the quality and consistency of the evidence
+5. Keep the answer concise and direct
+
+Return a JSON object:
+{
+  "answer": "The synthesized final answer (or 'No confident answer found' if none exists)",
+  "confidence": 0-100 (based on evidence quality and consistency)
+}`;
+
+        const response = await this.createChatCompletion({
+          model: this.config.model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `Synthesize a final answer from this research on: ${query}` }
+          ],
+          temperature: 0.1,
+        });
+
+       const content = response.choices[0]?.message?.content?.trim();
+       if (content) {
+         try {
+           const synthesis = JSON.parse(content);
+           return {
+             answer: synthesis.answer || 'No confident answer found',
+             confidence: synthesis.confidence || 0
+           };
+         } catch (error) {
+           console.warn('Error parsing synthesis:', error);
+           return { answer: 'Unable to synthesize answer from research', confidence: 0 };
+         }
+       }
+       return { answer: 'Research completed but no clear answer synthesized', confidence: 0 };
+     } catch (error) {
+       console.warn('Error synthesizing final answer:', error);
+       return { answer: 'Error during answer synthesis', confidence: 0 };
+     }
+   }
+
+  /**
+    * Get current date and time information
+    */
+   getCurrentDateTime(timezone: string = 'UTC'): {
+     full: string;
+     date: string;
+     time: string;
+     day: string;
+     timestamp: number;
+   } {
+     const now = new Date();
+     const options: Intl.DateTimeFormatOptions = {
+       timeZone: timezone,
+       year: 'numeric',
+       month: 'long',
+       day: 'numeric',
+       hour: '2-digit',
+       minute: '2-digit',
+       second: '2-digit',
+       weekday: 'long'
+     };
+
+     const full = now.toLocaleString('en-US', options);
+     const date = now.toLocaleDateString('en-US', { timeZone: timezone, year: 'numeric', month: 'long', day: 'numeric' });
+     const time = now.toLocaleTimeString('en-US', { timeZone: timezone, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+     const day = now.toLocaleDateString('en-US', { timeZone: timezone, weekday: 'long' });
+
+     return {
+       full,
+       date,
+       time,
+       day,
+       timestamp: now.getTime()
+     };
+   }
 }
 
 // Export singleton instance

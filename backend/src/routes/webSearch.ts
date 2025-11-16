@@ -1,5 +1,5 @@
 import express from 'express';
-import { body, query, validationResult } from 'express-validator';
+import { body, validationResult } from 'express-validator';
 import { authenticateToken } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
 import { performWebSearch, formatWebSearchResults, WebSearchOptions } from '../utils/webSearch';

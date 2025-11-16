@@ -1,11 +1,10 @@
 import express from 'express';
-import { body, query, validationResult } from 'express-validator';
+import { query, validationResult } from 'express-validator';
 import prisma from '../config/database';
 import { authenticateToken } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
 import aiService from '../services/aiService';
 import { SearchResponse } from '../types';
-import { readUrlContent } from '../utils/urlReader';
 
 // Simple in-memory cache for recent search results (userId -> results)
 const recentSearchCache = new Map<string, any[]>();
@@ -330,86 +329,54 @@ router.get('/', [
     // Handle different focus modes
     let researchSummary: any = null;
 
-    if (!isChat && searchQuery) {
-      if (focusMode === 'deep-research') {
-        try {
-          console.log('Deep research mode activated - using sequential thinking for query:', searchQuery);
+     if (!isChat && searchQuery) {
+       if (focusMode === 'deep-research') {
+         try {
+           console.log('Deep research mode activated - using sequential thinking for query:', searchQuery);
 
-          // Use sequential thinking for complex research tasks
-          const recentResults = recentSearchCache.get(userId);
-          const contextString = recentResults ? recentResults.map(r => `${r.title}: ${r.content || r.description || ''}`).join('. ') : '';
-          const sequentialResult = await aiService.executeSequentialThinking(searchQuery, contextString);
-          console.log('Sequential thinking completed:', {
-            finalAnswer: sequentialResult.finalAnswer,
-            thoughtCount: sequentialResult.thoughtProcess.length,
-            confidence: sequentialResult.confidence
-          });
+           // Use sequential thinking for complex research tasks
+           const recentResults = recentSearchCache.get(userId);
+           const contextString = recentResults ? recentResults.map(r => `${r.title}: ${r.content || r.description || ''}`).join('. ') : '';
 
-          // Convert sequential thinking results to resources
-          if (sequentialResult.thoughtProcess.length > 0) {
-            // Add thought process as resources
-            const thoughtResources = sequentialResult.thoughtProcess.map((thought, index) => ({
-              id: `sequential-thought-${index}`,
-              title: `Thought ${thought.thoughtNumber}: ${thought.thought.substring(0, 50)}...`,
-              content: thought.thought,
-              type: 'document' as const,
-              url: null,
-              created_at: new Date(),
-              updated_at: new Date(),
-              description: `Action: ${thought.action || 'Analysis'} | Result: ${thought.result || 'Completed'}`,
-              file_path: null,
-              metadata: {
-                thoughtNumber: thought.thoughtNumber,
-                action: thought.action,
-                result: thought.result,
-                nextThoughtNeeded: thought.nextThoughtNeeded
-              },
-              user_id: userId,
-              embedding: null,
-              tags: [{ name: 'sequential-thinking', id: 'sequential-thinking' }]
-            }));
+           // Progress callback for logging sequential thinking progress
+           const progressCallback = (progress: { phase: string; step: number; totalSteps: number; details: string }) => {
+             console.log(`[Sequential Thinking] ${progress.phase} (${progress.step}/${progress.totalSteps}): ${progress.details}`);
+           };
 
-            response.resources = [
-              ...response.resources,
-              ...thoughtResources
-            ];
+           const sequentialResult = await aiService.executeSequentialThinking(searchQuery, contextString, progressCallback);
+           console.log('Sequential thinking completed:', {
+             finalAnswer: sequentialResult.finalAnswer,
+             thoughtCount: sequentialResult.thoughtProcess.length,
+             confidence: sequentialResult.confidence
+           });
 
-            // Add final answer as a highlighted resource if found
-            if (sequentialResult.finalAnswer && sequentialResult.confidence > 70) {
-              response.resources = [
-                ...response.resources,
-                {
-                  id: 'sequential-answer',
-                  title: `Sequential Thinking Result: ${sequentialResult.finalAnswer}`,
-                  content: `Through sequential thinking analysis, I found: ${sequentialResult.finalAnswer}`,
-                  type: 'document' as const,
-                  url: null,
-                  created_at: new Date(),
-                  updated_at: new Date(),
-                  description: `Confidence: ${sequentialResult.confidence}% | Thoughts: ${sequentialResult.thoughtProcess.length}`,
-                  file_path: null,
-                  metadata: {
-                    finalAnswer: sequentialResult.finalAnswer,
-                    confidence: sequentialResult.confidence,
-                    thoughtProcessLength: sequentialResult.thoughtProcess.length
-                  },
-                  user_id: userId,
-                  embedding: null,
-                  tags: [{ name: 'sequential-answer', id: 'sequential-answer' }]
-                }
-              ];
-            }
-          }
+           // Handle sequential thinking results
+           if (sequentialResult.finalAnswer && sequentialResult.confidence > 70) {
+             // High confidence answer found - set as chat response instead of resources
+             chatResponse = `**Deep Research Result:** ${sequentialResult.finalAnswer}\n\n*Confidence: ${sequentialResult.confidence}% | Research completed in ${sequentialResult.thoughtProcess.length} steps*`;
+             isChat = true; // Treat as chat response to avoid showing resources
+           } else if (sequentialResult.thoughtProcess.length > 0) {
+             // No confident answer, but we have thought process - show summary
+             const lastThought = sequentialResult.thoughtProcess[sequentialResult.thoughtProcess.length - 1];
+             chatResponse = `I conducted deep research on "${searchQuery}" but couldn't reach a confident conclusion. Here's what I found:\n\n**Latest Analysis:** ${lastThought.thought}\n\n*Research completed ${sequentialResult.thoughtProcess.length} steps with ${sequentialResult.confidence}% confidence. Try rephrasing your query or providing more context.*`;
+             isChat = true;
+           } else {
+             // No results at all
+             chatResponse = `I attempted deep research on "${searchQuery}" but encountered issues during the analysis. Please try again or use a different search approach.`;
+             isChat = true;
+           }
 
-          researchSummary = {
-            method: 'sequential-thinking',
-            finalAnswer: sequentialResult.finalAnswer,
-            confidence: sequentialResult.confidence,
-            thoughtCount: sequentialResult.thoughtProcess.length
-          };
-        } catch (error) {
-          console.warn('Deep research failed:', error);
-        }
+           researchSummary = {
+             method: 'sequential-thinking',
+             finalAnswer: sequentialResult.finalAnswer,
+             confidence: sequentialResult.confidence,
+             thoughtCount: sequentialResult.thoughtProcess.length
+           };
+         } catch (error) {
+           console.warn('Deep research failed:', error);
+           chatResponse = `Deep research failed for "${searchQuery}". Error: ${error instanceof Error ? error.message : 'Unknown error'}. Falling back to regular search.`;
+           isChat = true;
+         }
       } else if (focusMode === 'quick-search') {
         // Quick search mode - prioritize speed over depth
         console.log('Quick search mode activated for query:', searchQuery);

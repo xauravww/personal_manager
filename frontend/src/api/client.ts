@@ -266,6 +266,7 @@ class ApiClient {
     limit?: number;
     offset?: number;
     timezone?: string;
+    focusMode?: string;
   }): Promise<{ success: boolean; data: SearchResponse; ai?: any; error?: string }> {
     const searchParams = new URLSearchParams();
 
@@ -275,6 +276,7 @@ class ApiClient {
     if (params.limit) searchParams.set('limit', params.limit.toString());
     if (params.offset) searchParams.set('offset', params.offset.toString());
     if (params.timezone) searchParams.set('timezone', params.timezone);
+    if (params.focusMode) searchParams.set('focusMode', params.focusMode);
 
     const url = `${API_BASE_URL}/search?${searchParams.toString()}`;
 

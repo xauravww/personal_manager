@@ -5,6 +5,7 @@ import { authenticateToken } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
 import aiService from '../services/aiService';
 import { SearchResponse } from '../types';
+import { readUrlContent } from '../utils/urlReader';
 
 // Simple in-memory cache for recent search results (userId -> results)
 const recentSearchCache = new Map<string, any[]>();
@@ -93,6 +94,7 @@ router.get('/', [
     const offset = parseInt(req.query.offset as string) || 0;
     const limit = parseInt(req.query.limit as string) || 20;
     const timezone = req.query.timezone as string || 'UTC';
+    const focusMode = req.query.focusMode as string || 'general';
 
     // Build where clause for Prisma
     const where: any = {
@@ -237,7 +239,7 @@ router.get('/', [
           const currentDateTime = aiService.getCurrentDateTime(timezone);
           chatResponse = `Today is ${currentDateTime.day}, ${currentDateTime.date}. The current time is ${currentDateTime.time}. Is there anything I can help you with in your personal resources?`;
         } else {
-          chatResponse = await aiService.generateChatResponse(searchQuery, context, timezone);
+          chatResponse = await aiService.generateChatResponse(searchQuery, context, timezone, focusMode);
         }
         console.log('Generated chat response:', chatResponse);
       } catch (error) {
@@ -325,6 +327,103 @@ router.get('/', [
       has_more: offset + limit < total,
     };
 
+    // Handle different focus modes
+    let researchSummary: any = null;
+
+    if (!isChat && searchQuery) {
+      if (focusMode === 'deep-research') {
+        try {
+          console.log('Deep research mode activated - using sequential thinking for query:', searchQuery);
+
+          // Use sequential thinking for complex research tasks
+          const recentResults = recentSearchCache.get(userId);
+          const contextString = recentResults ? recentResults.map(r => `${r.title}: ${r.content || r.description || ''}`).join('. ') : '';
+          const sequentialResult = await aiService.executeSequentialThinking(searchQuery, contextString);
+          console.log('Sequential thinking completed:', {
+            finalAnswer: sequentialResult.finalAnswer,
+            thoughtCount: sequentialResult.thoughtProcess.length,
+            confidence: sequentialResult.confidence
+          });
+
+          // Convert sequential thinking results to resources
+          if (sequentialResult.thoughtProcess.length > 0) {
+            // Add thought process as resources
+            const thoughtResources = sequentialResult.thoughtProcess.map((thought, index) => ({
+              id: `sequential-thought-${index}`,
+              title: `Thought ${thought.thoughtNumber}: ${thought.thought.substring(0, 50)}...`,
+              content: thought.thought,
+              type: 'document' as const,
+              url: null,
+              created_at: new Date(),
+              updated_at: new Date(),
+              description: `Action: ${thought.action || 'Analysis'} | Result: ${thought.result || 'Completed'}`,
+              file_path: null,
+              metadata: {
+                thoughtNumber: thought.thoughtNumber,
+                action: thought.action,
+                result: thought.result,
+                nextThoughtNeeded: thought.nextThoughtNeeded
+              },
+              user_id: userId,
+              embedding: null,
+              tags: [{ name: 'sequential-thinking', id: 'sequential-thinking' }]
+            }));
+
+            response.resources = [
+              ...response.resources,
+              ...thoughtResources
+            ];
+
+            // Add final answer as a highlighted resource if found
+            if (sequentialResult.finalAnswer && sequentialResult.confidence > 70) {
+              response.resources = [
+                ...response.resources,
+                {
+                  id: 'sequential-answer',
+                  title: `Sequential Thinking Result: ${sequentialResult.finalAnswer}`,
+                  content: `Through sequential thinking analysis, I found: ${sequentialResult.finalAnswer}`,
+                  type: 'document' as const,
+                  url: null,
+                  created_at: new Date(),
+                  updated_at: new Date(),
+                  description: `Confidence: ${sequentialResult.confidence}% | Thoughts: ${sequentialResult.thoughtProcess.length}`,
+                  file_path: null,
+                  metadata: {
+                    finalAnswer: sequentialResult.finalAnswer,
+                    confidence: sequentialResult.confidence,
+                    thoughtProcessLength: sequentialResult.thoughtProcess.length
+                  },
+                  user_id: userId,
+                  embedding: null,
+                  tags: [{ name: 'sequential-answer', id: 'sequential-answer' }]
+                }
+              ];
+            }
+          }
+
+          researchSummary = {
+            method: 'sequential-thinking',
+            finalAnswer: sequentialResult.finalAnswer,
+            confidence: sequentialResult.confidence,
+            thoughtCount: sequentialResult.thoughtProcess.length
+          };
+        } catch (error) {
+          console.warn('Deep research failed:', error);
+        }
+      } else if (focusMode === 'quick-search') {
+        // Quick search mode - prioritize speed over depth
+        console.log('Quick search mode activated for query:', searchQuery);
+        // For quick search, we could limit the number of results or use faster search methods
+        // Currently uses the same logic but could be optimized for speed
+      } else if (focusMode === 'academic') {
+        // Academic mode - emphasize credible sources and citations
+        console.log('Academic mode activated for query:', searchQuery);
+        // Could prioritize academic sources, add citation requirements, etc.
+        // For now, uses enhanced search with academic focus in AI responses
+      }
+      // General mode uses the default search behavior
+    }
+
     // Generate suggestions if no results found
     let suggestions: string[] = [];
     if (!isChat && total === 0) {
@@ -410,8 +509,19 @@ router.get('/', [
         type: where.type || null,
         tags: aiFilters.tags || null,
       },
-      ...(isChat && { chatResponse }),
+      ...(isChat && chatResponse && { chatResponse }),
       ...(suggestions.length > 0 && { suggestions }),
+      // Add deep research summary if applicable
+      ...(researchSummary && {
+        deepResearch: {
+          method: researchSummary.method,
+          thoughtCount: researchSummary.thoughtCount,
+          confidence: researchSummary.confidence,
+          answerFound: researchSummary.confidence > 70,
+          ...(researchSummary.confidence > 70 && { answer: researchSummary.finalAnswer }),
+          summary: `Sequential thinking completed with ${researchSummary.thoughtCount} thoughts.${researchSummary.confidence > 70 ? ` Found answer: ${researchSummary.finalAnswer}` : ' No confident answer found.'}`
+        }
+      }),
     } : null;
 
     res.json({

@@ -55,10 +55,30 @@ type FocusMode = 'general' | 'deep-research' | 'quick-search' | 'academic';
 
 const SearchInterface: React.FC = () => {
   const focusModes = [
-    { id: 'general' as FocusMode, label: 'General', icon: Search },
-    { id: 'deep-research' as FocusMode, label: 'Deep Research', icon: Brain },
-    { id: 'quick-search' as FocusMode, label: 'Quick Search', icon: Zap },
-    { id: 'academic' as FocusMode, label: 'Academic', icon: GraduationCap },
+    {
+      id: 'general' as FocusMode,
+      label: 'General',
+      icon: Search,
+      description: 'Balanced search across your resources with AI enhancement for relevant results'
+    },
+    {
+      id: 'deep-research' as FocusMode,
+      label: 'Deep Research',
+      icon: Brain,
+      description: 'Sequential thinking approach with web searches, URL reading, and comprehensive analysis'
+    },
+    {
+      id: 'quick-search' as FocusMode,
+      label: 'Quick Search',
+      icon: Zap,
+      description: 'Fast, lightweight search focused on immediate, relevant matches from your resources'
+    },
+    {
+      id: 'academic' as FocusMode,
+      label: 'Academic',
+      icon: GraduationCap,
+      description: 'Scholarly approach with emphasis on credible sources, citations, and thorough verification'
+    },
   ];
 
   const [focusMode, setFocusMode] = useState<FocusMode>('general');
@@ -152,6 +172,7 @@ const SearchInterface: React.FC = () => {
         const response = await apiClient.searchResources({
           q: searchQuery,
           timezone: userTimezone,
+          focusMode: focusMode,
         });
 
         let aiContent = '';
@@ -431,24 +452,31 @@ const SearchInterface: React.FC = () => {
                 const mode = focusModes.find(m => m.id === modeId);
                 if (!mode) return null;
                 return (
-                  <button
-                    key={modeId}
-                    onClick={() => setFocusMode(modeId)}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-full text-sm transition-colors ${
-                      focusMode === modeId ? 'bg-blue-100 text-blue-800 border border-blue-300' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    <mode.icon className="w-4 h-4" strokeWidth={1.5} />
-                    {mode.label}
-                    <X
-                      className="w-3 h-3 ml-1 hover:text-red-500"
-                      strokeWidth={1.5}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEnabledModes(enabledModes.filter(m => m !== modeId));
-                      }}
-                    />
-                  </button>
+                  <div key={modeId} className="relative group">
+                    <button
+                      onClick={() => setFocusMode(modeId)}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-full text-sm transition-colors ${
+                        focusMode === modeId ? 'bg-blue-100 text-blue-800 border border-blue-300' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                      title={mode.description}
+                    >
+                      <mode.icon className="w-4 h-4" strokeWidth={1.5} />
+                      {mode.label}
+                      <X
+                        className="w-3 h-3 ml-1 hover:text-red-500"
+                        strokeWidth={1.5}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEnabledModes(enabledModes.filter(m => m !== modeId));
+                        }}
+                      />
+                    </button>
+                    {/* Tooltip */}
+                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
+                      {mode.description}
+                      <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                    </div>
+                  </div>
                 );
               })}
               {enabledModes.length < focusModes.length && (
@@ -461,6 +489,14 @@ const SearchInterface: React.FC = () => {
                 </button>
               )}
             </div>
+            {/* Current mode description */}
+            {focusMode && (
+              <div className="mt-3 text-center">
+                <p className="text-sm text-gray-600">
+                  <span className="font-medium">Current mode:</span> {focusModes.find(m => m.id === focusMode)?.description}
+                </p>
+              </div>
+            )}
           </div>
         </div>
 

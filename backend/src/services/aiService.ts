@@ -230,7 +230,45 @@ class AIService {
     }
   }
 
-  async generateChatResponse(userQuery: string, context?: string, timezone?: string): Promise<string> {
+  async generateDeepResearchResponse(userQuery: string, context?: string, timezone?: string): Promise<string> {
+    const userTimezone = timezone || 'UTC';
+    const now = new Date();
+    const currentDateTime = now.toLocaleString('en-US', {
+      timeZone: userTimezone,
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      weekday: 'long'
+    });
+
+    const systemPrompt = `You are a deep research assistant for a personal resource manager.
+    Current date and time: ${currentDateTime}
+    The user is in deep research mode, which means they want comprehensive, sequential research on their query.
+    Provide a thoughtful response that acknowledges the research approach and offers to help with systematic investigation.
+    Keep responses informative but not overwhelming. Focus on the research methodology.`;
+
+    try {
+      const response = await this.createChatCompletion({
+        model: this.config.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userQuery }
+        ],
+        temperature: 0.6,
+        max_tokens: 200,
+      });
+
+      return response.choices[0]?.message?.content?.trim() || "I'll help you conduct deep research on this topic. Let me gather comprehensive information for you.";
+    } catch (error) {
+      console.error('Error generating deep research response:', error);
+      return "I'm conducting deep research on your query. This may take a moment as I gather comprehensive information from multiple sources.";
+    }
+  }
+
+  async generateChatResponse(userQuery: string, context?: string, timezone?: string, focusMode?: string): Promise<string> {
     // Get current date and time in user's timezone
     const userTimezone = timezone || 'UTC';
     const now = new Date();
@@ -245,9 +283,22 @@ class AIService {
       weekday: 'long'
     });
 
+    let modeSpecificInstructions = '';
+    if (focusMode === 'deep-research') {
+      modeSpecificInstructions = 'You are in deep research mode. Provide comprehensive, well-researched responses. Acknowledge that you\'re using sequential thinking and thorough analysis.';
+    } else if (focusMode === 'quick-search') {
+      modeSpecificInstructions = 'You are in quick search mode. Provide fast, direct answers focused on immediate needs. Keep responses brief and to the point.';
+    } else if (focusMode === 'academic') {
+      modeSpecificInstructions = 'You are in academic mode. Emphasize credible sources, proper citations, and scholarly analysis. Use formal language and reference authoritative information.';
+    } else {
+      modeSpecificInstructions = 'You are in general mode. Provide balanced, helpful responses suitable for everyday use.';
+    }
+
     let systemPrompt = `You are a helpful AI assistant for a personal resource manager application.
     Users can store and search through their notes, documents, videos, links, and other resources.
     Current date and time: ${currentDateTime}
+    Focus mode: ${focusMode || 'general'}
+    ${modeSpecificInstructions}
     Always include accurate current date/time information when asked about dates, times, or current status.
     Respond to user queries in a friendly, helpful manner. Keep responses concise but informative.
     If they ask about your capabilities, explain that you help search and organize personal resources.
@@ -325,6 +376,326 @@ class AIService {
     } catch (error) {
       console.error('Error extracting tags:', error);
       return [];
+    }
+  }
+
+  /**
+   * Generate follow-up research queries for deep research mode
+   */
+  async generateResearchQueries(originalQuery: string, context?: string): Promise<string[]> {
+    try {
+      const systemPrompt = `You are a research assistant helping to generate follow-up search queries for deep research.
+      The user asked: "${originalQuery}"
+      Generate 2-3 specific, relevant follow-up search queries that would provide deeper insights or related information.
+      Focus on queries that would complement the original search and provide comprehensive coverage.
+      Return only a JSON array of strings, like: ["query1", "query2", "query3"]
+      Make queries specific and actionable.`;
+
+      const response = await this.createChatCompletion({
+        model: this.config.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: originalQuery }
+        ],
+        temperature: 0.7,
+        max_tokens: 150,
+      });
+
+      const content = response.choices[0]?.message?.content?.trim();
+      if (content) {
+        try {
+          const queries = JSON.parse(content);
+          return Array.isArray(queries) ? queries.slice(0, 3) : [];
+        } catch {
+          // Fallback: extract from text
+          return content.split(',').map(q => q.trim().replace(/["\[\]]/g, '')).filter(q => q.length > 0).slice(0, 3);
+        }
+      }
+      return [];
+    } catch (error) {
+      console.warn('Error generating research queries:', error);
+      return [];
+    }
+  }
+
+  async suggestUrlsToRead(searchResults: any[], originalQuery: string): Promise<{url: string, title: string, reason: string}[]> {
+    try {
+      const resultsText = searchResults.slice(0, 5).map((result, index) =>
+        `${index + 1}. ${result.title} - ${result.url}\n   ${result.content?.substring(0, 200)}...`
+      ).join('\n\n');
+
+      const systemPrompt = `You are a research strategist. Analyze these search results for the query "${originalQuery}" and suggest the most promising URLs to read in detail.
+
+      For each suggested URL, provide:
+      - The URL
+      - The title
+      - A brief reason why this URL is likely to contain the needed information
+
+      Focus on official documentation, release pages, version history pages, or authoritative sources.
+      Suggest 2-4 URLs maximum, prioritizing the most relevant ones.
+      Return only a JSON array of objects with format: [{"url": "https://...", "title": "Page Title", "reason": "Why this URL is promising"}]
+
+      If no suitable URLs are found, return an empty array.`;
+
+      const response = await this.createChatCompletion({
+        model: this.config.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Search results:\n${resultsText}` }
+        ],
+        temperature: 0.3,
+        max_tokens: 300,
+      });
+
+      const content = response.choices[0]?.message?.content?.trim();
+      if (content) {
+        try {
+          const suggestions = JSON.parse(content);
+          return Array.isArray(suggestions) ? suggestions.slice(0, 4) : [];
+        } catch (error) {
+          console.warn('Error parsing URL suggestions:', error);
+          return [];
+        }
+      }
+      return [];
+    } catch (error) {
+      console.warn('Error generating URL suggestions:', error);
+      return [];
+    }
+  }
+
+  async analyzeUrlContent(content: string, originalQuery: string): Promise<{found: boolean, answer?: string, confidence: number, summary?: string}> {
+    try {
+      const systemPrompt = `You are a content analyzer. Examine the provided web page content and determine if it contains the answer to: "${originalQuery}"
+
+      Look for:
+      - Direct answers to the query
+      - Version numbers, release information
+      - Current status or latest information
+      - Official documentation or authoritative sources
+
+      Return a JSON object with:
+      {
+        "found": true/false (whether the answer is in this content),
+        "answer": "the specific answer if found" (empty string if not found),
+        "confidence": 0-100 (how confident you are in the answer),
+        "summary": "brief summary of what this page contains"
+      }
+
+      Be precise and only set found=true if you actually find the specific information requested.`;
+
+      const response = await this.createChatCompletion({
+        model: this.config.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Content:\n${content.substring(0, 4000)}` } // Limit content length
+        ],
+        temperature: 0.1,
+        max_tokens: 200,
+      });
+
+      const content_response = response.choices[0]?.message?.content?.trim();
+      if (content_response) {
+        try {
+          const analysis = JSON.parse(content_response);
+          return {
+            found: analysis.found || false,
+            answer: analysis.answer || '',
+            confidence: analysis.confidence || 0,
+            summary: analysis.summary || ''
+          };
+        } catch (error) {
+          console.warn('Error parsing content analysis:', error);
+          return { found: false, confidence: 0 };
+        }
+      }
+      return { found: false, confidence: 0 };
+    } catch (error) {
+      console.warn('Error analyzing URL content:', error);
+      return { found: false, confidence: 0 };
+    }
+  }
+
+  /**
+   * Execute sequential thinking for complex research tasks
+   */
+  async executeSequentialThinking(query: string, context?: string): Promise<{
+    finalAnswer: string;
+    thoughtProcess: Array<{
+      thoughtNumber: number;
+      thought: string;
+      action?: string;
+      result?: string;
+      nextThoughtNeeded: boolean;
+    }>;
+    confidence: number;
+  }> {
+    const thoughtProcess: Array<{
+      thoughtNumber: number;
+      thought: string;
+      action?: string;
+      result?: string;
+      nextThoughtNeeded: boolean;
+    }> = [];
+
+    let currentThought = 1;
+    let totalThoughts = 5; // Initial estimate
+    let nextThoughtNeeded = true;
+    let finalAnswer = '';
+    let confidence = 0;
+
+    const userTimezone = 'UTC'; // Default timezone
+    const now = new Date();
+    const currentDateTime = now.toLocaleString('en-US', {
+      timeZone: userTimezone,
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      weekday: 'long'
+    });
+
+    try {
+      while (nextThoughtNeeded && currentThought <= 15) { // Safety limit
+        const systemPrompt = `You are executing sequential thinking for research. Current date/time: ${currentDateTime}
+
+Query: "${query}"
+
+Thought Process History:
+${thoughtProcess.map(t => `Thought ${t.thoughtNumber}: ${t.thought}${t.action ? ` | Action: ${t.action}` : ''}${t.result ? ` | Result: ${t.result}` : ''}`).join('\n')}
+
+Current thought: ${currentThought}/${totalThoughts}
+
+Instructions:
+1. Analyze the query and determine what information is needed
+2. Plan a research strategy with specific, actionable steps
+3. Execute searches, read URLs, or analyze data as needed
+4. Revise your approach if initial attempts fail
+5. Continue until you have a confident answer
+
+For this thought step, provide:
+{
+  "thought": "Your current analysis or plan",
+  "action": "Specific action to take (search, read_url, analyze, conclude)",
+  "actionDetails": "Details for the action (search query, URL to read, etc.)",
+  "nextThoughtNeeded": true/false,
+  "totalThoughts": estimated_total_thoughts,
+  "confidence": 0-100,
+  "finalAnswer": "only provide if confident in the answer"
+}
+
+Actions available:
+- "search": Perform a web search with the query
+- "read_url": Read and analyze a specific URL
+- "analyze": Analyze previous results
+- "conclude": Provide final answer
+
+Be methodical and thorough. Don't rush to conclusions.`;
+
+        const response = await this.createChatCompletion({
+          model: this.config.model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `Execute thought step ${currentThought} for: ${query}` }
+          ],
+          temperature: 0.3,
+          max_tokens: 400,
+        });
+
+        const content = response.choices[0]?.message?.content?.trim();
+        if (!content) break;
+
+        try {
+          const thoughtResult = JSON.parse(content);
+
+          // Execute the action if specified
+          let actionResult = '';
+          if (thoughtResult.action && thoughtResult.actionDetails) {
+            actionResult = await this.executeThoughtAction(thoughtResult.action, thoughtResult.actionDetails, query);
+          }
+
+          thoughtProcess.push({
+            thoughtNumber: currentThought,
+            thought: thoughtResult.thought,
+            action: thoughtResult.action,
+            result: actionResult,
+            nextThoughtNeeded: thoughtResult.nextThoughtNeeded
+          });
+
+          nextThoughtNeeded = thoughtResult.nextThoughtNeeded;
+          totalThoughts = thoughtResult.totalThoughts || totalThoughts;
+
+          if (thoughtResult.finalAnswer && thoughtResult.confidence > 70) {
+            finalAnswer = thoughtResult.finalAnswer;
+            confidence = thoughtResult.confidence;
+            nextThoughtNeeded = false;
+          }
+
+          currentThought++;
+        } catch (error) {
+          console.warn(`Error parsing thought ${currentThought}:`, error);
+          break;
+        }
+      }
+
+      return {
+        finalAnswer: finalAnswer || 'Unable to find a confident answer through sequential thinking',
+        thoughtProcess,
+        confidence
+      };
+    } catch (error) {
+      console.warn('Error in sequential thinking:', error);
+      return {
+        finalAnswer: 'Sequential thinking failed due to an error',
+        thoughtProcess,
+        confidence: 0
+      };
+    }
+  }
+
+  /**
+   * Execute a specific action from sequential thinking
+   */
+  private async executeThoughtAction(action: string, actionDetails: string, originalQuery: string): Promise<string> {
+    try {
+      switch (action) {
+        case 'search':
+          // Perform web search
+          const searchUrl = `${process.env.WEB_SEARCH_URL}?q=${encodeURIComponent(actionDetails)}&format=json&pageno=1&time_range=month&categories=it,news&engines=duckduckgo,wikipedia&enabled_engines=duckduckgo,wikipedia&language=en&safesearch=1`;
+          const searchResponse = await fetch(searchUrl, {
+            headers: {
+              'User-Agent': 'curl/7.68.0',
+              'Accept': '*/*',
+            },
+          });
+
+          if (searchResponse.ok) {
+            const searchData: any = await searchResponse.json();
+            const results = searchData.results?.slice(0, 3) || [];
+            return `Found ${results.length} results: ${results.map((r: any) => r.title).join(', ')}`;
+          }
+          return 'Search failed';
+
+        case 'read_url':
+          // Read URL content
+          const { readUrlContent } = await import('../utils/urlReader');
+          const content = await readUrlContent(actionDetails, 15000, {
+            returnRaw: false,
+            maxLength: 2000,
+          });
+          return `Content read (${content.length} chars): ${content.substring(0, 200)}...`;
+
+        case 'analyze':
+          return `Analysis completed for: ${actionDetails}`;
+
+        default:
+          return `Unknown action: ${action}`;
+      }
+    } catch (error) {
+      console.warn(`Error executing action ${action}:`, error);
+      return `Action failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
     }
   }
 

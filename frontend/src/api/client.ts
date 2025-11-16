@@ -214,7 +214,7 @@ class ApiClient {
     tags?: string;
     limit?: number;
     offset?: number;
-  }): Promise<ApiResponse<SearchResponse>> {
+  }): Promise<{ success: boolean; data: SearchResponse; ai?: any; error?: string }> {
     const searchParams = new URLSearchParams();
 
     if (params.q) searchParams.set('q', params.q);
@@ -223,7 +223,40 @@ class ApiClient {
     if (params.limit) searchParams.set('limit', params.limit.toString());
     if (params.offset) searchParams.set('offset', params.offset.toString());
 
-    return this.request(`/search?${searchParams.toString()}`);
+    const url = `${API_BASE_URL}/search?${searchParams.toString()}`;
+
+    const config: RequestInit = {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    };
+
+    // Add authorization header if token exists
+    if (this.token) {
+      config.headers = {
+        ...config.headers,
+        Authorization: `Bearer ${this.token}`,
+      };
+    }
+
+    try {
+      const response = await fetch(url, config);
+      const data = await response.json();
+
+      if (!response.ok) {
+        return {
+          success: false,
+          error: data.error || `HTTP ${response.status}: ${response.statusText}`,
+        };
+      }
+
+      return data; // Return the full response including ai
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Network error',
+      };
+    }
   }
 
   async getSearchSuggestions(params: {

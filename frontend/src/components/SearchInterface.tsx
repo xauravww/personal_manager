@@ -47,6 +47,7 @@ interface ConversationMessage {
   results?: SearchResult[];
   citations?: Citation[];
   structuredAnswer?: string;
+  suggestions?: string[];
 }
 
 type FocusMode = 'general' | 'deep-research' | 'quick-search' | 'academic';
@@ -108,24 +109,19 @@ const SearchInterface: React.FC = () => {
     setConversation(prev => [...prev, userMessage]);
 
     try {
-      // Call the search API with focus mode consideration
-      const searchParams: any = {
+      const response = await apiClient.searchResources({
         q: searchQuery,
-        limit: focusMode === 'deep-research' ? 20 : 10
-      };
+      });
 
-      // Adjust search based on focus mode
-      if (focusMode === 'academic') {
-        searchParams.type = 'document';
-      }
+    let structuredAnswer = '';
+    let citations: Citation[] = [];
+    let aiContent = '';
+    let results: SearchResult[] = [];
 
-      const response = await apiClient.searchResources(searchParams);
-
-      let aiContent = '';
-      let structuredAnswer = '';
-      let results: SearchResult[] = [];
-      let citations: Citation[] = [];
-
+    if (response.ai && response.ai.intent === 'chat') {
+      aiContent = response.ai.chatResponse || "Hello! I'm your AI assistant for personal resources. How can I help you?";
+      results = [];
+    } else {
       if (response.success && response.data) {
         const searchResults = response.data.resources;
         results = searchResults.map(resource => ({
@@ -135,42 +131,42 @@ const SearchInterface: React.FC = () => {
           content: resource.content || resource.description || '',
           tags: resource.tags.map(tag => tag.name),
           createdAt: new Date(resource.created_at).toLocaleDateString(),
-          relevance: 0.9,
-          url: resource.url
+          relevance: 0.9 // Could be calculated based on search score
         }));
 
-        // Generate structured answer based on focus mode
-        if (focusMode === 'deep-research') {
-          structuredAnswer = `Based on a comprehensive search, I found ${results.length} relevant resources. Here's a detailed analysis:\n\n**Key Findings:**\n${results.slice(0, 3).map(r => `- ${r.title}: ${r.content.substring(0, 100)}...`).join('\n')}`;
-          aiContent = structuredAnswer;
-        } else if (focusMode === 'academic') {
-          aiContent = `Academic search results for "${searchQuery}". Found ${results.length} scholarly resources with detailed citations.`;
+        // Use backend's helpful message if available (for no results with suggestions)
+        if (response.data.message) {
+          aiContent = response.data.message;
+        } else if (results.length > 0) {
+          aiContent = `I found ${results.length} resources related to "${searchQuery}". Here are the most relevant results:`;
         } else {
-          aiContent = `I found ${results.length} resources related to "${searchQuery}".`;
+          aiContent = `I couldn't find any resources related to "${searchQuery}". Try different keywords or adjust your focus mode.`;
         }
-
-        // Generate citations
-        citations = results.map((result, index) => ({
-          id: (index + 1).toString(),
-          title: result.title,
-          url: result.url || '#',
-          snippet: result.content.substring(0, 150) + '...'
-        }));
       } else {
         aiContent = `I couldn't find any resources related to "${searchQuery}". Try different keywords or adjust your focus mode.`;
       }
+    }
 
-      const aiMessage: ConversationMessage = {
-        id: (Date.now() + 1).toString(),
-        type: 'ai',
-        content: aiContent,
-        structuredAnswer,
-        timestamp: new Date(),
-        results: results.length > 0 ? results : undefined,
-        citations: citations.length > 0 ? citations : undefined
-      };
+    // Generate citations
+    citations = results.map((result, index) => ({
+      id: (index + 1).toString(),
+      title: result.title,
+      url: result.url || '#',
+      snippet: result.content.substring(0, 150) + '...'
+    }));
 
-      setConversation(prev => [...prev, aiMessage]);
+    const aiMessage: ConversationMessage = {
+      id: (Date.now() + 1).toString(),
+      type: 'ai',
+      content: aiContent,
+      structuredAnswer,
+      timestamp: new Date(),
+      results: results.length > 0 ? results : undefined,
+      citations: citations.length > 0 ? citations : undefined,
+      suggestions: response.ai?.suggestions
+    };
+
+    setConversation(prev => [...prev, aiMessage]);
     } catch (error) {
       const aiMessage: ConversationMessage = {
         id: (Date.now() + 1).toString(),
@@ -393,11 +389,28 @@ const SearchInterface: React.FC = () => {
                     </div>
                   )}
 
-                  {message.citations && renderCitations(message.citations)}
+                   {message.citations && renderCitations(message.citations)}
 
-                  <div className="text-xs text-gray-500">
-                    {message.timestamp.toLocaleTimeString()}
-                  </div>
+                   {message.suggestions && message.suggestions.length > 0 && (
+                     <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                       <h4 className="text-sm font-medium text-blue-800 mb-3">Try these search terms:</h4>
+                       <div className="flex flex-wrap gap-3">
+                         {message.suggestions.map((suggestion, index) => (
+                           <button
+                             key={index}
+                             onClick={() => handleSearch(suggestion)}
+                             className="px-4 py-2 bg-blue-100 text-blue-700 rounded-full text-sm font-medium hover:bg-blue-200 transition-colors shadow-sm"
+                           >
+                             {suggestion}
+                           </button>
+                         ))}
+                       </div>
+                     </div>
+                   )}
+
+                   <div className="text-xs text-gray-500">
+                     {message.timestamp.toLocaleTimeString()}
+                   </div>
                 </div>
               </div>
             ))}

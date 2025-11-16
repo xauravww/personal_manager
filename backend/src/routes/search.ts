@@ -6,6 +6,21 @@ import { createError } from '../middleware/errorHandler';
 import { SearchResponse } from '../types';
 import aiService from '../services/aiService';
 
+// Cosine similarity function (for future vector search implementation)
+function _cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length) return 0;
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dotProduct += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  if (normA === 0 || normB === 0) return 0;
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
 const router = express.Router();
 
 // Apply authentication to all routes
@@ -56,9 +71,9 @@ router.use(authenticateToken);
  *         description: Search results retrieved successfully
  */
 router.get('/', [
-  query('q').optional().trim().isLength({ min: 1 }),
+  query('q').optional().trim().isLength({ min: 1, max: 500 }).matches(/^[a-zA-Z0-9\s\-_.,!?()]+$/).withMessage('Search query contains invalid characters'),
   query('type').optional().isIn(['note', 'video', 'link', 'document']),
-  query('tags').optional().trim(),
+  query('tags').optional().trim().isLength({ max: 200 }),
   query('limit').optional().isInt({ min: 1, max: 50 }),
   query('offset').optional().isInt({ min: 0 }),
 ], async (req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -83,18 +98,53 @@ router.get('/', [
     let enhancedQuery = searchQuery;
     let searchTerms: string[] = [];
     let aiFilters: { type?: string; tags?: string[] } = {};
+    let queryEmbedding: number[] | null = null;
+    let isChat = false;
 
     if (searchQuery) {
-      try {
-        // Use AI to enhance the search query
-        const aiResult = await aiService.enhanceSearchQuery(searchQuery);
-        enhancedQuery = aiResult.enhancedQuery;
-        searchTerms = aiResult.searchTerms;
-        aiFilters = aiResult.filters;
-      } catch (error) {
-        console.warn('AI search enhancement failed, falling back to basic search:', error);
-        // Fallback to basic search
-        searchTerms = [searchQuery];
+      // Simple intent detection for common cases
+      const simpleGreetings = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'thanks', 'thank you', 'help', 'please'];
+      if (simpleGreetings.includes(searchQuery.toLowerCase().trim())) {
+        searchTerms = [];
+        isChat = true;
+        console.log('Simple greeting detected, intent is chat');
+      } else {
+        try {
+          // Use AI to enhance the search query
+          const aiResult = await aiService.enhanceSearchQuery(searchQuery);
+          console.log('AI result:', aiResult);
+          if (aiResult.intent === 'chat') {
+            searchTerms = [];
+            isChat = true;
+            console.log('Intent is chat, no search');
+          } else {
+            enhancedQuery = aiResult.enhancedQuery;
+            searchTerms = aiResult.searchTerms;
+            aiFilters = aiResult.filters;
+            console.log('AI enhanced query:', enhancedQuery, 'terms:', searchTerms);
+
+            // Generate embedding for vector search (skip for very short queries)
+            if (enhancedQuery.length >= 5) {
+              const embeddingResponse = await aiService.createEmbeddings(enhancedQuery);
+              queryEmbedding = embeddingResponse.data[0].embedding;
+              console.log('Query embedding generated, length:', queryEmbedding!.length);
+            } else {
+              console.log('Query too short for embeddings, using text search');
+            }
+          }
+         } catch (error) {
+           console.warn('AI search enhancement failed, falling back to basic search:', error);
+           // Fallback: extract keywords from query, removing common stop words
+           const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'give', 'me', 'some', 'something', 'anything', 'please', 'show', 'find', 'search', 'related', 'about']);
+           searchTerms = searchQuery.toLowerCase()
+             .split(/\s+/)
+             .filter(word => word.length > 2 && !stopWords.has(word))
+             .slice(0, 5); // Limit to 5 terms
+           if (searchTerms.length === 0) {
+             searchTerms = [searchQuery]; // Fallback to full query if no keywords
+           }
+           console.log('Fallback to text search with terms:', searchTerms);
+         }
       }
 
       // Build search conditions based on enhanced terms
@@ -152,27 +202,88 @@ router.get('/', [
       };
     }
 
-    const [resources, total] = await Promise.all([
-      prisma.resource.findMany({
-        where,
-        include: {
-          tags: {
-            select: {
-              id: true,
-              name: true,
+    let resources: any[] = [];
+    let total: number = 0;
+    let chatResponse = '';
+
+    if (isChat) {
+      // Generate AI chat response
+      try {
+        chatResponse = await aiService.generateChatResponse(searchQuery);
+        console.log('Generated chat response:', chatResponse);
+      } catch (error) {
+        console.warn('Failed to generate chat response:', error);
+        chatResponse = "Hello! I'm your AI assistant for personal resources. How can I help you?";
+      }
+    }
+
+    if (!isChat) {
+      if (queryEmbedding) {
+        // Use vector search for semantic similarity
+        const allResources = await prisma.resource.findMany({
+          where: {
+            ...where,
+            embedding: { not: null }, // Only resources with embeddings
+          },
+          include: {
+            tags: {
+              select: { name: true },
             },
           },
-        },
-        orderBy: {
-          created_at: 'desc',
-        },
-        skip: offset,
-        take: limit,
-      }),
-      prisma.resource.count({
-        where,
-      }),
-    ]);
+        });
+
+        // Compute similarities
+        const similarities = allResources.map(resource => ({
+          ...resource,
+          _similarity: _cosineSimilarity(queryEmbedding!, JSON.parse(resource.embedding!)),
+        }));
+
+        // Sort by similarity descending
+        similarities.sort((a, b) => b._similarity - a._similarity);
+
+        // Filter by similarity threshold
+        const threshold = 0.0; // Include all positive similarities
+        const relevantResources = similarities.filter(r => r._similarity > threshold);
+
+        if (relevantResources.length > 0) {
+          // Use vector results
+          resources = relevantResources.slice(offset, offset + limit).map(r => {
+            const { _similarity, ...resourceWithoutSimilarity } = r;
+            return resourceWithoutSimilarity;
+          });
+          total = relevantResources.length;
+        } else {
+          // Fallback to text search if no vector results
+          resources = await prisma.resource.findMany({
+            where,
+            include: {
+              tags: {
+                select: { name: true },
+              },
+            },
+            orderBy: { created_at: 'desc' },
+            skip: offset,
+            take: limit,
+          });
+          total = await prisma.resource.count({ where });
+        }
+      } else {
+        // Fallback to text search
+        resources = await prisma.resource.findMany({
+          where,
+          include: {
+            tags: {
+              select: { name: true },
+            },
+          },
+          orderBy: { created_at: 'desc' },
+          skip: offset,
+          take: limit,
+        });
+
+        total = await prisma.resource.count({ where });
+      }
+    }
 
     const response: SearchResponse = {
       resources,
@@ -180,20 +291,105 @@ router.get('/', [
       has_more: offset + limit < total,
     };
 
+    // Generate suggestions if no results found
+    let suggestions: string[] = [];
+    if (!isChat && total === 0) {
+      // AI suggestions disabled, use fallback
+      const queryLower = searchQuery.toLowerCase();
+      if (queryLower.includes('read') || queryLower.includes('book')) {
+        suggestions = [
+          'find books about reading',
+          'what reading materials do I have',
+          'articles on literature',
+          'study guides for books',
+          'notes on novels',
+          'documents about reading',
+          'book recommendations',
+          'reading lists'
+        ];
+      } else if (queryLower.includes('study') || queryLower.includes('learn')) {
+        suggestions = [
+          'find study materials',
+          'what educational content do I have',
+          'tutorials and guides',
+          'learning resources',
+          'course notes',
+          'study guides',
+          'educational documents',
+          'learning materials'
+        ];
+      } else if (queryLower.includes('video') || queryLower.includes('watch')) {
+        suggestions = [
+          'find video tutorials',
+          'what videos do I have',
+          'watch lectures',
+          'video courses',
+          'how-to videos',
+          'demonstrations',
+          'webinars',
+          'video guides'
+        ];
+      } else if (queryLower.includes('write') || queryLower.includes('writing')) {
+        suggestions = [
+          'writing guides and tips',
+          'notes on writing',
+          'articles about writing',
+          'writing tutorials',
+          'essay examples',
+          'writing resources',
+          'blog posts on writing',
+          'creative writing materials'
+        ];
+      } else if (queryLower.includes('code') || queryLower.includes('programming')) {
+        suggestions = [
+          'find code snippets',
+          'programming tutorials',
+          'code examples',
+          'programming guides',
+          'development resources',
+          'coding projects',
+          'programming documentation',
+          'tech tutorials'
+        ];
+      } else {
+        suggestions = [
+          'find my notes',
+          'what documents do I have',
+          'search books',
+          'video tutorials',
+          'articles and guides',
+          'personal resources',
+          'saved materials',
+          'reference materials'
+        ];
+      }
+      // Limit to 8 suggestions
+      suggestions = suggestions.slice(0, 8);
+    }
+
     // Include AI enhancement info if search was performed
-    const aiInfo = searchQuery ? {
+    let aiInfo: any = searchQuery ? {
+      intent: isChat ? 'chat' : 'search',
       enhancedQuery,
       searchTerms,
       appliedFilters: {
         type: where.type || null,
         tags: aiFilters.tags || null,
       },
+      ...(isChat && { chatResponse }),
+      ...(suggestions.length > 0 && { suggestions }),
     } : null;
 
     res.json({
       success: true,
-      data: response,
-      ai: aiInfo,
+      data: {
+        ...response,
+        ...(isChat && chatResponse && { message: chatResponse }),
+      },
+      ai: {
+        ...aiInfo,
+        ...(isChat && chatResponse && { chatResponse }),
+      },
     });
   } catch (error) {
     next(error);

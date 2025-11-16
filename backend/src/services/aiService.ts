@@ -47,6 +47,8 @@ interface ModelsResponse {
   }>;
 }
 
+
+
 class AIService {
   private client: AxiosInstance;
   private config: AIConfig;
@@ -55,9 +57,8 @@ class AIService {
     this.config = {
       proxyUrl: process.env.AI_PROXY_URL || 'https://api.openai.com',
       apiKey: process.env.AI_API_KEY || process.env.OPENAI_API_KEY || '',
-      model: process.env.AI_MODEL || 'gpt-3.5-turbo',
+      model: process.env.AI_MODEL || '',
     };
-
     this.client = axios.create({
       baseURL: this.config.proxyUrl,
       headers: {
@@ -110,30 +111,46 @@ class AIService {
     }
   }
 
-  /**
-   * Enhanced search using AI to understand natural language queries
-   */
-  async enhanceSearchQuery(userQuery: string): Promise<{
-    enhancedQuery: string;
-    searchTerms: string[];
-    filters: {
-      type?: string;
-      tags?: string[];
-    };
-  }> {
-    const systemPrompt = `You are a helpful assistant that enhances search queries for a personal resource manager.
-    The user has resources like notes, documents, videos, links, and images.
-    Convert natural language queries into structured search terms and filters.
+    async enhanceSearchQuery(userQuery: string): Promise<{
+      intent: 'search' | 'chat';
+      enhancedQuery: string;
+      searchTerms: string[];
+      filters: {
+        type?: string;
+        tags?: string[];
+      };
+    }> {
+      const systemPrompt = `You are a helpful assistant that enhances search queries for a personal resource manager.
+      The user has resources like notes, documents, videos, links, and images.
+      First, determine if the query is a search request or conversational chat.
+      Set intent to "chat" ONLY for:
+      - Pure greetings without search intent: hi, hello, hey, good morning, etc. (but not "hello, find my notes")
+      - Thanks: thank you, thanks, appreciate it
+      - Direct questions about the assistant: can you help, what can you do, who are you, etc.
+      - Very short single words: hi, help, please (when standalone)
+      Set intent to "search" for ALL other queries, especially those that:
+      - Ask to find, show, give, get, or retrieve resources
+      - Use words like "find", "search", "show me", "give me", "get", "related to", "about", "something", "anything"
+      - Mention resource types: notes, books, documents, videos, links, images
+      - Ask questions about user's content or resources
 
-    Respond with JSON in this format:
-    {
-      "enhancedQuery": "improved search query",
-      "searchTerms": ["term1", "term2"],
-      "filters": {
-        "type": "note|document|video|link|image" (optional),
-        "tags": ["tag1", "tag2"] (optional)
-      }
-    }`;
+      Examples:
+      - "hi" -> intent: "chat"
+      - "find my notes on AI" -> intent: "search", searchTerms: ["notes", "AI"]
+      - "do you have books" -> intent: "search", searchTerms: ["books"]
+      - "give me anything related to study" -> intent: "search", searchTerms: ["study"]
+      - "something book or study" -> intent: "search", searchTerms: ["books", "study"]
+      - "please show me reading materials" -> intent: "search", searchTerms: ["reading"]
+      Respond with JSON in this format:
+      {
+        "intent": "search" or "chat",
+        "enhancedQuery": "improved search query" (empty if chat),
+        "searchTerms": ["term1", "term2"] (empty if chat),
+        "filters": {
+          "type": "note|document|video|link|image" (optional),
+          "tags": ["tag1", "tag2"] (optional)
+        }
+      }`;
 
     try {
       const response = await this.createChatCompletion({
@@ -151,17 +168,19 @@ class AIService {
         throw new Error('No response from AI');
       }
 
-      // Parse the JSON response
-      const parsed = JSON.parse(content);
-      return {
-        enhancedQuery: parsed.enhancedQuery || userQuery,
-        searchTerms: parsed.searchTerms || [userQuery],
-        filters: parsed.filters || {},
-      };
+       // Parse the JSON response
+       const parsed = JSON.parse(content);
+       return {
+         intent: parsed.intent || 'search',
+         enhancedQuery: parsed.enhancedQuery || userQuery,
+         searchTerms: parsed.searchTerms || [userQuery],
+         filters: parsed.filters || {},
+       };
     } catch (error) {
       console.error('Error enhancing search query:', error);
       // Fallback to basic search
       return {
+        intent: 'search',
         enhancedQuery: userQuery,
         searchTerms: [userQuery],
         filters: {},
@@ -170,8 +189,73 @@ class AIService {
   }
 
   /**
-   * Generate content summary using AI
+   * Generate search suggestions when no results found
    */
+  async generateSearchSuggestions(userQuery: string): Promise<string[]> {
+    try {
+      const response = await this.createChatCompletion({
+        model: this.config.model,
+        messages: [
+          {
+            role: 'system',
+            content: `You are a helpful assistant that suggests alternative search terms when a user finds no results.
+            The user searched for: "${userQuery}"
+            Suggest 3-5 specific, relevant search terms that might find resources in a personal manager (notes, books, documents, videos, etc.).
+            Return only a JSON array of strings, like: ["term1", "term2", "term3"]
+            Focus on concrete terms related to the original query.`
+          },
+          {
+            role: 'user',
+            content: userQuery
+          }
+        ],
+        temperature: 0.5,
+        max_tokens: 100,
+      });
+
+      const content = response.choices[0]?.message?.content?.trim();
+      if (content) {
+        try {
+          const suggestions = JSON.parse(content);
+          return Array.isArray(suggestions) ? suggestions.slice(0, 5) : [];
+        } catch {
+          // Fallback: extract from text
+          return content.split(',').map(s => s.trim().replace(/["\[\]]/g, '')).filter(s => s.length > 0).slice(0, 5);
+        }
+      }
+      return [];
+    } catch (error) {
+      console.warn('Error generating search suggestions:', error);
+      return [];
+    }
+  }
+
+  async generateChatResponse(userQuery: string): Promise<string> {
+    const systemPrompt = `You are a helpful AI assistant for a personal resource manager application.
+    Users can store and search through their notes, documents, videos, links, and other resources.
+    Respond to user queries in a friendly, helpful manner. Keep responses concise but informative.
+    If they ask about your capabilities, explain that you help search and organize personal resources.
+    If they greet you, respond warmly and offer assistance.
+    Do not mention technical details unless asked.`;
+
+    try {
+      const response = await this.createChatCompletion({
+        model: this.config.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userQuery }
+        ],
+        temperature: 0.7,
+        max_tokens: 150,
+      });
+
+      return response.choices[0]?.message?.content?.trim() || "I'm here to help you with your personal resources!";
+    } catch (error) {
+      console.error('Error generating chat response:', error);
+      return "Hello! I'm your AI assistant for managing personal resources. How can I help you today?";
+    }
+  }
+
   async summarizeContent(content: string, maxLength: number = 100): Promise<string> {
     try {
       const response = await this.createChatCompletion({
@@ -198,9 +282,6 @@ class AIService {
     }
   }
 
-  /**
-   * Extract keywords/tags from content using AI
-   */
   async extractTags(content: string, maxTags: number = 5): Promise<string[]> {
     try {
       const response = await this.createChatCompletion({

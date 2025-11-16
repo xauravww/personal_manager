@@ -211,14 +211,17 @@ router.get('/:id', [
  *         description: Resource created successfully
  */
 router.post('/', [
-  body('title').trim().isLength({ min: 1, max: 500 }),
+  body('title').trim().isLength({ min: 1, max: 500 }).matches(/^[a-zA-Z0-9\s\-_.,!?()]+$/).withMessage('Title contains invalid characters'),
   body('type').isIn(['note', 'video', 'link', 'document']),
-  body('description').optional().trim(),
+  body('description').optional().trim().isLength({ max: 1000 }),
   body('url').optional().isURL(),
-  body('content').optional().trim(),
-  body('file_path').optional().trim(),
+  body('content').optional().trim().isLength({ max: 10000 }),
+  body('file_path').optional().trim().isLength({ max: 500 }),
   body('metadata').optional().isObject(),
-  body('tag_names').optional().isArray(),
+  body('tag_names').optional().isArray().custom((value) => {
+    if (!Array.isArray(value)) return false;
+    return value.every(tag => typeof tag === 'string' && tag.length <= 50 && /^[a-zA-Z0-9\s\-_]+$/.test(tag));
+  }).withMessage('Tag names must be strings with valid characters and max length 50'),
 ], async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
     const errors = validationResult(req);
@@ -289,32 +292,22 @@ router.post('/', [
       });
     });
 
-    // AI processing (done outside transaction for performance)
-    // Skip AI processing in test environment to avoid timeouts
-    if (resource && process.env.NODE_ENV !== 'test') {
+    // AI processing for resource creation
+    if (resource) {
       try {
-        const contentToProcess = resource.content || resource.description || resource.title;
-
-        // Generate summary if content is substantial
-        if (contentToProcess && contentToProcess.length > 50) {
-          const summary = await aiService.summarizeContent(contentToProcess, 200);
-          if (summary && summary !== contentToProcess.substring(0, 200)) {
-            await prisma.resource.update({
-              where: { id: resource.id },
-              data: {
-                description: summary,
-              },
-            });
-            // Update the resource object for response
-            resource.description = summary;
-          }
+        // Generate summary if content is long
+        if (resource.content && resource.content.length > 200) {
+          const summary = await aiService.summarizeContent(resource.content, 100);
+          await prisma.resource.update({
+            where: { id: resource.id },
+            data: { description: summary },
+          });
         }
 
-        // Extract tags if no tags were provided
-        if ((!tag_names || tag_names.length === 0) && contentToProcess) {
-          const extractedTags = await aiService.extractTags(contentToProcess, 3);
+        // Extract tags from content
+        if (resource.content) {
+          const extractedTags = await aiService.extractTags(resource.content, 3);
           if (extractedTags.length > 0) {
-            // Add extracted tags
             for (const tagName of extractedTags) {
               const tag = await prisma.tag.upsert({
                 where: {
@@ -339,34 +332,33 @@ router.post('/', [
                 },
               });
             }
-
-            // Refresh resource with new tags
-            const updatedResource = await prisma.resource.findUnique({
-              where: { id: resource.id },
-              include: {
-                tags: {
-                  select: {
-                    id: true,
-                    name: true,
-                  },
-                },
-              },
-            });
-            if (updatedResource) {
-              return updatedResource;
-            }
           }
         }
-      } catch (error) {
-        console.warn('AI processing failed for resource creation:', error);
-        // Continue without AI features
+
+        // Generate embedding for semantic search
+        const textToEmbed = `${resource.title} ${resource.description || ''} ${resource.content || ''}`.trim();
+        if (textToEmbed) {
+          try {
+            const embeddingResponse = await aiService.createEmbeddings(textToEmbed);
+            const embedding = embeddingResponse.data[0].embedding;
+            await prisma.resource.update({
+              where: { id: resource.id },
+              data: { embedding: JSON.stringify(embedding) },
+            });
+          } catch (embeddingError) {
+            console.warn('Failed to generate embedding for new resource:', embeddingError);
+          }
+        }
+      } catch (aiError) {
+        console.warn('AI processing failed for new resource:', aiError);
+        // Continue without AI processing
       }
     }
 
-      res.status(201).json({
-        success: true,
-        data: { resource },
-      });
+    res.status(201).json({
+      success: true,
+      data: { resource },
+    });
   } catch (error) {
     next(error);
   }

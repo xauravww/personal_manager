@@ -7,3 +7,5 @@ backend/dist
 frontend/.env
 backend/.env
 settings.json
+backend/error.log
+backend/combined.log

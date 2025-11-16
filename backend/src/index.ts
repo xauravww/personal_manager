@@ -11,6 +11,8 @@ import dotenv from 'dotenv';
 import authRoutes from './routes/auth';
 import resourceRoutes from './routes/resources';
 import searchRoutes from './routes/search';
+import urlReaderRoutes from './routes/urlReader';
+import webSearchRoutes from './routes/webSearch';
 import { errorHandler } from './middleware/errorHandler';
 import prisma from './config/database';
 
@@ -82,6 +84,8 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use('/api/auth', authRoutes);
 app.use('/api/resources', resourceRoutes);
 app.use('/api/search', searchRoutes);
+app.use('/api/url-reader', urlReaderRoutes);
+app.use('/api/web-search', webSearchRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

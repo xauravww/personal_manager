@@ -230,9 +230,25 @@ class AIService {
     }
   }
 
-  async generateChatResponse(userQuery: string, context?: string): Promise<string> {
+  async generateChatResponse(userQuery: string, context?: string, timezone?: string): Promise<string> {
+    // Get current date and time in user's timezone
+    const userTimezone = timezone || 'UTC';
+    const now = new Date();
+    const currentDateTime = now.toLocaleString('en-US', {
+      timeZone: userTimezone,
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      weekday: 'long'
+    });
+
     let systemPrompt = `You are a helpful AI assistant for a personal resource manager application.
     Users can store and search through their notes, documents, videos, links, and other resources.
+    Current date and time: ${currentDateTime}
+    Always include accurate current date/time information when asked about dates, times, or current status.
     Respond to user queries in a friendly, helpful manner. Keep responses concise but informative.
     If they ask about your capabilities, explain that you help search and organize personal resources.
     If they greet you, respond warmly and offer assistance.
@@ -310,6 +326,42 @@ class AIService {
       console.error('Error extracting tags:', error);
       return [];
     }
+  }
+
+  /**
+   * Get current date and time information
+   */
+  getCurrentDateTime(timezone: string = 'UTC'): {
+    full: string;
+    date: string;
+    time: string;
+    day: string;
+    timestamp: number;
+  } {
+    const now = new Date();
+    const options: Intl.DateTimeFormatOptions = {
+      timeZone: timezone,
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      weekday: 'long'
+    };
+
+    const full = now.toLocaleString('en-US', options);
+    const date = now.toLocaleDateString('en-US', { timeZone: timezone, year: 'numeric', month: 'long', day: 'numeric' });
+    const time = now.toLocaleTimeString('en-US', { timeZone: timezone, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const day = now.toLocaleDateString('en-US', { timeZone: timezone, weekday: 'long' });
+
+    return {
+      full,
+      date,
+      time,
+      day,
+      timestamp: now.getTime()
+    };
   }
 }
 

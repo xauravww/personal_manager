@@ -69,6 +69,57 @@ interface CreateResourceRequest {
   tag_names?: string[];
 }
 
+interface UrlReaderRequest {
+  url: string;
+  returnRaw?: boolean;
+  maxRetries?: number;
+  startChar?: number;
+  maxLength?: number;
+  section?: string;
+  paragraphRange?: string;
+  readHeadings?: boolean;
+}
+
+interface UrlReaderResponse {
+  content: string;
+  url: string;
+  processingTime: number;
+}
+
+interface WebSearchRequest {
+  query: string;
+  pageno?: number;
+  time_range?: 'day' | 'week' | 'month' | 'year';
+  categories?: string;
+  engines?: string;
+  enabled_engines?: string;
+  disabled_engines?: string;
+  language?: string;
+  safesearch?: number;
+}
+
+interface WebSearchResult {
+  title: string;
+  url: string;
+  content: string;
+  engine: string;
+  category?: string;
+  publishedDate?: string;
+}
+
+interface WebSearchResponse {
+  query: string;
+  number_of_results: number;
+  results: WebSearchResult[];
+  answers?: any[];
+  corrections?: any[];
+  infoboxes?: any[];
+  suggestions?: string[];
+  unresponsive_engines?: string[];
+  formatted: string;
+  processingTime: number;
+}
+
 class ApiClient {
   private token: string | null = null;
 
@@ -214,6 +265,7 @@ class ApiClient {
     tags?: string;
     limit?: number;
     offset?: number;
+    timezone?: string;
   }): Promise<{ success: boolean; data: SearchResponse; ai?: any; error?: string }> {
     const searchParams = new URLSearchParams();
 
@@ -222,6 +274,7 @@ class ApiClient {
     if (params.tags) searchParams.set('tags', params.tags);
     if (params.limit) searchParams.set('limit', params.limit.toString());
     if (params.offset) searchParams.set('offset', params.offset.toString());
+    if (params.timezone) searchParams.set('timezone', params.timezone);
 
     const url = `${API_BASE_URL}/search?${searchParams.toString()}`;
 
@@ -271,6 +324,22 @@ class ApiClient {
     return this.request(`/search/suggestions?${searchParams.toString()}`);
   }
 
+  // URL Reader methods
+  async readUrlContent(params: UrlReaderRequest): Promise<ApiResponse<UrlReaderResponse>> {
+    return this.request('/url-reader', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  }
+
+  // Web Search methods
+  async performWebSearch(params: WebSearchRequest): Promise<ApiResponse<WebSearchResponse>> {
+    return this.request('/web-search', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  }
+
   // Token management
   setToken(token: string) {
     this.token = token;
@@ -293,4 +362,4 @@ class ApiClient {
 
 // Create and export a singleton instance
 export const apiClient = new ApiClient();
-export type { Resource, SearchResponse, CreateResourceRequest, AuthResponse };
+export type { Resource, SearchResponse, CreateResourceRequest, AuthResponse, UrlReaderRequest, UrlReaderResponse, WebSearchRequest, WebSearchResponse };

@@ -92,6 +92,7 @@ router.get('/', [
     const tagsParam = req.query.tags as string;
     const offset = parseInt(req.query.offset as string) || 0;
     const limit = parseInt(req.query.limit as string) || 20;
+    const timezone = req.query.timezone as string || 'UTC';
 
     // Build where clause for Prisma
     const where: any = {
@@ -108,13 +109,15 @@ router.get('/', [
       // Simple intent detection for common cases
       const simpleGreetings = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'thanks', 'thank you', 'help', 'please'];
       const conversationalPhrases = ['summarize', 'explain', 'tell me', 'what about', 'can you', 'could you', 'would you', 'these', 'them', 'that', 'this', 'the results', 'the notes', 'my notes'];
+      const dateTimeQueries = ['current date', 'what date', 'what time', 'current time', 'today', 'now', 'date time', 'time date', 'what day', 'current day'];
 
       const queryLower = searchQuery.toLowerCase().trim();
       if (simpleGreetings.includes(queryLower) ||
-          conversationalPhrases.some(phrase => queryLower.includes(phrase))) {
+          conversationalPhrases.some(phrase => queryLower.includes(phrase)) ||
+          dateTimeQueries.some(phrase => queryLower.includes(phrase))) {
         searchTerms = [];
         isChat = true;
-        console.log('Conversational query detected, intent is chat');
+        console.log('Conversational or date/time query detected, intent is chat');
       } else {
         try {
           // Use AI to enhance the search query
@@ -224,7 +227,18 @@ router.get('/', [
       }
 
       try {
-        chatResponse = await aiService.generateChatResponse(searchQuery, context);
+        // Check if this is a date/time query
+        const dateTimeQueries = ['current date', 'what date', 'what time', 'current time', 'today', 'now', 'date time', 'time date', 'what day', 'current day'];
+        const queryLower = searchQuery.toLowerCase().trim();
+        const isDateTimeQuery = dateTimeQueries.some(phrase => queryLower.includes(phrase));
+
+        if (isDateTimeQuery) {
+          // Provide accurate current date/time information in user's timezone
+          const currentDateTime = aiService.getCurrentDateTime(timezone);
+          chatResponse = `Today is ${currentDateTime.day}, ${currentDateTime.date}. The current time is ${currentDateTime.time}. Is there anything I can help you with in your personal resources?`;
+        } else {
+          chatResponse = await aiService.generateChatResponse(searchQuery, context, timezone);
+        }
         console.log('Generated chat response:', chatResponse);
       } catch (error) {
         console.warn('Failed to generate chat response:', error);

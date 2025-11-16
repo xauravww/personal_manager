@@ -3,6 +3,7 @@ PROJECT_IDEA.md
 frontend/node_modules
 backend/node_modules
 frontend/dist
+backend/dist
 frontend/.env
 backend/.env
 settings.json

@@ -120,19 +120,19 @@ class AIService {
         tags?: string[];
       };
     }> {
-      const systemPrompt = `You are a helpful assistant that enhances search queries for a personal resource manager.
-      The user has resources like notes, documents, videos, links, and images.
-      First, determine if the query is a search request or conversational chat.
-      Set intent to "chat" ONLY for:
-      - Pure greetings without search intent: hi, hello, hey, good morning, etc. (but not "hello, find my notes")
-      - Thanks: thank you, thanks, appreciate it
-      - Direct questions about the assistant: can you help, what can you do, who are you, etc.
-      - Very short single words: hi, help, please (when standalone)
-      Set intent to "search" for ALL other queries, especially those that:
-      - Ask to find, show, give, get, or retrieve resources
-      - Use words like "find", "search", "show me", "give me", "get", "related to", "about", "something", "anything"
-      - Mention resource types: notes, books, documents, videos, links, images
-      - Ask questions about user's content or resources
+       const systemPrompt = `You are a helpful assistant that enhances search queries for a personal resource manager.
+       The user has resources like notes, documents, videos, links, and images.
+       First, determine if the query is a search request or conversational chat.
+        Set intent to "chat" ONLY for:
+        - Pure greetings without search intent: hi, hello, hey, good morning, etc. (but not "hello, find my notes")
+        - Thanks: thank you, thanks, appreciate it
+        - Direct questions about the assistant: can you help, what can you do, who are you, etc.
+        - Very short single words: hi, help, please (when standalone)
+       Set intent to "search" for ALL other queries, especially those that:
+       - Ask to find, show, give, get, or retrieve resources
+       - Use words like "find", "search", "show me", "give me", "get", "related to", "about", "something", "anything"
+       - Mention resource types: notes, books, documents, videos, links, images
+       - Ask questions about user's content or resources
 
       Examples:
       - "hi" -> intent: "chat"
@@ -230,13 +230,17 @@ class AIService {
     }
   }
 
-  async generateChatResponse(userQuery: string): Promise<string> {
-    const systemPrompt = `You are a helpful AI assistant for a personal resource manager application.
+  async generateChatResponse(userQuery: string, context?: string): Promise<string> {
+    let systemPrompt = `You are a helpful AI assistant for a personal resource manager application.
     Users can store and search through their notes, documents, videos, links, and other resources.
     Respond to user queries in a friendly, helpful manner. Keep responses concise but informative.
     If they ask about your capabilities, explain that you help search and organize personal resources.
     If they greet you, respond warmly and offer assistance.
     Do not mention technical details unless asked.`;
+
+    if (context) {
+      systemPrompt += `\n\nRecent context: ${context}`;
+    }
 
     try {
       const response = await this.createChatCompletion({

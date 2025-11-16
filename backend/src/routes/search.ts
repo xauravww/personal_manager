@@ -1,10 +1,13 @@
 import express from 'express';
-import { query, validationResult } from 'express-validator';
+import { body, query, validationResult } from 'express-validator';
 import prisma from '../config/database';
 import { authenticateToken } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
-import { SearchResponse } from '../types';
 import aiService from '../services/aiService';
+import { SearchResponse } from '../types';
+
+// Simple in-memory cache for recent search results (userId -> results)
+const recentSearchCache = new Map<string, any[]>();
 
 // Cosine similarity function (for future vector search implementation)
 function _cosineSimilarity(a: number[], b: number[]): number {
@@ -104,10 +107,14 @@ router.get('/', [
     if (searchQuery) {
       // Simple intent detection for common cases
       const simpleGreetings = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'thanks', 'thank you', 'help', 'please'];
-      if (simpleGreetings.includes(searchQuery.toLowerCase().trim())) {
+      const conversationalPhrases = ['summarize', 'explain', 'tell me', 'what about', 'can you', 'could you', 'would you', 'these', 'them', 'that', 'this', 'the results', 'the notes', 'my notes'];
+
+      const queryLower = searchQuery.toLowerCase().trim();
+      if (simpleGreetings.includes(queryLower) ||
+          conversationalPhrases.some(phrase => queryLower.includes(phrase))) {
         searchTerms = [];
         isChat = true;
-        console.log('Simple greeting detected, intent is chat');
+        console.log('Conversational query detected, intent is chat');
       } else {
         try {
           // Use AI to enhance the search query
@@ -207,9 +214,17 @@ router.get('/', [
     let chatResponse = '';
 
     if (isChat) {
-      // Generate AI chat response
+      // Generate AI chat response with context from recent searches
+      let context = '';
+      const recentResults = recentSearchCache.get(userId);
+      if (recentResults && recentResults.length > 0) {
+        context = `Recent search results: ${recentResults.map(r =>
+          `${r.title}: ${r.content || r.description || ''}`
+        ).join('. ')}`;
+      }
+
       try {
-        chatResponse = await aiService.generateChatResponse(searchQuery);
+        chatResponse = await aiService.generateChatResponse(searchQuery, context);
         console.log('Generated chat response:', chatResponse);
       } catch (error) {
         console.warn('Failed to generate chat response:', error);
@@ -283,6 +298,11 @@ router.get('/', [
 
         total = await prisma.resource.count({ where });
       }
+    }
+
+    // Cache recent search results for chat context
+    if (!isChat && resources.length > 0) {
+      recentSearchCache.set(userId, resources.slice(0, 5)); // Store up to 5 recent results
     }
 
     const response: SearchResponse = {

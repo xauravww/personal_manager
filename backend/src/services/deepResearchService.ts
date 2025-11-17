@@ -1,6 +1,7 @@
 import { aiService } from './aiService';
 import { performWebSearch } from '../utils/webSearch';
 import { readUrlContent } from '../utils/urlReader';
+import prisma from '../config/database';
 
 export interface DeepResearchThought {
   thoughtNumber: number;
@@ -39,8 +40,13 @@ export class DeepResearchService {
     relevance: number;
   }> = [];
   private finalConfidence: number = 0;
+  private includeWebSearch: boolean = true;
+  private userId?: string;
+  private prisma: typeof prisma;
 
-  constructor() {
+  constructor(userId?: string) {
+    this.userId = userId;
+    this.prisma = prisma;
     this.reset();
   }
 
@@ -48,6 +54,7 @@ export class DeepResearchService {
     this.thoughtHistory = [];
     this.sources = [];
     this.finalConfidence = 0;
+    this.includeWebSearch = true;
   }
 
   private formatThought(thoughtData: DeepResearchThought): string {
@@ -95,7 +102,128 @@ export class DeepResearchService {
   private async executeResearchAction(action: string, actionDetails: string, originalQuery: string): Promise<string> {
     try {
       switch (action) {
+        case 'search_local': {
+          if (this.includeWebSearch) {
+            return `Local search is not available when web search is enabled. Use 'search' for web results.`;
+          }
+
+          if (!this.userId) {
+            return `User authentication required for local resource search.`;
+          }
+
+          console.log(`📚 Searching local resources for: "${actionDetails}"`);
+
+          try {
+            // Parse actionDetails to extract individual search terms
+            // Handle various formats: quoted terms, comma-separated, etc.
+            let searchTerms: string[] = [];
+
+            // Extract quoted terms (both single and double quotes)
+            const quotedTerms = actionDetails.match(/['"]([^'"]+)['"]/g);
+            if (quotedTerms && quotedTerms.length > 0) {
+              searchTerms = quotedTerms.map(term => term.slice(1, -1)); // Remove quotes
+            } else {
+              // Fallback: split by common separators and clean up
+              searchTerms = actionDetails
+                .split(/[,;]|\sand\s|\sor\s|\sor\s/)
+                .map(term => term.trim().toLowerCase())
+                .filter(term => term.length > 2) // Ignore very short terms
+                .filter(term => !term.includes('search') && !term.includes('keywords') && !term.includes('terms') && !term.includes('like') && !term.includes('user') && !term.includes('local') && !term.includes('resources')); // Filter out meta words
+            }
+
+            // If still no terms found, try to extract meaningful words
+            if (searchTerms.length === 0) {
+              // Extract words that look like they could be search terms
+              const words = actionDetails.toLowerCase().match(/\b\w{4,}\b/g) || [];
+              searchTerms = words.filter(word =>
+                !['search', 'keywords', 'terms', 'like', 'user', 'local', 'resources', 'find', 'documents', 'notes', 'guides'].includes(word)
+              );
+            }
+
+            // Final fallback: use key parts of the query
+            if (searchTerms.length === 0) {
+              searchTerms = ['python']; // Default to the main topic
+            }
+
+
+
+            // Use Prisma's built-in query methods for better reliability
+            const orConditions = searchTerms.flatMap(term => [
+              { title: { contains: term } },
+              { content: { contains: term } },
+              { description: { contains: term } }
+            ]);
+
+            const userResources = await this.prisma.resource.findMany({
+              where: {
+                user_id: this.userId,
+                OR: orConditions
+              },
+              take: 10
+            });
+
+            if (userResources.length === 0) {
+              return `No local resources found matching: "${actionDetails}"`;
+            }
+
+            // Calculate relevance and format results
+            const localResults = userResources.map((resource: any) => {
+              let relevance = 0.5; // Base relevance
+
+              const title = resource.title.toLowerCase();
+              const content = (resource.content || '').toLowerCase();
+              const description = (resource.description || '').toLowerCase();
+
+              // Calculate relevance based on how many search terms match
+              let matchCount = 0;
+              for (const term of searchTerms) {
+                if (title.includes(term)) matchCount += 3; // Title matches are most important
+                if (content.includes(term)) matchCount += 2; // Content matches are important
+                if (description.includes(term)) matchCount += 1; // Description matches are least important
+              }
+
+              // Normalize relevance score (0-1)
+              relevance = Math.min(matchCount / (searchTerms.length * 3), 1.0);
+
+              return {
+                id: resource.id,
+                title: resource.title,
+                type: resource.type,
+                content: resource.content || resource.description || '',
+                tags: [], // Tags will be handled separately if needed
+                relevance: relevance
+              };
+            });
+
+            // Sort by relevance
+            localResults.sort((a: any, b: any) => b.relevance - a.relevance);
+
+            const formattedResults = localResults.map((r: any, i: number) =>
+              `${i + 1}. ${r.title} (${r.type})\n   ${r.content.substring(0, 150)}...\n   Tags: ${r.tags.join(', ')}\n   Relevance: ${Math.round(r.relevance * 100)}%`
+            ).join('\n\n');
+
+            // Store sources for citation
+            localResults.forEach((r: any) => {
+              this.sources.push({
+                url: `#resource-${r.id}`,
+                title: r.title,
+                content: r.content,
+                relevance: r.relevance
+              });
+            });
+
+            return `Found ${localResults.length} relevant local resources:\n${formattedResults}`;
+          } catch (error) {
+            console.error('Error searching local resources:', error);
+            return `Error searching local resources: ${error instanceof Error ? error.message : 'Unknown error'}`;
+          }
+        }
+
         case 'search': {
+          if (!this.includeWebSearch) {
+            return `Web search is disabled. Use 'search_local' to search through your personal resources instead of web search.`;
+          }
+
           console.log(`🔍 Performing web search for: "${actionDetails}"`);
 
           const searchResults = await performWebSearch(actionDetails, {
@@ -127,6 +255,10 @@ export class DeepResearchService {
         }
 
         case 'read_url': {
+          if (!this.includeWebSearch) {
+            return `Web access is disabled. Cannot read URL: "${actionDetails}". Please analyze available information from local resources only.`;
+          }
+
           console.log(`📖 Reading URL: ${actionDetails}`);
 
           // Extract URL from actionDetails (AI sometimes includes extra text)
@@ -182,8 +314,10 @@ export class DeepResearchService {
     }
   }
 
-  async *performDeepResearch(query: string, maxThoughts: number = 10, userTimezone?: string): AsyncIterable<DeepResearchThought> {
+  async *performDeepResearch(query: string, maxThoughts: number = 10, userTimezone?: string, includeWebSearch: boolean = true, userId?: string): AsyncIterable<DeepResearchThought> {
     this.reset();
+    this.includeWebSearch = includeWebSearch;
+    this.userId = userId;
 
     let currentThought = 1;
     let totalThoughts = 5; // Initial estimate
@@ -191,7 +325,7 @@ export class DeepResearchService {
     let finalAnswer = '';
     let confidence = 0;
 
-    console.log(`🚀 Starting deep research for: "${query}" (timezone: ${userTimezone})`);
+    console.log(`🚀 Starting deep research for: "${query}" (timezone: ${userTimezone}, web search: ${includeWebSearch ? 'enabled' : 'disabled'})`);
 
     // Check if this is a time-related query that we can handle directly
     const timeKeywords = ['current time', 'what time', 'time now', 'what\'s the time', 'tell me the time', 'what time is it'];
@@ -260,34 +394,43 @@ export class DeepResearchService {
         yield thinkingThought;
 
         // Generate next thought using AI
+        const availableActions = includeWebSearch
+          ? `- "search": Search the web for specific terms (provide concise, direct search queries like "Next.js documentation" not long sentences)
+- "read_url": Read content from a specific URL (provide clean URLs without extra text)
+- "analyze": Analyze existing information
+- "extract_links": Extract links from recently read content`
+          : `- "search_local": Search through user's local resources (documents, notes, etc.) for specific terms
+- "analyze": Analyze existing information from local resources
+- "extract_links": Extract links from recently read content`;
+
+        const actionOptions = includeWebSearch
+          ? `"action": "search|read_url|analyze|extract_links"`
+          : `"action": "search_local|analyze|extract_links"`;
+
         const systemPrompt = `You are conducting deep research on: "${query}"
 
 Current progress: ${currentThought}/${totalThoughts} thoughts completed
 Sources found: ${this.sources.length}
+${includeWebSearch ? 'Web search: ENABLED' : 'Web search: DISABLED (searching local resources only)'}
 
 Thought history:
 ${this.thoughtHistory.map(t => `Thought ${t.thoughtNumber}: ${t.thought}${t.action ? ` | Action: ${t.action}` : ''}${t.result ? ` | Result: ${t.result.substring(0, 100)}...` : ''}`).join('\n')}
 
 Instructions for this research step:
 1. Analyze what information is still needed
-2. Plan the next research action (search, read_url, analyze, extract_links)
-3. Be specific about what you're looking for
-4. Consider if you have enough information to conclude
-5. If ready to conclude, provide a final answer with confidence
+2. Plan the next research action${includeWebSearch ? ' (search, read_url, analyze, extract_links)' : ' (search_local, analyze, extract_links)'}
+3. Be specific about what you're looking for${includeWebSearch ? '' : ' - search through user\'s local documents, notes, and resources'}
 
 Available actions:
-- "search": Search the web for specific terms (provide concise, direct search queries like "Next.js documentation" not long sentences)
-- "read_url": Read content from a specific URL (provide clean URLs without extra text)
-- "analyze": Analyze existing information
-- "extract_links": Extract links from recently read content
+${availableActions}
 
-For search queries: Keep them short and direct (2-5 words maximum). Examples: "Next.js docs", "React SSR tutorial", "Vercel deployment"
+${includeWebSearch ? 'For search queries: Keep them short and direct (2-5 words maximum). Examples: "Next.js docs", "React SSR tutorial", "Vercel deployment"' : 'For local search: Search user\'s personal resources (notes, documents, etc.) with specific keywords. Examples: "python tutorial", "machine learning notes", "web development project"'}
 
 Return JSON:
 {
   "thought": "Your current analysis and plan",
-  "action": "search|read_url|analyze|extract_links",
-  "actionDetails": "CONCISE details - for search: 2-5 word query, for read_url: clean URL only",
+  ${actionOptions},
+  "actionDetails": "CONCISE details${includeWebSearch ? ' - for search: 2-5 word query, for read_url: clean URL only' : ' - for search_local: specific search terms for user resources'}",
   "nextThoughtNeeded": true/false,
   "totalThoughts": estimated_total,
   "finalAnswer": "ONLY if confident (80%+), provide final answer",
@@ -506,6 +649,5 @@ Return JSON:
   }
 }
 
-// Export singleton instance
-export const deepResearchService = new DeepResearchService();
-export default deepResearchService;
+// Export service class for creating new instances per request
+export default DeepResearchService;

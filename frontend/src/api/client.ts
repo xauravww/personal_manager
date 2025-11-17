@@ -376,11 +376,13 @@ class ApiClient {
     query: string;
     maxThoughts?: number;
     timezone?: string;
+    includeWebSearch?: boolean;
   }): Promise<EventSource> {
     const searchParams = new URLSearchParams();
     searchParams.set('query', params.query);
     if (params.maxThoughts) searchParams.set('maxThoughts', params.maxThoughts.toString());
     if (params.timezone) searchParams.set('timezone', params.timezone);
+    if (params.includeWebSearch !== undefined) searchParams.set('includeWebSearch', params.includeWebSearch.toString());
     if (this.token) searchParams.set('token', this.token);
 
     const url = `${API_BASE_URL}/deep-research?${searchParams.toString()}`;

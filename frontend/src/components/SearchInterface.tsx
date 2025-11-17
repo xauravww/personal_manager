@@ -208,7 +208,8 @@ const SearchInterface: React.FC = () => {
         const eventSource = await apiClient.performDeepResearch({
           query: searchQuery,
           maxThoughts: 10,
-          timezone: userTimezone
+          timezone: userTimezone,
+          includeWebSearch: includeWebSearch
         });
 
         setDeepResearchEventSource(eventSource);

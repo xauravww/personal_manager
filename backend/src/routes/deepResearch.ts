@@ -2,7 +2,7 @@ import express from 'express';
 import { body, validationResult } from 'express-validator';
 import { authenticateToken } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
-import { deepResearchService, DeepResearchThought } from '../services/deepResearchService';
+import { DeepResearchService, DeepResearchThought } from '../services/deepResearchService';
 
 const router = express.Router();
 
@@ -59,7 +59,7 @@ const authenticateFromQuery = (req: express.Request, res: express.Response, next
  */
 router.get('/', authenticateFromQuery, async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
-    const { query, maxThoughts = '10', timezone } = req.query;
+    const { query, maxThoughts = '10', timezone, includeWebSearch = 'true' } = req.query;
 
     // Manual validation since we're using query params
     if (!query || typeof query !== 'string' || query.trim().length === 0 || query.length > 500) {
@@ -93,7 +93,13 @@ router.get('/', authenticateFromQuery, async (req: express.Request, res: express
 
     try {
       // Perform deep research and stream thoughts
-      for await (const thought of deepResearchService.performDeepResearch(queryStr, maxThoughtsNum, timezone as string)) {
+      const includeWebSearchBool = includeWebSearch === 'true';
+      // Get user ID from authenticated request
+      const userId = (req as any).user?.id;
+
+      // Create new instance for this request
+      const researchService = new DeepResearchService(userId);
+      for await (const thought of researchService.performDeepResearch(queryStr, maxThoughtsNum, timezone as string, includeWebSearchBool, userId)) {
         const eventData = {
           type: 'thought',
           thought: {
@@ -118,7 +124,7 @@ router.get('/', authenticateFromQuery, async (req: express.Request, res: express
       }
 
       // Send completion message
-      const result = deepResearchService.getResearchResult();
+      const result = researchService.getResearchResult();
       res.write(`data: ${JSON.stringify({
         type: 'complete',
         result: {

@@ -2,9 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import {
   Search,
-  Menu,
   X,
-  History,
   BookOpen,
   Zap,
   GraduationCap,
@@ -87,7 +85,7 @@ const SearchInterface: React.FC = () => {
   const [aiEnhancedSearch, setAiEnhancedSearch] = useState<boolean>(true);
   const [includeWebSearch, setIncludeWebSearch] = useState<boolean>(false);
   const [userTimezone, setUserTimezone] = useState<string>('UTC');
-  const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
+
   const [query, setQuery] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
@@ -682,67 +680,24 @@ const SearchInterface: React.FC = () => {
 
   return (
     <div className="bg-gray-50 relative overflow-hidden" style={{ height: '100vh', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0 }}>
-      {/* Sidebar */}
-      <div className={`${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} fixed inset-y-0 left-0 z-50 w-80 bg-white border-r border-gray-200 transition-transform duration-300 ease-in-out lg:absolute lg:top-0 lg:left-0 lg:h-full lg:w-80 flex flex-col`}>
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Search Options</h2>
-          <button onClick={() => setSidebarOpen(false)} className="lg:hidden text-gray-500 hover:text-gray-700">
-            <X className="w-6 h-6" strokeWidth={1.5} />
-          </button>
-        </div>
 
-        <div className="flex-1 p-4 space-y-6 overflow-y-auto">
-          {/* Search History */}
-          <div>
-            <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
-              <History className="w-4 h-4" strokeWidth={1.5} />
-              Recent Searches
-            </h3>
-            <div className="space-y-1">
-              {searchHistory.slice(0, 5).map((item, index) => (
-                <div key={index} className="flex items-center justify-between p-2 text-sm text-gray-600 hover:bg-gray-50 rounded transition-colors">
-                  <button
-                    onClick={() => handleHistoryClick(item)}
-                    className="flex-1 text-left truncate"
-                  >
-                    {item}
-                  </button>
-                  <button
-                    onClick={() => removeHistoryItem(item)}
-                    className="text-gray-400 hover:text-red-500 ml-2"
-                  >
-                    <X className="w-4 h-4" strokeWidth={1.5} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-
-        </div>
-      </div>
 
         {/* Main Content */}
-        <div className="absolute inset-0 lg:left-80 flex flex-col overflow-hidden">
+        <div className="absolute inset-0 flex flex-col overflow-hidden">
           {/* Header */}
-          <header className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between lg:px-6">
-            <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-gray-500 hover:text-gray-700">
-              <Menu className="w-6 h-6" strokeWidth={1.5} />
-            </button>
-             <div className="flex-1 max-w-2xl mx-auto">
-               <div className="text-center">
-                 <h1 className="text-xl font-semibold text-gray-900">Personal Resource Manager</h1>
-
-               </div>
-             </div>
-            <div className="w-6 lg:w-0"></div> {/* Spacer */}
+          <header className="bg-white border-b border-gray-200 px-4 py-3 lg:px-6">
+            <div className="max-w-4xl mx-auto">
+              <div className="text-center">
+                <h1 className="text-xl font-semibold text-gray-900">Personal Resource Manager</h1>
+              </div>
+            </div>
           </header>
 
 
 
         {/* Search Bar */}
         <div className="bg-white border-b border-gray-200 px-4 py-8 lg:px-6">
-          <div className="max-w-2xl mx-auto">
+           <div className="max-w-4xl mx-auto">
             <div className="relative">
               <input
                 type="text"
@@ -847,7 +802,7 @@ const SearchInterface: React.FC = () => {
 
         {/* Focus Mode Capsules */}
         <div className="bg-white border-b border-gray-200 px-4 py-4 lg:px-6">
-          <div className="max-w-2xl mx-auto">
+           <div className="max-w-4xl mx-auto">
             <div className="flex items-center gap-2 flex-wrap">
               {enabledModes.map((modeId) => {
                 const mode = focusModes.find(m => m.id === modeId);
@@ -905,12 +860,12 @@ const SearchInterface: React.FC = () => {
 
         {/* Main Content Area */}
         <div className="flex-1 px-4 py-6 lg:px-6 overflow-y-auto">
-          <div className="max-w-4xl mx-auto">
+          <div className="w-full">
             {/* Conversation/Chat Area */}
-            <div className="space-y-4">
-              {conversation.map((message) => (
-                <div key={message.id} className={`flex mb-4 ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className="max-w-[80%]">
+            <div className="space-y-4 px-4">
+                {conversation.map((message) => (
+                  <div key={message.id} className={`flex mb-4 px-4 ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className="max-w-[80%]">
                     <div className={`flex gap-3 ${message.type === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
                       <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                         message.type === 'user' ? 'bg-blue-500 text-white' : 'bg-green-500 text-white'
@@ -1054,9 +1009,9 @@ const SearchInterface: React.FC = () => {
 
                <div ref={chatEndRef} />
 
-                {/* Loading State */}
-                {isLoading && !deepResearchProgress && (
-                  <div className="flex gap-4">
+                 {/* Loading State */}
+                 {isLoading && !deepResearchProgress && (
+                   <div className="flex gap-4 px-4">
                     <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-white">
                       <Bot className="w-4 h-4" strokeWidth={1.5} />
                     </div>
@@ -1068,9 +1023,9 @@ const SearchInterface: React.FC = () => {
                   </div>
                 )}
 
-                {/* Deep Research Progress */}
-                {deepResearchProgress && (
-                  <div className="flex gap-4">
+                 {/* Deep Research Progress */}
+                 {deepResearchProgress && (
+                   <div className="flex gap-4 px-4">
                     <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center text-white">
                       {getResearchStatusIcon(deepResearchProgress.status)}
                     </div>
@@ -1183,10 +1138,7 @@ const SearchInterface: React.FC = () => {
         </div>
       </div>
 
-      {/* Overlay for mobile sidebar */}
-      {sidebarOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" onClick={() => setSidebarOpen(false)}></div>
-      )}
+
     </div>
   );
 };

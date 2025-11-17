@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import Navbar from '../components/Navbar';
 
 const Landing: React.FC = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { isAuthenticated } = useAuth();
 
   const toggleMobileMenu = () => {
     setMobileMenuOpen(!mobileMenuOpen);
@@ -28,7 +31,13 @@ const Landing: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-white text-gray-900">
-      {/* Mobile Menu Overlay */}
+      {/* Show navbar for authenticated users */}
+      {isAuthenticated && <Navbar showNavigation={true} />}
+
+      {/* Marketing Header - only show for non-authenticated users */}
+      {!isAuthenticated && (
+        <>
+          {/* Mobile Menu Overlay */}
       {mobileMenuOpen && (
         <div
           className="fixed inset-0 z-40 bg-black bg-opacity-50 md:hidden"
@@ -171,6 +180,8 @@ const Landing: React.FC = () => {
           </div>
         </div>
       </header>
+        </>
+      )}
 
       {/* Hero Section */}
       <section className="bg-gradient-to-br from-blue-50 to-teal-50 py-20">

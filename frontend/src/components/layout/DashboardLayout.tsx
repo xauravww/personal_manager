@@ -12,7 +12,6 @@ import {
   ChevronDown,
   LogOut,
   UserCircle,
-  Brain,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -32,7 +31,6 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
     { name: 'Dashboard', href: '/dashboard', icon: Home },
     { name: 'Resources', href: '/resources', icon: FolderOpen },
     { name: 'Search', href: '/search', icon: Search },
-    { name: 'Deep Research', href: '/deep-research', icon: Brain },
     { name: 'Settings', href: '/dashboard', icon: Settings }, // For now, link to dashboard
   ];
 
@@ -65,7 +63,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
   }, []);
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50">
       {/* Mobile sidebar overlay */}
       {sidebarOpen && (
         <div
@@ -74,18 +72,22 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
         />
       )}
 
-      {/* Sidebar */}
+      {/* Mobile Navigation Sidebar */}
       <div
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform ${
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform md:hidden ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        } transition-transform duration-300 ease-in-out md:translate-x-0 md:static md:inset-0`}
+        } transition-transform duration-300 ease-in-out`}
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
           <div className="flex items-center justify-center h-16 px-4 bg-white border-b border-gray-200">
-            <h1 className="text-xl font-semibold text-gray-900 tracking-tight">
+            <Link
+              to="/dashboard"
+              className="text-xl font-semibold text-gray-900 tracking-tight hover:text-gray-700 transition-colors"
+              onClick={() => setSidebarOpen(false)}
+            >
               Personal Manager
-            </h1>
+            </Link>
           </div>
 
           {/* Navigation */}
@@ -115,78 +117,87 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
             })}
           </nav>
 
-          {/* Mobile Navigation */}
-          <div className="md:hidden border-t border-gray-200">
-            <nav className="px-4 py-6 space-y-2">
+          {/* Close button for mobile */}
+          <div className="p-4 border-t border-gray-200">
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="flex items-center justify-center w-full px-3 py-2 text-sm font-medium text-gray-600 bg-gray-50 rounded-md hover:bg-gray-100"
+            >
+              <X className="mr-2 h-4 w-4" strokeWidth={1.5} />
+              Close Menu
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Top Navbar */}
+      <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-30">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            {/* Left side - Logo and Mobile Menu */}
+            <div className="flex items-center">
+              {/* Mobile menu button */}
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="md:hidden p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500 mr-2"
+              >
+                <Menu className="h-6 w-6" strokeWidth={1.5} />
+              </button>
+
+              {/* Logo */}
+              <Link
+                to="/dashboard"
+                className="text-xl font-semibold text-gray-900 tracking-tight hover:text-gray-700 transition-colors"
+              >
+                Personal Manager
+              </Link>
+            </div>
+
+            {/* Center - Desktop Navigation */}
+            <nav className="hidden md:flex space-x-8">
               {navigation.map((item) => {
                 const isCurrent = location.pathname === item.href;
                 return (
                   <Link
                     key={item.name}
                     to={item.href}
-                    className={`group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200 ${
+                    className={`inline-flex items-center px-1 pt-1 text-sm font-medium border-b-2 transition-colors duration-200 ${
                       isCurrent
-                        ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-700'
-                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                        ? 'border-blue-500 text-gray-900'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                     }`}
-                    onClick={() => setSidebarOpen(false)}
                   >
-                    <item.icon
-                      className={`mr-3 h-5 w-5 flex-shrink-0 ${
-                        isCurrent ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-500'
-                      }`}
-                      strokeWidth={1.5}
-                    />
                     {item.name}
                   </Link>
                 );
               })}
             </nav>
 
-            {/* Close button for mobile */}
-            <div className="p-4 border-t border-gray-200">
-              <button
-                onClick={() => setSidebarOpen(false)}
-                className="flex items-center justify-center w-full px-3 py-2 text-sm font-medium text-gray-600 bg-gray-50 rounded-md hover:bg-gray-100"
-              >
-                <X className="mr-2 h-4 w-4" strokeWidth={1.5} />
-                Close Menu
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Main content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
-        <header className="bg-white shadow-sm border-b border-gray-200">
-          <div className="flex items-center justify-between h-16 px-4 sm:px-6 lg:px-8">
-            {/* Mobile menu button */}
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="md:hidden p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500"
-            >
-              <Menu className="h-6 w-6" strokeWidth={1.5} />
-            </button>
-
-            {/* Search bar */}
-            <form onSubmit={handleSearchSubmit} className="flex-1 max-w-lg mx-4">
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Search className="h-5 w-5 text-gray-400" strokeWidth={1.5} />
-                </div>
-                <input
-                  name="search"
-                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
-                  placeholder="Search resources..."
-                  type="search"
-                />
-              </div>
-            </form>
-
-            {/* Right side */}
+            {/* Right side - Search, Notifications, Profile */}
             <div className="flex items-center space-x-4">
+              {/* Search bar */}
+              <form onSubmit={handleSearchSubmit} className="hidden md:block">
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Search className="h-5 w-5 text-gray-400" strokeWidth={1.5} />
+                  </div>
+                  <input
+                    name="search"
+                    className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                    placeholder="Search resources..."
+                    type="search"
+                  />
+                </div>
+              </form>
+
+              {/* Mobile/Tablet search button */}
+              <button
+                onClick={() => navigate('/search')}
+                className="md:hidden p-2 text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+              >
+                <Search className="h-5 w-5" strokeWidth={1.5} />
+              </button>
+
               {/* Notifications */}
               <button className="p-2 text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
                 <Bell className="h-6 w-6" strokeWidth={1.5} />
@@ -202,7 +213,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
                     <div className="h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center">
                       <UserCircle className="h-5 w-5 text-primary-600" strokeWidth={1.5} />
                     </div>
-                    <div className="hidden md:block text-left">
+                    <div className="hidden lg:block text-left">
                       <p className="text-sm font-medium text-gray-900">{user?.name || 'User'}</p>
                       <p className="text-xs text-gray-500">{user?.email}</p>
                     </div>
@@ -229,15 +240,15 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
               </div>
             </div>
           </div>
-        </header>
+        </div>
+      </header>
 
-        {/* Main content area */}
-        <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50">
-          <div className="container mx-auto px-6 py-8">
-            {children}
-          </div>
-        </main>
-      </div>
+      {/* Main content area */}
+      <main className="flex-1 bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {children}
+        </div>
+      </main>
     </div>
   );
 };

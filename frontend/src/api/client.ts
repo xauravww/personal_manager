@@ -417,8 +417,16 @@ class ApiClient {
     });
   }
 
-  async getLearningModules(subjectId: string): Promise<ApiResponse<any[]>> {
-    return this.request(`/learning/subjects/${subjectId}/modules`);
+  async getLearningModules(subjectId: string, params?: { page?: number; limit?: number }): Promise<ApiResponse<{
+    modules: any[];
+    pagination: { page: number; limit: number; total: number; pages: number };
+  }>> {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.limit) searchParams.set('limit', params.limit.toString());
+
+    const query = searchParams.toString();
+    return this.request(`/learning/subjects/${subjectId}/modules${query ? `?${query}` : ''}`);
   }
 
   async createLearningModule(module: {
@@ -497,6 +505,26 @@ class ApiClient {
     context?: any;
   }): Promise<ApiResponse<any>> {
     return this.request('/learning/mindmaps/generate', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  }
+
+  async chatWithModule(params: {
+    module_id: string;
+    message: string;
+    conversation_history?: Array<{role: string, content: string}>;
+  }): Promise<ApiResponse<{
+    response: string;
+    suggestions?: string[];
+    analysis?: {
+      score: number;
+      strengths: string[];
+      weakPoints: Array<{topic: string, severity: string, suggestions: string[]}>;
+    };
+    completed?: boolean;
+  }>> {
+    return this.request('/learning/modules/chat', {
       method: 'POST',
       body: JSON.stringify(params),
     });

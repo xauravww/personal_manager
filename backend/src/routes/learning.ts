@@ -118,24 +118,49 @@ router.get('/subjects/:subjectId/modules', async (req, res) => {
   try {
     const userId = (req as any).user.id;
     const { subjectId } = req.params;
+    const { page = 1, limit = 10 } = req.query;
 
-    const modules = await prisma.learningModule.findMany({
-      where: {
-        subject_id: subjectId,
-        subject: {
-          user_id: userId
-        }
-      },
-      include: {
-        progress: {
-          where: { user_id: userId }
+    const pageNum = parseInt(page as string, 10);
+    const limitNum = parseInt(limit as string, 10);
+    const skip = (pageNum - 1) * limitNum;
+
+    const [modules, totalCount] = await Promise.all([
+      prisma.learningModule.findMany({
+        where: {
+          subject_id: subjectId,
+          subject: {
+            user_id: userId
+          }
         },
-        assignments: true
-      },
-      orderBy: { order_index: 'asc' }
-    });
+        include: {
+          progress: {
+            where: { user_id: userId }
+          },
+          assignments: true
+        },
+        orderBy: { order_index: 'asc' },
+        skip,
+        take: limitNum
+      }),
+      prisma.learningModule.count({
+        where: {
+          subject_id: subjectId,
+          subject: {
+            user_id: userId
+          }
+        }
+      })
+    ]);
 
-    res.json(modules);
+    res.json({
+      modules,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total: totalCount,
+        pages: Math.ceil(totalCount / limitNum)
+      }
+    });
   } catch (error) {
     console.error('Error fetching learning modules:', error);
     res.status(500).json({ error: 'Failed to fetch learning modules' });
@@ -798,6 +823,182 @@ router.post('/mindmaps/generate', async (req, res) => {
   } catch (error) {
     console.error('Error generating mindmap:', error);
     res.status(500).json({ error: 'Failed to generate mindmap' });
+  }
+});
+
+// AI Chat with Module
+router.post('/modules/chat', async (req, res) => {
+  try {
+    const userId = (req as any).user.id;
+    const { module_id, message, conversation_history } = req.body;
+
+    // Verify module belongs to user's subject
+    const module = await prisma.learningModule.findFirst({
+      where: {
+        id: module_id,
+        subject: {
+          user_id: userId
+        }
+      },
+      include: {
+        subject: true,
+        assignments: true
+      }
+    });
+
+    if (!module) {
+      return res.status(404).json({ error: 'Module not found' });
+    }
+
+    // Check if module is already completed
+    const existingProgress = await prisma.learningProgress.findFirst({
+      where: {
+        user_id: userId,
+        module_id: module_id
+      }
+    });
+
+    if (existingProgress?.status === 'completed') {
+      return res.json({
+        response: "This module is already completed! 🎉 You can review the content or move on to the next module.",
+        suggestions: [],
+        analysis: { score: 100, strengths: [], weakPoints: [] },
+        completed: true
+      });
+    }
+
+    // Build context for AI with completion authority
+    const context = `
+Module: ${module.title}
+Description: ${module.description || 'No description'}
+Content: ${module.content || 'No content'}
+Difficulty: ${module.difficulty || 'Not specified'}
+Subject: ${module.subject.name}
+Current Status: ${existingProgress?.status || 'not_started'}
+
+IMPORTANT: You have the authority to mark this module as completed when the user demonstrates sufficient understanding.
+If the user shows clear understanding of the key concepts, responds to questions appropriately, or indicates they've mastered the material, mark the module as completed.
+
+Conversation History:
+${conversation_history ? conversation_history.map((msg: any) => `${msg.role}: ${msg.content}`).join('\n') : 'No previous conversation'}
+
+User's current message: ${message}
+
+Instructions:
+- Assess the user's understanding based on their responses
+- If they demonstrate mastery, mark the module as completed
+- Be decisive - don't prolong conversations unnecessarily
+- When completing, give a congratulatory message and end the learning session
+    `.trim();
+
+    // Generate AI response with completion authority
+    const aiResponse = await aiService.generateChatResponse(
+      message,
+      context,
+      undefined,
+      'academic',
+      false
+    );
+
+    let shouldMarkCompleted = false;
+    let completionResponse = typeof aiResponse === 'string' ? aiResponse : 'I understand. Let me help you with that.';
+
+    // Check if AI response indicates completion - be very specific to avoid false positives
+    const lowerResponse = completionResponse.toLowerCase();
+    if ((lowerResponse.includes('module has been completed') ||
+         lowerResponse.includes('marking as complete') ||
+         lowerResponse.includes('automatically marked as completed') ||
+         lowerResponse.includes('module is now completed')) &&
+        (lowerResponse.includes('🎉') ||
+         lowerResponse.includes('congratulations') ||
+         lowerResponse.includes('well done'))) {
+      shouldMarkCompleted = true;
+    }
+
+    // If AI decides to complete, update the database
+    if (shouldMarkCompleted) {
+      await prisma.learningProgress.upsert({
+        where: {
+          user_id_module_id: {
+            user_id: userId,
+            module_id: module_id
+          }
+        },
+        update: {
+          status: 'completed',
+          score: 100,
+          completed_at: new Date()
+        },
+        create: {
+          user_id: userId,
+          subject_id: module.subject_id,
+          module_id: module_id,
+          status: 'completed',
+          score: 100,
+          time_spent: existingProgress?.time_spent || 0,
+          completed_at: new Date()
+        }
+      });
+    }
+
+    // Analyze learning progress from conversation
+    const progressAnalysis = await aiService.analyzeAssignmentSubmission(
+      {
+        title: module.title,
+        description: module.description || '',
+        solution: undefined
+      },
+      message,
+      module.subject.name
+    );
+
+    // Update weak points if any issues detected
+    if (progressAnalysis.weakPoints.length > 0) {
+      for (const weakPoint of progressAnalysis.weakPoints) {
+        await prisma.weakPoint.upsert({
+          where: {
+            user_id_topic: {
+              user_id: userId,
+              topic: weakPoint.topic
+            }
+          },
+          update: {
+            frequency: {
+              increment: 1
+            },
+            last_identified: new Date()
+          },
+          create: {
+            user_id: userId,
+            subject_id: module.subject_id,
+            topic: weakPoint.topic,
+            description: weakPoint.description,
+            severity: weakPoint.severity as any,
+            suggestions: JSON.stringify(weakPoint.suggestions)
+          }
+        });
+      }
+    }
+
+    // Generate hints based on weak points
+    let suggestions: string[] = [];
+    if (progressAnalysis.improvementAreas.length > 0 && !shouldMarkCompleted) {
+      suggestions = progressAnalysis.improvementAreas.slice(0, 3);
+    }
+
+    res.json({
+      response: completionResponse,
+      suggestions,
+      analysis: {
+        score: progressAnalysis.score,
+        strengths: progressAnalysis.strengths,
+        weakPoints: progressAnalysis.weakPoints
+      },
+      completed: shouldMarkCompleted
+    });
+  } catch (error) {
+    console.error('Error in module chat:', error);
+    res.status(500).json({ error: 'Failed to process chat message' });
   }
 });
 

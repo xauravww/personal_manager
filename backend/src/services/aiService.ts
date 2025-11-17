@@ -430,6 +430,8 @@ class AIService {
         return "I'm your personal AI assistant for the Resource Manager application. I help you search through and organize your stored resources like notes, documents, videos, and links using natural language queries.";
       } else if (lowerQuery.includes('what can you do') || lowerQuery.includes('help')) {
         return "I can help you search through your personal resources, suggest relevant materials, and assist with organizing your content. Try asking me to find specific notes, documents, or topics!";
+      } else if (lowerQuery.includes('explain') || lowerQuery.includes('what is') || lowerQuery.includes('how does')) {
+        return "That's a great question! Let me explain this concept clearly. [Mock explanation for testing]. Do you understand this now, or would you like me to clarify anything?";
       } else {
         return "I'm currently running in test mode. To get full AI-powered responses, please configure a valid API key. In the meantime, I can help you search through your stored resources!";
       }
@@ -469,7 +471,14 @@ class AIService {
     Respond to user queries in a friendly, helpful manner. Keep responses concise but informative.
     If they ask about your capabilities, explain that you help search and organize personal resources.
     If they greet you, respond warmly and offer assistance.
-    Do not mention technical details unless asked.`;
+    Do not mention technical details unless asked.
+
+    IMPORTANT LEARNING GUIDELINES:
+    - When teaching or explaining concepts, DO NOT provide full answers immediately.
+    - Instead, give helpful hints and ask guiding questions to encourage learning.
+    - Only provide complete answers when the user explicitly says "please provide full answer" or clicks a button requesting it.
+    - This Socratic method helps users learn better by thinking through problems themselves.
+    - Always end hints with questions that guide the user toward the solution.`;
 
     if (context) {
       systemPrompt += `\n\nRecent context: ${context}`;

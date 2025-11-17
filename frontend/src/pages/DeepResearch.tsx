@@ -45,9 +45,8 @@ interface DeepResearchThought {
 
 interface DeepResearchResult {
   finalAnswer: string;
+  thoughtProcess: DeepResearchThought[];
   confidence: number;
-  sourcesCount: number;
-  thoughtsCount: number;
   sources: Array<{
     url: string;
     title: string;
@@ -66,9 +65,39 @@ const DeepResearch: React.FC = () => {
   const [finalResult, setFinalResult] = useState<DeepResearchResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sourcesExpanded, setSourcesExpanded] = useState<boolean>(false);
+  const [researchAnalysisExpanded, setResearchAnalysisExpanded] = useState<boolean>(false);
   const [latestTotalThoughts, setLatestTotalThoughts] = useState<number>(5);
   const thoughtsEndRef = useRef<HTMLDivElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
+
+  // Client-side cleaning of final answer to ensure no research analysis leaks through
+  const cleanFinalAnswer = (answer: string): string => {
+    if (!answer) return answer;
+
+    let cleaned = answer;
+
+    // Cut off everything after research analysis
+    const researchAnalysisIndex = cleaned.toLowerCase().indexOf('research analysis');
+    if (researchAnalysisIndex !== -1) {
+      cleaned = cleaned.substring(0, researchAnalysisIndex).trim();
+    }
+
+    // Cut off everything after step indicators
+    const stepPatterns = ['step 1:', 'step 2:', 'step 3:', 'step 4:', 'step 5:', 'step 6:', 'step 7:', 'step 8:', 'step 9:', 'step 10:'];
+    for (const pattern of stepPatterns) {
+      const index = cleaned.toLowerCase().indexOf(pattern.toLowerCase());
+      if (index !== -1) {
+        cleaned = cleaned.substring(0, index).trim();
+        break;
+      }
+    }
+
+    // Remove confidence mentions
+    cleaned = cleaned.replace(/\d+% confidence.*$/s, '').trim();
+    cleaned = cleaned.replace(/research completed with.*$/s, '').trim();
+
+    return cleaned;
+  };
 
   const scrollToBottom = () => {
     thoughtsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -161,43 +190,49 @@ const DeepResearch: React.FC = () => {
 
           if (data.type === 'start') {
             setResearchStatus('searching');
-          } else if (data.type === 'thought') {
-            const thought = data.thought;
+           } else if (data.type === 'thought') {
+             const thought = data.thought;
 
-            // Check if this is an intermediate status thought (decimal thought number)
-            const isIntermediate = thought.thoughtNumber % 1 !== 0;
+             // Check if this is an intermediate status thought (decimal thought number)
+             const isIntermediate = thought.thoughtNumber % 1 !== 0;
 
-            if (isIntermediate) {
-              // Update status based on intermediate thought
-              if (thought.action === 'search') {
-                setResearchStatus('searching');
-              } else if (thought.action === 'read_url') {
-                setResearchStatus('reading');
-              } else if (thought.action === 'analyze') {
-                setResearchStatus('analyzing');
-              } else {
-                setResearchStatus('thinking');
-              }
-              // Don't add intermediate thoughts to the main thoughts list
-              return;
-            }
+             if (isIntermediate) {
+               // Update status based on intermediate thought
+               if (thought.action === 'search') {
+                 setResearchStatus('searching');
+               } else if (thought.action === 'read_url') {
+                 setResearchStatus('reading');
+               } else if (thought.action === 'analyze') {
+                 setResearchStatus('analyzing');
+               } else {
+                 setResearchStatus('thinking');
+               }
+               // Don't add intermediate thoughts to the main thoughts list
+               return;
+             }
 
-            // Update latest total thoughts estimate
-            setLatestTotalThoughts(prev => Math.max(prev, thought.totalThoughts));
+             // Don't display the final thought as current thought - it will be shown in final result
+             if (!thought.nextThoughtNeeded) {
+               setResearchStatus('complete');
+               return;
+             }
 
-            // Set new current thought (no need to keep history since we don't display it)
-            setCurrentThought(thought);
+             // Update latest total thoughts estimate
+             setLatestTotalThoughts(prev => Math.max(prev, thought.totalThoughts));
 
-            // Update status based on completed thought action
-            if (thought.action === 'search') {
-              setResearchStatus('searching');
-            } else if (thought.action === 'read_url') {
-              setResearchStatus('reading');
-            } else if (thought.action === 'analyze') {
-              setResearchStatus('analyzing');
-            } else {
-              setResearchStatus('thinking');
-            }
+             // Set new current thought (no need to keep history since we don't display it)
+             setCurrentThought(thought);
+
+             // Update status based on completed thought action
+             if (thought.action === 'search') {
+               setResearchStatus('searching');
+             } else if (thought.action === 'read_url') {
+               setResearchStatus('reading');
+             } else if (thought.action === 'analyze') {
+               setResearchStatus('analyzing');
+             } else {
+               setResearchStatus('thinking');
+             }
           } else if (data.type === 'complete') {
             setFinalResult(data.result);
             setResearchStatus('complete');
@@ -238,6 +273,7 @@ const DeepResearch: React.FC = () => {
     setFinalResult(null);
     setError(null);
     setSourcesExpanded(false);
+    setResearchAnalysisExpanded(false);
     setLatestTotalThoughts(5);
     setResearchStatus('idle');
     setQuery('');
@@ -336,117 +372,209 @@ const DeepResearch: React.FC = () => {
             </div>
           )}
 
-          {/* Current Research Progress */}
-          {(currentThought || isLoading) && (
-            <div className="mb-8">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-gray-900">Live Research Progress</h2>
-                <span className="text-sm text-gray-600">
-                  {currentThought ? currentThought.thoughtNumber : 0} steps completed
-                </span>
-              </div>
+           {/* Current Research Progress */}
+           {(currentThought || isLoading) && (
+             <div className="mb-8">
+               <div className="flex items-center justify-between mb-4">
+                 <h2 className="text-lg font-semibold text-gray-900">Live Research Progress</h2>
+                 <span className="text-sm text-gray-600">
+                   {currentThought ? currentThought.thoughtNumber : 0} steps completed
+                 </span>
+               </div>
 
-              <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-                {currentThought ? (
-                  <div className="animate-fade-in">
-                    {/* Progress Bar */}
-                    <div className="mb-4">
-                      <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
-                        <span>Step {currentThought.thoughtNumber} of {latestTotalThoughts}</span>
-                        <span>{Math.round((currentThought.thoughtNumber / latestTotalThoughts) * 100)}% complete</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-3">
-                        <div
-                          className="bg-gradient-to-r from-blue-500 to-purple-600 h-3 rounded-full transition-all duration-700 ease-out"
-                          style={{ width: `${Math.min((currentThought.thoughtNumber / latestTotalThoughts) * 100, 100)}%` }}
-                        ></div>
-                      </div>
-                    </div>
+               <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+                 {currentThought ? (
+                   <div className="animate-fade-in">
+                     {/* Progress Bar */}
+                     <div className="mb-6">
+                       <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
+                         <span>Step {currentThought.thoughtNumber} of {latestTotalThoughts}</span>
+                         <span>{Math.round((currentThought.thoughtNumber / latestTotalThoughts) * 100)}% complete</span>
+                       </div>
+                       <div className="w-full bg-gray-200 rounded-full h-3">
+                         <div
+                           className="bg-gradient-to-r from-blue-500 to-purple-600 h-3 rounded-full transition-all duration-700 ease-out"
+                           style={{ width: `${Math.min((currentThought.thoughtNumber / latestTotalThoughts) * 100, 100)}%` }}
+                         ></div>
+                       </div>
+                     </div>
 
-                    {/* Current Thought Content */}
-                    <div className="flex items-start gap-4">
-                      <div className="flex-shrink-0 mt-1">
-                        {getThoughtIcon(currentThought)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-3">
-                          <h3 className="text-xl font-semibold text-gray-900">
-                            {currentThought.isRevision ? 'Revision' : currentThought.action ? `${currentThought.action.replace('_', ' ').toUpperCase()}` : 'Analysis'}
-                          </h3>
-                          {currentThought.isRevision && (
-                            <span className="px-3 py-1 bg-yellow-100 text-yellow-800 text-sm rounded-full">
-                              Revising step {currentThought.revisesThought}
-                            </span>
-                          )}
-                        </div>
+                     {/* Current Status Message */}
+                     <div className="text-center mb-6">
+                       <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-700 rounded-full text-sm font-medium">
+                         {getStatusIcon(researchStatus)}
+                         <span>{getStatusText(researchStatus)}</span>
+                       </div>
+                     </div>
 
-                        <div className="prose prose-lg max-w-none text-gray-700 mb-4">
-                          <ReactMarkdown>{currentThought.thought}</ReactMarkdown>
-                        </div>
+                     {/* Current Thought in List Format */}
+                     <div className="border border-gray-200 rounded-lg overflow-hidden">
+                       <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+                         <h4 className="text-sm font-medium text-gray-900">Latest Research Step</h4>
+                       </div>
+                       <div className="p-4">
+                         <div className="flex items-start gap-3">
+                           <div className="flex-shrink-0 mt-0.5">
+                             {getThoughtIcon(currentThought)}
+                           </div>
+                           <div className="flex-1 min-w-0">
+                             <div className="flex items-center gap-2 mb-2">
+                               <span className="text-sm font-medium text-gray-900">
+                                 Step {currentThought.thoughtNumber}: {currentThought.isRevision ? 'Revision' : currentThought.action ? `${currentThought.action.replace('_', ' ').toUpperCase()}` : 'Analysis'}
+                               </span>
+                               {currentThought.isRevision && (
+                                 <span className="px-2 py-0.5 bg-yellow-100 text-yellow-800 text-xs rounded-full">
+                                   Revising {currentThought.revisesThought}
+                                 </span>
+                               )}
+                             </div>
 
-                        {currentThought.actionDetails && (
-                          <div className="mb-4 p-4 bg-gray-50 rounded-lg border-l-4 border-blue-400">
-                            <div className="text-sm text-gray-600 mb-2">Action Details:</div>
-                            <div className="text-sm font-mono text-gray-800 break-all">
-                              {currentThought.actionDetails}
-                            </div>
-                          </div>
-                        )}
+                             <div className="text-sm text-gray-700 mb-3">
+                               <ReactMarkdown>{currentThought.thought}</ReactMarkdown>
+                             </div>
 
-                        {currentThought.result && (
-                          <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                            <div className="text-sm text-green-700 mb-2 font-medium">Result:</div>
-                            <div className="text-sm text-green-800 whitespace-pre-wrap break-words">
-                              {currentThought.result.length > 500 ? `${currentThought.result.substring(0, 500)}...` : currentThought.result}
-                            </div>
-                          </div>
-                        )}
+                             {currentThought.actionDetails && (
+                               <div className="mb-3 p-3 bg-gray-50 rounded border-l-2 border-blue-300">
+                                 <div className="text-xs text-gray-600 mb-1">Action:</div>
+                                 <div className="text-xs font-mono text-gray-800 break-all">
+                                   {currentThought.actionDetails}
+                                 </div>
+                               </div>
+                             )}
 
-                        <div className="mt-4 text-xs text-gray-500 flex items-center gap-4">
-                          <span>{new Date(currentThought.timestamp).toLocaleTimeString()}</span>
-                          {!currentThought.nextThoughtNeeded && (
-                            <span className="text-green-600 font-medium">Final step</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center py-8">
-                    <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <Loader2 className="w-6 h-6 text-white animate-spin" strokeWidth={1.5} />
-                    </div>
-                    <h3 className="text-lg font-medium text-gray-900 mb-2">Initializing Research</h3>
-                    <p className="text-gray-600">Setting up the research process...</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+                             {currentThought.result && (
+                               <div className="p-3 bg-green-50 rounded border border-green-200">
+                                 <div className="text-xs text-green-700 mb-1 font-medium">Result:</div>
+                                 <div className="text-xs text-green-800 whitespace-pre-wrap break-words">
+                                   {currentThought.result.length > 300 ? `${currentThought.result.substring(0, 300)}...` : currentThought.result}
+                                 </div>
+                               </div>
+                             )}
+
+                             <div className="mt-3 text-xs text-gray-500">
+                               {new Date(currentThought.timestamp).toLocaleTimeString()}
+                             </div>
+                           </div>
+                         </div>
+                       </div>
+                     </div>
+                   </div>
+                 ) : (
+                   <div className="text-center py-8">
+                     <div className="w-12 h-12 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                       <Loader2 className="w-6 h-6 text-white animate-spin" strokeWidth={1.5} />
+                     </div>
+                     <h3 className="text-lg font-medium text-gray-900 mb-2">Initializing Research</h3>
+                     <p className="text-gray-600">Setting up the research process...</p>
+                   </div>
+                 )}
+               </div>
+             </div>
+           )}
 
 
 
           {/* Final Result */}
-          {finalResult && (
-            <div className="mt-8 bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-xl p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <CheckCircle className="w-6 h-6 text-green-600" strokeWidth={1.5} />
-                <h3 className="text-xl font-semibold text-gray-900">Research Complete</h3>
-                <span className="px-3 py-1 bg-green-100 text-green-800 text-sm rounded-full font-medium">
-                  {finalResult.confidence}% confidence
-                </span>
-              </div>
+           {finalResult && (
+             <div className="mt-8">
+               {/* Clean Final Answer */}
+               <div className="bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-xl p-6">
+                 <div className="flex items-center gap-3 mb-4">
+                   <CheckCircle className="w-6 h-6 text-green-600" strokeWidth={1.5} />
+                   <h3 className="text-xl font-semibold text-gray-900">Research Complete</h3>
+                   <span className="px-3 py-1 bg-green-100 text-green-800 text-sm rounded-full font-medium">
+                     {finalResult.confidence}% confidence
+                   </span>
+                 </div>
 
-              <div className="prose prose-lg max-w-none text-gray-800 mb-4">
-                <ReactMarkdown>{finalResult.finalAnswer}</ReactMarkdown>
-              </div>
+                 <div className="prose prose-lg max-w-none text-gray-800 mb-4">
+                   <ReactMarkdown>{cleanFinalAnswer(finalResult.finalAnswer)}</ReactMarkdown>
+                 </div>
 
-              <div className="flex items-center gap-6 text-sm text-gray-600">
-                <span>{finalResult.sourcesCount} sources explored</span>
-                <span>{finalResult.thoughtsCount} research steps</span>
-              </div>
-            </div>
-          )}
+                 <div className="flex items-center gap-6 text-sm text-gray-600">
+                   <span>{finalResult.sources.length} sources explored</span>
+                   <span>{finalResult.thoughtProcess.length} research steps</span>
+                 </div>
+               </div>
+
+               {/* Research Analysis Collapsible Section */}
+               {finalResult.thoughtProcess && finalResult.thoughtProcess.length > 0 && (
+                 <div className="mt-6 bg-white border border-gray-200 rounded-xl overflow-hidden">
+                   <button
+                     onClick={() => setResearchAnalysisExpanded(!researchAnalysisExpanded)}
+                     className="w-full px-6 py-4 text-left flex items-center justify-between hover:bg-gray-50 transition-colors"
+                   >
+                     <div className="flex items-center gap-3">
+                       <Brain className="w-5 h-5 text-purple-600" strokeWidth={1.5} />
+                       <span className="font-medium text-gray-900">Research Analysis</span>
+                       <span className="text-sm text-gray-600">({finalResult.thoughtProcess.length} steps)</span>
+                     </div>
+                     <ChevronDown
+                       className={`w-5 h-5 text-gray-500 transition-transform ${researchAnalysisExpanded ? 'rotate-180' : ''}`}
+                       strokeWidth={1.5}
+                     />
+                   </button>
+
+                   {researchAnalysisExpanded && (
+                     <div className="border-t border-gray-200">
+                       <div className="max-h-96 overflow-y-auto">
+                         {finalResult.thoughtProcess.map((thought, index) => (
+                           <div key={index} className="px-6 py-4 border-b border-gray-100 last:border-b-0">
+                             <div className="flex items-start gap-4">
+                               <div className="flex-shrink-0 mt-1">
+                                 {getThoughtIcon(thought)}
+                               </div>
+                               <div className="flex-1 min-w-0">
+                                 <div className="flex items-center gap-2 mb-3">
+                                   <h4 className="text-lg font-semibold text-gray-900">
+                                     {thought.isRevision ? 'Revision' : thought.action ? `${thought.action.replace('_', ' ').toUpperCase()}` : 'Analysis'}
+                                   </h4>
+                                   {thought.isRevision && (
+                                     <span className="px-3 py-1 bg-yellow-100 text-yellow-800 text-sm rounded-full">
+                                       Revising step {thought.revisesThought}
+                                     </span>
+                                   )}
+                                 </div>
+
+                                 <div className="prose prose-sm max-w-none text-gray-700 mb-4">
+                                   <ReactMarkdown>{thought.thought}</ReactMarkdown>
+                                 </div>
+
+                                 {thought.actionDetails && (
+                                   <div className="mb-4 p-4 bg-gray-50 rounded-lg border-l-4 border-blue-400">
+                                     <div className="text-sm text-gray-600 mb-2">Action Details:</div>
+                                     <div className="text-sm font-mono text-gray-800 break-all">
+                                       {thought.actionDetails}
+                                     </div>
+                                   </div>
+                                 )}
+
+                                 {thought.result && (
+                                   <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                                     <div className="text-sm text-green-700 mb-2 font-medium">Result:</div>
+                                     <div className="text-sm text-green-800 whitespace-pre-wrap break-words">
+                                       {thought.result.length > 500 ? `${thought.result.substring(0, 500)}...` : thought.result}
+                                     </div>
+                                   </div>
+                                 )}
+
+                                 <div className="mt-4 text-xs text-gray-500 flex items-center gap-4">
+                                   <span>{new Date(thought.timestamp).toLocaleTimeString()}</span>
+                                   {!thought.nextThoughtNeeded && (
+                                     <span className="text-green-600 font-medium">Final step</span>
+                                   )}
+                                 </div>
+                               </div>
+                             </div>
+                           </div>
+                         ))}
+                       </div>
+                     </div>
+                   )}
+                 </div>
+               )}
+             </div>
+           )}
 
           {/* Sources Dropdown */}
           {finalResult && finalResult.sources && finalResult.sources.length > 0 && (

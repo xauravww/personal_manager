@@ -123,19 +123,18 @@ router.get('/', authenticateFromQuery, async (req: express.Request, res: express
         await new Promise(resolve => setTimeout(resolve, 200));
       }
 
-      // Send completion message
-      const result = researchService.getResearchResult();
-      res.write(`data: ${JSON.stringify({
-        type: 'complete',
-        result: {
-          finalAnswer: result.finalAnswer,
-          confidence: result.confidence,
-          sourcesCount: result.sources.length,
-          thoughtsCount: result.thoughtProcess.length,
-          sources: result.sources
-        },
-        timestamp: new Date().toISOString()
-      })}\n\n`);
+        // Send completion message
+        const result = researchService.getResearchResult();
+        res.write(`data: ${JSON.stringify({
+          type: 'complete',
+          result: {
+            finalAnswer: result.finalAnswer,
+            confidence: result.confidence,
+            thoughtProcess: result.thoughtProcess,
+            sources: result.sources
+          },
+          timestamp: new Date().toISOString()
+        })}\n\n`);
 
       if (res.flush) res.flush();
 

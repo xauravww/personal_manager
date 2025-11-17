@@ -100,6 +100,13 @@ const SearchInterface: React.FC = () => {
     latestTotalThoughts?: number;
   } | null>(null);
   const [deepResearchEventSource, setDeepResearchEventSource] = useState<EventSource | null>(null);
+  const [researchAnalysisExpanded, setResearchAnalysisExpanded] = useState<boolean>(false);
+  const [currentResearchResult, setCurrentResearchResult] = useState<{
+    finalAnswer: string;
+    thoughtProcess: any[];
+    confidence: number;
+    sources: any[];
+  } | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
 
@@ -121,6 +128,8 @@ const SearchInterface: React.FC = () => {
         timestamp: new Date()
       }
     ]);
+    setCurrentResearchResult(null);
+    setResearchAnalysisExpanded(false);
   };
 
   useEffect(() => {
@@ -169,6 +178,10 @@ const SearchInterface: React.FC = () => {
     console.log('🔍 Starting search');
     console.log('🔐 Is authenticated:', apiClient.isAuthenticated());
     console.log('🎫 Auth token exists:', !!localStorage.getItem('authToken'));
+
+    // Clear previous research result
+    setCurrentResearchResult(null);
+    setResearchAnalysisExpanded(false);
 
     if (!apiClient.isAuthenticated()) {
       console.error('❌ Not authenticated - cannot make search request');
@@ -299,24 +312,23 @@ const SearchInterface: React.FC = () => {
                 currentThought: thought,
                 latestTotalThoughts
               });
-            } else if (data.type === 'complete') {
-              console.log('Deep research completed successfully');
-              researchCompleted = true;
-              setDeepResearchProgress(prev => prev ? { ...prev, status: 'complete' } : null);
-              setIsLoading(false);
-              // Don't close the EventSource here, let it close naturally with [DONE]
+             } else if (data.type === 'complete') {
+               console.log('Deep research completed successfully');
+               researchCompleted = true;
+               setDeepResearchProgress(prev => prev ? { ...prev, status: 'complete' } : null);
+               setIsLoading(false);
+               // Don't close the EventSource here, let it close naturally with [DONE]
 
-              // Format the final response
-              let content = data.result.finalAnswer;
+               // Store the research result for display
+               setCurrentResearchResult({
+                 finalAnswer: data.result.finalAnswer,
+                 thoughtProcess: thoughtProcess,
+                 confidence: data.result.confidence,
+                 sources: data.result.sources || []
+               });
 
-              if (thoughtProcess.length > 0) {
-                const thoughtProcessText = thoughtProcess
-                  .map((thought: any, index: number) =>
-                    `**Step ${index + 1}:** ${thought.thought}`
-                  )
-                  .join('\n\n');
-                content += `\n\n## Research Analysis\n\n${thoughtProcessText}\n\n---\n\n*Research completed with ${thoughtProcess.length} steps and ${data.result.confidence}% confidence.*`;
-              }
+               // Use the clean final answer directly
+               let content = data.result.finalAnswer;
 
               const aiMessage: ConversationMessage = {
                 id: (Date.now() + 2).toString(),
@@ -500,17 +512,7 @@ const SearchInterface: React.FC = () => {
           // Chat response - no need for web search or local results
           aiContent = response.ai.chatResponse || "Hello! I'm your AI assistant for personal resources. How can I help you?";
 
-          // Check if this is a deep research response with thought process
-          if (response.ai.deepResearch && response.ai.deepResearch.thoughtProcess) {
-            // Add thought process to the content
-            const thoughtProcessText = response.ai.deepResearch.thoughtProcess
-              .map((thought: any, index: number) =>
-                `**Step ${index + 1}:** ${thought.thought}`
-              )
-              .join('\n\n');
-
-            aiContent += `\n\n## Research Analysis\n\n${thoughtProcessText}\n\n---\n\n*Research completed in ${response.ai.deepResearch.thoughtCount} steps with ${response.ai.deepResearch.confidence}% confidence.*`;
-          }
+           // Deep research results are handled separately - don't add thought process to content
         } else {
           // Use AI-generated summary from backend if available
           if (response.ai && response.ai.summary) {
@@ -966,14 +968,91 @@ const SearchInterface: React.FC = () => {
 
 
 
-                    <div className="text-xs text-gray-500 mt-2 ml-11">
-                      {message.timestamp.toLocaleTimeString()}
-                    </div>
-                  </div>
-                </div>
-              ))}
+                     <div className="text-xs text-gray-500 mt-2 ml-11">
+                       {message.timestamp.toLocaleTimeString()}
+                     </div>
+                   </div>
+                 </div>
+               ))}
 
-              <div ref={chatEndRef} />
+               {/* Research Analysis for Latest AI Message */}
+               {currentResearchResult && currentResearchResult.thoughtProcess && currentResearchResult.thoughtProcess.length > 0 && (
+                 <div className="mt-6 bg-white border border-gray-200 rounded-xl overflow-hidden">
+                   <button
+                     onClick={() => setResearchAnalysisExpanded(!researchAnalysisExpanded)}
+                     className="w-full px-6 py-4 text-left flex items-center justify-between hover:bg-gray-50 transition-colors"
+                   >
+                     <div className="flex items-center gap-3">
+                       <Brain className="w-5 h-5 text-purple-600" strokeWidth={1.5} />
+                       <span className="font-medium text-gray-900">Research Analysis</span>
+                       <span className="text-sm text-gray-600">({currentResearchResult.thoughtProcess.length} steps)</span>
+                     </div>
+                     <ChevronDown
+                       className={`w-5 h-5 text-gray-500 transition-transform ${researchAnalysisExpanded ? 'rotate-180' : ''}`}
+                       strokeWidth={1.5}
+                     />
+                   </button>
+
+                   {researchAnalysisExpanded && (
+                     <div className="border-t border-gray-200">
+                       <div className="max-h-96 overflow-y-auto">
+                         {currentResearchResult.thoughtProcess.map((thought, index) => (
+                           <div key={index} className="px-6 py-4 border-b border-gray-100 last:border-b-0">
+                             <div className="flex items-start gap-4">
+                               <div className="flex-shrink-0 mt-1">
+                                 {getThoughtIcon(thought)}
+                               </div>
+                               <div className="flex-1 min-w-0">
+                                 <div className="flex items-center gap-2 mb-3">
+                                   <h4 className="text-lg font-semibold text-gray-900">
+                                     {thought.isRevision ? 'Revision' : thought.action ? `${thought.action.replace('_', ' ').toUpperCase()}` : 'Analysis'}
+                                   </h4>
+                                   {thought.isRevision && (
+                                     <span className="px-3 py-1 bg-yellow-100 text-yellow-800 text-sm rounded-full">
+                                       Revising step {thought.revisesThought}
+                                     </span>
+                                   )}
+                                 </div>
+
+                                 <div className="prose prose-sm max-w-none text-gray-700 mb-4">
+                                   <ReactMarkdown>{thought.thought}</ReactMarkdown>
+                                 </div>
+
+                                 {thought.actionDetails && (
+                                   <div className="mb-4 p-4 bg-gray-50 rounded-lg border-l-4 border-blue-400">
+                                     <div className="text-sm text-gray-600 mb-2">Action Details:</div>
+                                     <div className="text-sm font-mono text-gray-800 break-all">
+                                       {thought.actionDetails}
+                                     </div>
+                                   </div>
+                                 )}
+
+                                 {thought.result && (
+                                   <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                                     <div className="text-sm text-green-700 mb-2 font-medium">Result:</div>
+                                     <div className="text-sm text-green-800 whitespace-pre-wrap break-words">
+                                       {thought.result.length > 500 ? `${thought.result.substring(0, 500)}...` : thought.result}
+                                     </div>
+                                   </div>
+                                 )}
+
+                                 <div className="mt-4 text-xs text-gray-500 flex items-center gap-4">
+                                   <span>{new Date(thought.timestamp).toLocaleTimeString()}</span>
+                                   {!thought.nextThoughtNeeded && (
+                                     <span className="text-green-600 font-medium">Final step</span>
+                                   )}
+                                 </div>
+                               </div>
+                             </div>
+                           </div>
+                         ))}
+                       </div>
+                     </div>
+                   )}
+                 </div>
+               )}
+
+               <div ref={chatEndRef} />
 
                 {/* Loading State */}
                 {isLoading && !deepResearchProgress && (

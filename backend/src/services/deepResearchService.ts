@@ -40,6 +40,7 @@ export class DeepResearchService {
     relevance: number;
   }> = [];
   private finalConfidence: number = 0;
+  private finalAnswer: string = '';
   private includeWebSearch: boolean = true;
   private userId?: string;
   private prisma: typeof prisma;
@@ -220,77 +221,97 @@ export class DeepResearchService {
         }
 
         case 'search': {
-          if (!this.includeWebSearch) {
-            return `Web search is disabled. Use 'search_local' to search through your personal resources instead of web search.`;
-          }
+           if (!this.includeWebSearch) {
+             return `Web search is disabled. Use 'search_local' to search through your personal resources instead of web search.`;
+           }
 
-          console.log(`🔍 Performing web search for: "${actionDetails}"`);
+           console.log(`🔍 Performing web search for: "${actionDetails}"`);
 
-          const searchResults = await performWebSearch(actionDetails, {
-            pageno: 1,
-            time_range: 'month',
-            categories: 'it,news,science',
-            engines: 'duckduckgo,google,wikipedia',
-            enabled_engines: 'duckduckgo,google',
-            language: 'en',
-            safesearch: 1
-          });
+           try {
+             const searchResults = await performWebSearch(actionDetails, {
+               pageno: 1,
+               time_range: 'month',
+               categories: 'it,news,science',
+               engines: 'duckduckgo,google,wikipedia',
+               enabled_engines: 'duckduckgo,google',
+               language: 'en',
+               safesearch: 1
+             });
 
-          const results = searchResults.results?.slice(0, 5) || [];
-          const formattedResults = results.map((r: any, i: number) =>
-            `${i + 1}. ${r.title} - ${r.url}\n   ${r.content?.substring(0, 150)}...`
-          ).join('\n\n');
+             // Filter out academic/research content and irrelevant results
+             const filteredResults = this.filterWebSearchResults(searchResults.results || [], actionDetails);
 
-          // Store sources
-          results.forEach((r: any) => {
-            this.sources.push({
-              url: r.url,
-              title: r.title,
-              content: r.content || '',
-              relevance: 0.8 // Default relevance
-            });
-          });
+             const results = filteredResults.slice(0, 5);
+             const formattedResults = results.map((r: any, i: number) =>
+               `${i + 1}. ${r.title} - ${r.url}\n   ${r.content?.substring(0, 150)}...`
+             ).join('\n\n');
 
-          return `Found ${results.length} results:\n${formattedResults}`;
-        }
+             // Store sources
+             results.forEach((r: any) => {
+               this.sources.push({
+                 url: r.url,
+                 title: r.title,
+                 content: r.content || '',
+                 relevance: 0.8 // Default relevance
+               });
+             });
+
+             return `Found ${results.length} results:\n${formattedResults}`;
+           } catch (error) {
+             console.warn(`Web search failed for "${actionDetails}":`, error);
+             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+             return `Web search failed: ${errorMessage}. Try searching your local resources instead using 'search_local' action with relevant keywords.`;
+           }
+         }
 
         case 'read_url': {
-          if (!this.includeWebSearch) {
-            return `Web access is disabled. Cannot read URL: "${actionDetails}". Please analyze available information from local resources only.`;
-          }
+           if (!this.includeWebSearch) {
+             return `Web access is disabled. Cannot read URL: "${actionDetails}". Please analyze available information from local resources only.`;
+           }
 
-          console.log(`📖 Reading URL: ${actionDetails}`);
+           console.log(`📖 Reading URL: ${actionDetails}`);
 
-          // Extract URL from actionDetails (AI sometimes includes extra text)
-          const urlRegex = /(https?:\/\/[^\s]+)/;
-          const match = actionDetails.match(urlRegex);
-          const url = match ? match[1] : actionDetails.trim();
+           try {
+             // Extract URL from actionDetails (AI sometimes includes extra text)
+             const urlRegex = /(https?:\/\/[^\s]+)/;
+             const match = actionDetails.match(urlRegex);
+             const url = match ? match[1] : actionDetails.trim();
 
-          if (!url.startsWith('http://') && !url.startsWith('https://')) {
-            return `Invalid URL format: ${actionDetails}. Please provide a valid URL starting with http:// or https://.`;
-          }
+             if (!url.startsWith('http://') && !url.startsWith('https://')) {
+               return `Invalid URL format: ${actionDetails}. Please provide a valid URL starting with http:// or https://.`;
+             }
 
-          const content = await readUrlContent(url, 15000, {
-            returnRaw: false,
-            maxLength: 3000,
-          });
+             const content = await readUrlContent(url, 15000, {
+               returnRaw: false,
+               maxLength: 3000,
+             });
 
-          // Store as source
-          this.sources.push({
-            url,
-            title: url, // Will be updated if we can extract title
-            content,
-            relevance: 0.9
-          });
+             // Check if content is meaningful (not just error pages or redirects)
+             if (content.length < 100) {
+               return `URL content too short or inaccessible: ${url}. The page may not exist or be blocked.`;
+             }
 
-          // Try to extract title from content
-          const titleMatch = content.match(/<title[^>]*>([^<]+)<\/title>/i);
-          if (titleMatch) {
-            this.sources[this.sources.length - 1].title = titleMatch[1].trim();
-          }
+             // Store as source
+             this.sources.push({
+               url,
+               title: url, // Will be updated if we can extract title
+               content,
+               relevance: 0.9
+             });
 
-          return `Content read (${content.length} chars): ${content.substring(0, 500)}...`;
-        }
+             // Try to extract title from content
+             const titleMatch = content.match(/<title[^>]*>([^<]+)<\/title>/i);
+             if (titleMatch) {
+               this.sources[this.sources.length - 1].title = titleMatch[1].trim();
+             }
+
+             return `Content read (${content.length} chars): ${content.substring(0, 500)}...`;
+           } catch (error) {
+             console.warn(`URL reading failed for "${actionDetails}":`, error);
+             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+             return `Failed to read URL: ${errorMessage}. Consider searching for alternative sources.`;
+           }
+         }
 
         case 'analyze':
           return `Analysis completed for: ${actionDetails}`;
@@ -419,18 +440,20 @@ ${this.thoughtHistory.map(t => `Thought ${t.thoughtNumber}: ${t.thought}${t.acti
 Instructions for this research step:
 1. Analyze what information is still needed
 2. Plan the next research action${includeWebSearch ? ' (search, read_url, analyze, extract_links)' : ' (search_local, analyze, extract_links)'}
-3. Be specific about what you're looking for${includeWebSearch ? '' : ' - search through user\'s local documents, notes, and resources'}
+3. Be specific about what you're looking for${includeWebSearch ? ' - focus on practical, beginner-friendly content (tutorials, guides, documentation) rather than academic papers or research articles' : ' - search through user\'s local documents, notes, and resources'}
 
 Available actions:
 ${availableActions}
 
-${includeWebSearch ? 'For search queries: Keep them short and direct (2-5 words maximum). Examples: "Next.js docs", "React SSR tutorial", "Vercel deployment"' : 'For local search: Search user\'s personal resources (notes, documents, etc.) with specific keywords. Examples: "python tutorial", "machine learning notes", "web development project"'}
+${includeWebSearch ? 'For search queries: Keep them short and direct (2-5 words maximum). Focus on practical content. Examples: "Next.js tutorial", "React beginner guide", "Python basics course", "JavaScript docs"' : 'For local search: Search user\'s personal resources (notes, documents, etc.) with specific keywords. Examples: "python tutorial", "machine learning notes", "web development project"'}
+
+${includeWebSearch ? 'IMPORTANT: Avoid academic/research content. Prioritize tutorials, guides, documentation, and practical examples over research papers, academic journals, or scholarly articles. If web search fails (times out, network errors, etc.), immediately switch to search_local to search through the user\'s personal resources.' : ''}
 
 Return JSON:
 {
   "thought": "Your current analysis and plan",
   ${actionOptions},
-  "actionDetails": "CONCISE details${includeWebSearch ? ' - for search: 2-5 word query, for read_url: clean URL only' : ' - for search_local: specific search terms for user resources'}",
+  "actionDetails": "CONCISE details${includeWebSearch ? ' - for search: 2-5 word practical query, for read_url: clean URL only' : ' - for search_local: specific search terms for user resources'}",
   "nextThoughtNeeded": true/false,
   "totalThoughts": estimated_total,
   "finalAnswer": "ONLY if confident (80%+), provide final answer",
@@ -494,12 +517,13 @@ Return JSON:
           nextThoughtNeeded = thoughtResult.nextThoughtNeeded;
           totalThoughts = thoughtResult.totalThoughts || totalThoughts;
 
-          if (thoughtResult.finalAnswer && thoughtResult.confidence > 70) {
-            finalAnswer = thoughtResult.finalAnswer;
-            confidence = thoughtResult.confidence;
-            this.finalConfidence = confidence;
-            nextThoughtNeeded = false;
-          }
+           if (thoughtResult.finalAnswer && thoughtResult.confidence > 70) {
+             finalAnswer = thoughtResult.finalAnswer;
+             confidence = thoughtResult.confidence;
+             this.finalConfidence = confidence;
+             this.finalAnswer = finalAnswer;
+             nextThoughtNeeded = false;
+           }
 
           currentThought++;
         } catch (error) {
@@ -518,16 +542,17 @@ Return JSON:
       };
       yield synthesisThought;
 
-      // If no high-confidence answer was found, try to synthesize one
-      if (!finalAnswer || confidence <= 70) {
-        console.log('\n🔄 Synthesizing final answer from research...');
-        const synthesis = await this.synthesizeFinalAnswer(query);
-        if (synthesis.confidence > confidence) {
-          finalAnswer = synthesis.answer;
-          confidence = synthesis.confidence;
-          this.finalConfidence = confidence;
-        }
-      }
+       // If no high-confidence answer was found, try to synthesize one
+       if (!finalAnswer || confidence <= 70) {
+         console.log('\n🔄 Synthesizing final answer from research...');
+         const synthesis = await this.synthesizeFinalAnswer(query);
+         if (synthesis.confidence > confidence) {
+           finalAnswer = synthesis.answer;
+           confidence = synthesis.confidence;
+           this.finalConfidence = confidence;
+           this.finalAnswer = finalAnswer;
+         }
+       }
 
       // Yield final thought with conclusion
       const finalThought: DeepResearchThought = {
@@ -556,9 +581,70 @@ Return JSON:
     }
   }
 
+  private filterWebSearchResults(results: any[], query: string): any[] {
+    // Keywords that indicate academic/research content to filter out
+    const academicKeywords = [
+      'research paper', 'academic journal', 'doi:', 'abstract', 'citation',
+      'peer-reviewed', 'scholarly article', 'conference proceedings',
+      'phd thesis', 'dissertation', 'arxiv', 'pubmed', 'ieee', 'acm',
+      'springer', 'wiley', 'elsevier', 'science direct', 'jstor',
+      'researchgate', 'academia.edu', 'semantic scholar'
+    ];
+
+    // Keywords that indicate practical, beginner-friendly content
+    const practicalKeywords = [
+      'tutorial', 'guide', 'how to', 'beginner', 'introduction', 'basics',
+      'getting started', 'examples', 'documentation', 'docs', 'learn',
+      'course', 'class', 'lesson', 'step by step', 'easy', 'simple'
+    ];
+
+    // Filter out results that match academic keywords
+    const filtered = results.filter(result => {
+      const title = (result.title || '').toLowerCase();
+      const content = (result.content || '').toLowerCase();
+      const url = (result.url || '').toLowerCase();
+
+      // Skip if title, content, or URL contains academic keywords
+      const hasAcademicContent = academicKeywords.some(keyword =>
+        title.includes(keyword) || content.includes(keyword) || url.includes(keyword)
+      );
+
+      if (hasAcademicContent) {
+        console.log(`Filtering out academic result: ${result.title}`);
+        return false;
+      }
+
+      // For programming/course queries, prefer practical content
+      if (query.toLowerCase().includes('course') || query.toLowerCase().includes('learn') ||
+          query.toLowerCase().includes('tutorial') || query.toLowerCase().includes('programming')) {
+        const hasPracticalContent = practicalKeywords.some(keyword =>
+          title.includes(keyword) || content.includes(keyword)
+        );
+
+        if (!hasPracticalContent) {
+          console.log(`Filtering out non-practical result for learning query: ${result.title}`);
+          return false;
+        }
+      }
+
+      // Skip results with very short content (likely not useful)
+      if (!result.content || result.content.length < 50) {
+        console.log(`Filtering out result with insufficient content: ${result.title}`);
+        return false;
+      }
+
+      return true;
+    });
+
+    console.log(`Filtered web results: ${results.length} -> ${filtered.length}`);
+    return filtered;
+  }
+
   private async synthesizeFinalAnswer(query: string): Promise<{answer: string, confidence: number}> {
     try {
-      const thoughtsText = this.thoughtHistory.map(t =>
+      // Use thoughtProcess (excluding final thought) to avoid confusion in synthesis
+      const thoughtProcess = this.thoughtHistory.slice(0, -1);
+      const thoughtsText = thoughtProcess.map(t =>
         `Thought ${t.thoughtNumber}: ${t.thought}${t.action ? ` | Action: ${t.action}` : ''}${t.result ? ` | Result: ${t.result}` : ''}`
       ).join('\n');
 
@@ -566,25 +652,23 @@ Return JSON:
         `Source: ${s.title} (${s.url})\n${s.content.substring(0, 300)}...`
       ).join('\n\n');
 
-      const systemPrompt = `You are a research synthesizer. Analyze the research process and sources below to provide a final answer to: "${query}"
+        const systemPrompt = `You are a research synthesizer. Your ONLY task is to provide a final answer to: "${query}"
 
-Research Process:
-${thoughtsText}
+Based on the research that was conducted, provide a comprehensive and accurate answer.
 
-Sources Found:
-${sourcesText}
+CRITICAL: Your answer MUST be PURE CONTENT ONLY. Do NOT include ANY research process details, methodology, or meta-information.
 
-Instructions:
-1. Look for concrete answers, facts, or conclusions from the research
-2. Cross-reference information from multiple sources when possible
-3. If multiple answers exist, choose the most reliable one
-4. If no clear answer was found, state that clearly
-5. Provide a confidence score based on evidence quality and consistency
-6. Keep the answer concise and direct
+FORBIDDEN: Do NOT include ANY of these words/phrases in your answer:
+"Research Analysis", "Step", "Research completed", "Final answer:", "Confidence", "Sources explored", "Research steps", "Thought", "Action", "Result", "Executing", "Performing", "Reading URL", "Deep research completed", "Synthesizing final answer", "research methodology", "sources", "citations", "confidence levels", "research process"
 
-Return JSON:
+Your answer should be DIRECT CONTENT ONLY. Start immediately with the answer content. No headers, no meta-information, no process details.
+
+EXAMPLE FORMAT (pure content only):
+"Key latest Indian news headlines include: RBI's export relief measures may pressure the Indian rupee by denting dollar flows; Indian stock benchmarks poised to open higher on improving earnings outlook; EU preparing to reject India's demand for exemption from carbon border tax; Blast at police station in Kashmir kills nine and injures 27; Guernsey's Indian community celebrates Diwali. Regional news: Bangladesh tribunal convicts ousted PM Sheikh Hasina of crimes against humanity."
+
+Return ONLY this JSON - nothing else:
 {
-  "answer": "The synthesized final answer",
+  "answer": "PURE CONTENT ONLY - no research details, no steps, no analysis, no confidence, no sources mentioned",
   "confidence": 0-100
 }`;
 
@@ -601,13 +685,17 @@ Return JSON:
       if (content) {
         try {
           const synthesis = JSON.parse(content);
+          const rawAnswer = synthesis.answer || 'No confident answer found through research';
+          const cleanedAnswer = this.cleanFinalAnswer(rawAnswer);
           return {
-            answer: synthesis.answer || 'No confident answer found through research',
+            answer: cleanedAnswer,
             confidence: synthesis.confidence || 0
           };
         } catch (error) {
           console.warn('Error parsing synthesis:', error);
-          return { answer: 'Unable to synthesize answer from research', confidence: 0 };
+          // If JSON parsing fails, try to extract answer from the raw content
+          const cleanedContent = this.cleanFinalAnswer(content);
+          return { answer: cleanedContent || 'Unable to synthesize answer from research', confidence: 0 };
         }
       }
       return { answer: 'Research completed but no clear answer synthesized', confidence: 0 };
@@ -618,34 +706,118 @@ Return JSON:
   }
 
   getResearchResult(): DeepResearchResult {
-    const finalThought = this.thoughtHistory[this.thoughtHistory.length - 1];
+    // Use the stored finalAnswer if available, otherwise try to extract from final thought
+    let finalAnswer = this.finalAnswer;
 
-    let finalAnswer = 'Research completed without definitive answer';
+    if (!finalAnswer) {
+      const finalThought = this.thoughtHistory[this.thoughtHistory.length - 1];
+      finalAnswer = 'Research completed without definitive answer';
 
-    if (finalThought) {
-      // Check for direct time lookup
-      if (finalThought.thought.includes('Direct time lookup:')) {
-        finalAnswer = finalThought.thought.split('Direct time lookup:')[1].trim();
-      }
-      // Check for final answer
-      else if (finalThought.thought.includes('Final answer:')) {
-        finalAnswer = finalThought.thought.split('Final answer:')[1].trim();
-      }
-      // Check for research completed message
-      else if (finalThought.thought.includes('Research completed.')) {
-        const match = finalThought.thought.match(/Final answer:\s*(.+)/);
-        if (match) {
-          finalAnswer = match[1].trim();
+      if (finalThought) {
+        // Check for direct time lookup
+        if (finalThought.thought.includes('Direct time lookup:')) {
+          finalAnswer = finalThought.thought.split('Direct time lookup:')[1].trim();
+        }
+        // Check for final answer
+        else if (finalThought.thought.includes('Final answer:')) {
+          let answer = finalThought.thought.split('Final answer:')[1].trim();
+          // Clean the answer by removing any research steps or analysis that might be included
+          answer = this.cleanFinalAnswer(answer);
+          finalAnswer = answer;
+        }
+        // Check for research completed message
+        else if (finalThought.thought.includes('Research completed.')) {
+          const match = finalThought.thought.match(/Final answer:\s*(.+)/);
+          if (match) {
+            let answer = match[1].trim();
+            answer = this.cleanFinalAnswer(answer);
+            finalAnswer = answer;
+          } else {
+            // If no "Final answer:" found, try to extract content before any research indicators
+            let answer = finalThought.thought.split('Research completed.')[1]?.trim() || finalThought.thought;
+            answer = this.cleanFinalAnswer(answer);
+            finalAnswer = answer;
+          }
         }
       }
     }
 
+    // Clean the final answer one more time to be extra sure
+    finalAnswer = this.cleanFinalAnswer(finalAnswer);
+
+    // Exclude the final thought from thoughtProcess to prevent it from being displayed in research analysis
+    const thoughtProcess = this.thoughtHistory.slice(0, -1);
+
     return {
       finalAnswer,
-      thoughtProcess: this.thoughtHistory,
+      thoughtProcess,
       confidence: this.finalConfidence || 80, // Use calculated confidence or default
       sources: this.sources
     };
+  }
+
+  private cleanFinalAnswer(answer: string): string {
+    // Extremely aggressive cleaning - remove any content that looks like research analysis
+    let cleaned = answer;
+
+    // First, cut off everything after "research analysis" (case insensitive)
+    const researchAnalysisPatterns = ['research analysis', 'Research Analysis', 'RESEARCH ANALYSIS'];
+    for (const pattern of researchAnalysisPatterns) {
+      const index = cleaned.indexOf(pattern);
+      if (index !== -1) {
+        cleaned = cleaned.substring(0, index).trim();
+        break;
+      }
+    }
+
+    // Cut off everything after any step indicator
+    const stepPatterns = ['step 1:', 'step 2:', 'step 3:', 'step 4:', 'step 5:', 'step 6:', 'step 7:', 'step 8:', 'step 9:', 'step 10:'];
+    for (const pattern of stepPatterns) {
+      const index = cleaned.toLowerCase().indexOf(pattern.toLowerCase());
+      if (index !== -1) {
+        cleaned = cleaned.substring(0, index).trim();
+        break;
+      }
+    }
+
+    // Remove any remaining lines that contain research-related keywords
+    const lines = cleaned.split('\n');
+    const filteredLines = lines.filter(line => {
+      const trimmed = line.trim().toLowerCase();
+      if (trimmed.length === 0) return true;
+
+      // Block list of research-related terms
+      const blockedTerms = [
+        'research analysis', 'step ', 'thought ', 'action:', 'result:', 'executing:', 'performing:',
+        'reading url:', 'deep research completed', 'synthesizing final answer', 'research completed',
+        'final answer:', 'confidence', 'sources explored', 'research steps', 'research completed with',
+        'research analysis', 'thought', 'executing action', 'performing', 'reading url'
+      ];
+
+      return !blockedTerms.some(term => trimmed.includes(term));
+    });
+
+    cleaned = filteredLines.join('\n').trim();
+
+    // Final cleanup - remove any remaining confidence mentions
+    cleaned = cleaned.replace(/\d+% confidence.*$/s, '').trim();
+    cleaned = cleaned.replace(/research completed with.*$/s, '').trim();
+
+    // If still too short, try to extract the first meaningful paragraph
+    if (!cleaned || cleaned.length < 20) {
+      const paragraphs = answer.split('\n\n');
+      for (const paragraph of paragraphs) {
+        const trimmed = paragraph.trim();
+        if (trimmed.length > 50 &&
+            !trimmed.toLowerCase().includes('research') &&
+            !trimmed.toLowerCase().includes('step') &&
+            !trimmed.toLowerCase().includes('confidence')) {
+          return trimmed;
+        }
+      }
+    }
+
+    return cleaned || 'Unable to extract clean answer';
   }
 }
 

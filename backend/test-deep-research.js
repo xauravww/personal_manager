@@ -1,4 +1,4 @@
-const EventSource = require('eventsource');
+const EventSource = require('eventsource').default;
 
 const query = 'python course';
 const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJkOTgyNjRkOS1lZGIzLTQ2YTQtOGU1Ny04MGU5Mzc3NWQwZGMiLCJpYXQiOjE3NjMzNjI3NDUsImV4cCI6MTc2Mzk2NzU0NX0.tvi5mAXd1byT_V7yF-Z2OVSLr9GhhoF2Vxk8Ea5ZTMo'; // From previous run

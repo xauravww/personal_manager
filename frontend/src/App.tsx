@@ -11,6 +11,7 @@ const Dashboard = React.lazy(() => import('./pages/Dashboard'));
 const Search = React.lazy(() => import('./pages/Search'));
 const Upload = React.lazy(() => import('./pages/Upload'));
 const Resources = React.lazy(() => import('./pages/Resources'));
+const DeepResearch = React.lazy(() => import('./pages/DeepResearch'));
 
 // Loading component for Suspense fallback
 const PageLoader = () => (
@@ -61,6 +62,14 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <Upload />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/deep-research"
+                element={
+                  <ProtectedRoute>
+                    <DeepResearch />
                   </ProtectedRoute>
                 }
               />

@@ -89,13 +89,13 @@ const Dashboard: React.FC = () => {
                 </div>
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-600 mb-1">Total Resources</p>
-                  <p className="text-3xl font-bold text-gray-900">
+                  <div className="text-3xl font-bold text-gray-900">
                     {statsLoading ? (
                       <div className="animate-pulse bg-gray-200 h-8 w-16 rounded"></div>
                     ) : (
                       stats.totalResources
                     )}
-                  </p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -107,13 +107,13 @@ const Dashboard: React.FC = () => {
                 </div>
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-600 mb-1">Added This Week</p>
-                  <p className="text-3xl font-bold text-gray-900">
+                  <div className="text-3xl font-bold text-gray-900">
                     {statsLoading ? (
                       <div className="animate-pulse bg-gray-200 h-8 w-16 rounded"></div>
                     ) : (
                       stats.addedThisWeek
                     )}
-                  </p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -125,13 +125,13 @@ const Dashboard: React.FC = () => {
                 </div>
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-600 mb-1">Searches Today</p>
-                  <p className="text-3xl font-bold text-gray-900">
+                  <div className="text-3xl font-bold text-gray-900">
                     {statsLoading ? (
                       <div className="animate-pulse bg-gray-200 h-8 w-16 rounded"></div>
                     ) : (
                       stats.searchesToday
                     )}
-                  </p>
+                  </div>
                 </div>
               </div>
             </div>

@@ -63,7 +63,6 @@ const DeepResearch: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [researchStatus, setResearchStatus] = useState<ResearchStatus>('idle');
   const [currentThought, setCurrentThought] = useState<DeepResearchThought | null>(null);
-  const [completedThoughts, setCompletedThoughts] = useState<DeepResearchThought[]>([]);
   const [finalResult, setFinalResult] = useState<DeepResearchResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sourcesExpanded, setSourcesExpanded] = useState<boolean>(false);
@@ -77,7 +76,7 @@ const DeepResearch: React.FC = () => {
 
   useEffect(() => {
     scrollToBottom();
-  }, [currentThought, completedThoughts]);
+  }, [currentThought]);
 
   const getStatusIcon = (status: ResearchStatus) => {
     switch (status) {
@@ -139,7 +138,6 @@ const DeepResearch: React.FC = () => {
     setIsLoading(true);
     setResearchStatus('thinking');
     setCurrentThought(null);
-    setCompletedThoughts([]);
     setFinalResult(null);
     setError(null);
 
@@ -187,10 +185,7 @@ const DeepResearch: React.FC = () => {
             // Update latest total thoughts estimate
             setLatestTotalThoughts(prev => Math.max(prev, thought.totalThoughts));
 
-            // Move current thought to completed and set new current thought
-            if (currentThought) {
-              setCompletedThoughts(prev => [...prev, currentThought]);
-            }
+            // Set new current thought (no need to keep history since we don't display it)
             setCurrentThought(thought);
 
             // Update status based on completed thought action
@@ -240,7 +235,6 @@ const DeepResearch: React.FC = () => {
       eventSourceRef.current.close();
     }
     setCurrentThought(null);
-    setCompletedThoughts([]);
     setFinalResult(null);
     setError(null);
     setSourcesExpanded(false);
@@ -288,7 +282,7 @@ const DeepResearch: React.FC = () => {
               className="w-full px-6 py-4 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-lg shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
             />
             <div className="absolute right-4 top-1/2 transform -translate-y-1/2 flex gap-2">
-              {(currentThought || completedThoughts.length > 0 || finalResult) && (
+              {(currentThought || finalResult) && (
                 <button
                   onClick={clearResearch}
                   disabled={isLoading}
@@ -329,7 +323,7 @@ const DeepResearch: React.FC = () => {
       {/* Research Results */}
       <div className="flex-1 px-4 py-6 lg:px-6">
         <div className="max-w-4xl mx-auto">
-          {!currentThought && completedThoughts.length === 0 && !isLoading && researchStatus === 'idle' && (
+          {!currentThought && !isLoading && researchStatus === 'idle' && (
             <div className="text-center py-12">
               <div className="w-16 h-16 bg-gradient-to-r from-purple-100 to-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Brain className="w-8 h-8 text-purple-600" strokeWidth={1.5} />
@@ -348,7 +342,7 @@ const DeepResearch: React.FC = () => {
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-gray-900">Live Research Progress</h2>
                 <span className="text-sm text-gray-600">
-                  {completedThoughts.length + (currentThought ? 1 : 0)} steps completed
+                  {currentThought ? currentThought.thoughtNumber : 0} steps completed
                 </span>
               </div>
 
@@ -430,47 +424,7 @@ const DeepResearch: React.FC = () => {
             </div>
           )}
 
-          {/* Completed Thoughts History */}
-          {completedThoughts.length > 0 && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-semibold text-gray-900">Research History</h2>
-                <span className="text-sm text-gray-600">{completedThoughts.length} completed steps</span>
-              </div>
 
-              <div className="space-y-3">
-                {completedThoughts.map((thought, index) => (
-                  <div key={index} className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                    <div className="flex items-start gap-3">
-                      <div className="flex-shrink-0 mt-0.5">
-                        {getThoughtIcon(thought)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-2">
-                          <h4 className="text-sm font-medium text-gray-900">
-                            Step {thought.thoughtNumber}: {thought.isRevision ? 'Revision' : thought.action ? `${thought.action.replace('_', ' ').toUpperCase()}` : 'Analysis'}
-                          </h4>
-                          <span className="text-xs text-gray-500">
-                            {new Date(thought.timestamp).toLocaleTimeString()}
-                          </span>
-                        </div>
-                        <div className="text-sm text-gray-700 line-clamp-2">
-                          {thought.thought}
-                        </div>
-                        {thought.result && (
-                          <div className="mt-2 text-xs text-green-700">
-                            ✓ Result: {thought.result.substring(0, 100)}...
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div ref={thoughtsEndRef} />
-            </div>
-          )}
 
           {/* Final Result */}
           {finalResult && (

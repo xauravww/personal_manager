@@ -1018,9 +1018,16 @@ Return a JSON object:
        time,
        day,
        timestamp: now.getTime()
-     };
-   }
-}
+       };
+    }
+
+    /**
+     * Get the AI service configuration
+     */
+    getConfig(): AIConfig {
+      return this.config;
+    }
+  }
 
 // Export singleton instance
 export const aiService = new AIService();

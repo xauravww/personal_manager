@@ -12,6 +12,7 @@ import {
   ChevronDown,
   LogOut,
   UserCircle,
+  Brain,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -31,6 +32,7 @@ const DashboardLayout: React.FC<DashboardLayoutProps> = ({ children }) => {
     { name: 'Dashboard', href: '/dashboard', icon: Home },
     { name: 'Resources', href: '/resources', icon: FolderOpen },
     { name: 'Search', href: '/search', icon: Search },
+    { name: 'Deep Research', href: '/deep-research', icon: Brain },
     { name: 'Settings', href: '/dashboard', icon: Settings }, // For now, link to dashboard
   ];
 

@@ -36,6 +36,44 @@ async function retryWithBackoff(fn: () => Promise<any>, maxRetries = 3, baseDela
   throw lastError!;
 }
 
+// Extract main content from HTML by removing common navigation and header elements
+function extractMainContent(html: string): string {
+  // Simple content extraction - remove common navigation elements
+  let content = html;
+
+  // Remove script and style tags
+  content = content.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '');
+  content = content.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '');
+
+  // Remove common navigation/header elements
+  content = content.replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '');
+  content = content.replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '');
+  content = content.replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '');
+
+  // Remove common class/ID based navigation
+  content = content.replace(/<[^>]*class="[^"]*nav[^"]*"[^>]*>[\s\S]*?<\/[^>]+>/gi, '');
+  content = content.replace(/<[^>]*id="[^"]*nav[^"]*"[^>]*>[\s\S]*?<\/[^>]+>/gi, '');
+  content = content.replace(/<[^>]*class="[^"]*header[^"]*"[^>]*>[\s\S]*?<\/[^>]+>/gi, '');
+  content = content.replace(/<[^>]*class="[^"]*footer[^"]*"[^>]*>[\s\S]*?<\/[^>]+>/gi, '');
+
+  // Try to find main content area
+  const mainSelectors = [
+    /<main[^>]*>([\s\S]*?)<\/main>/i,
+    /<article[^>]*>([\s\S]*?)<\/article>/i,
+    /<div[^>]*class="[^"]*content[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+    /<div[^>]*id="[^"]*content[^"]*"[^>]*>([\s\S]*?)<\/div>/i,
+  ];
+
+  for (const selector of mainSelectors) {
+    const match = content.match(selector);
+    if (match && match[1] && match[1].length > 200) {
+      return match[1];
+    }
+  }
+
+  return content;
+}
+
 // Decode response data properly based on content-type charset
 function decodeResponseData(data: any, contentType?: string): string {
   // Handle Buffer data (compressed or binary)
@@ -99,7 +137,9 @@ function processContent(content: string, contentType?: string, returnRaw = false
 
   if (isHtml) {
     try {
-      return NodeHtmlMarkdown.translate(content);
+      // Extract main content before converting to markdown
+      const mainContent = extractMainContent(content);
+      return NodeHtmlMarkdown.translate(mainContent);
     } catch (error) {
       console.warn('Failed to convert HTML to Markdown, returning raw content:', error);
       return content;

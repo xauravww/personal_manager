@@ -370,6 +370,23 @@ class ApiClient {
   isAuthenticated(): boolean {
     return !!this.token;
   }
+
+  // Deep Research methods
+  async performDeepResearch(params: {
+    query: string;
+    maxThoughts?: number;
+  }): Promise<EventSource> {
+    const searchParams = new URLSearchParams();
+    searchParams.set('query', params.query);
+    if (params.maxThoughts) searchParams.set('maxThoughts', params.maxThoughts.toString());
+    if (this.token) searchParams.set('token', this.token);
+
+    const url = `${API_BASE_URL}/deep-research?${searchParams.toString()}`;
+
+    const eventSource = new EventSource(url);
+
+    return eventSource;
+  }
 }
 
 // Create and export a singleton instance

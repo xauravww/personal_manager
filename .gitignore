@@ -11,8 +11,11 @@ backend/error.log
 backend/combined.log
 backend/backend.log
 backend/*.log
+backend/prisma/*.db
+backend/prisma/*.db-*
 prisma/*.db
 prisma/*.db-*
+*.db
 *.log
 .DS_Store
 Thumbs.db

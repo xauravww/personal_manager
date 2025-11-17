@@ -232,16 +232,18 @@ Instructions for this research step:
 5. If ready to conclude, provide a final answer with confidence
 
 Available actions:
-- "search": Search the web for specific terms
-- "read_url": Read content from a specific URL
+- "search": Search the web for specific terms (provide concise, direct search queries like "Next.js documentation" not long sentences)
+- "read_url": Read content from a specific URL (provide clean URLs without extra text)
 - "analyze": Analyze existing information
 - "extract_links": Extract links from recently read content
+
+For search queries: Keep them short and direct (2-5 words maximum). Examples: "Next.js docs", "React SSR tutorial", "Vercel deployment"
 
 Return JSON:
 {
   "thought": "Your current analysis and plan",
   "action": "search|read_url|analyze|extract_links",
-  "actionDetails": "Specific details for the action",
+  "actionDetails": "CONCISE details - for search: 2-5 word query, for read_url: clean URL only",
   "nextThoughtNeeded": true/false,
   "totalThoughts": estimated_total,
   "finalAnswer": "ONLY if confident (80%+), provide final answer",
@@ -249,7 +251,7 @@ Return JSON:
 }`;
 
         const response = await aiService.createChatCompletion({
-          model: aiService.config.model,
+          model: aiService.getConfig().model,
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: `Execute thought step ${currentThought} for: ${query}` }
@@ -398,7 +400,7 @@ Return JSON:
 }`;
 
       const response = await aiService.createChatCompletion({
-        model: aiService.config.model,
+        model: aiService.getConfig().model,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: `Synthesize final answer from research on: ${query}` }

@@ -66,7 +66,7 @@ const Navbar: React.FC<NavbarProps> = ({ showNavigation = true }) => {
       {/* Mobile Navigation Sidebar */}
       <div
         className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform md:hidden ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+            sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         } transition-transform duration-300 ease-in-out`}
       >
         <div className="flex flex-col h-full">
@@ -74,10 +74,20 @@ const Navbar: React.FC<NavbarProps> = ({ showNavigation = true }) => {
           <div className="flex items-center justify-center h-16 px-4 bg-white border-b border-gray-200">
             <Link
               to="/"
-              className="text-xl font-semibold text-gray-900 tracking-tight hover:text-gray-700 transition-colors"
+              className="hover:opacity-80 transition-opacity"
               onClick={() => setSidebarOpen(false)}
             >
-              Personal Manager
+              <svg width="140" height="32" viewBox="0 0 140 32" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-8 w-auto">
+                {/* Book Icon */}
+                <rect x="2" y="6" width="16" height="20" rx="2" fill="#2563EB"/>
+                <path d="M6 10h8M6 14h8M6 18h6" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+                <path d="M10 6v20" stroke="#2563EB" strokeWidth="2" strokeLinecap="round"/>
+                <circle cx="10" cy="4" r="2" fill="#2563EB"/>
+                <circle cx="10" cy="28" r="2" fill="#2563EB"/>
+
+                {/* Text */}
+                <text x="26" y="22" fontFamily="system-ui, -apple-system, sans-serif" fontSize="14" fontWeight="700" fill="#111827">Personal Manager</text>
+              </svg>
             </Link>
           </div>
 
@@ -89,10 +99,10 @@ const Navbar: React.FC<NavbarProps> = ({ showNavigation = true }) => {
                  <Link
                    key={item.name}
                    to={item.href}
-                   className={`group flex items-center px-3 py-2 text-base font-medium rounded-md transition-colors duration-200 ${
+                   className={`group flex items-center px-3 py-2 text-base font-medium rounded-md transition-all duration-200 ${
                      isCurrent
                        ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-700'
-                       : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                       : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                    }`}
                    onClick={() => setSidebarOpen(false)}
                  >
@@ -130,7 +140,7 @@ const Navbar: React.FC<NavbarProps> = ({ showNavigation = true }) => {
               {/* Mobile menu button */}
               <button
                 onClick={() => setSidebarOpen(true)}
-                className="md:hidden p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary-500 mr-2"
+                className="md:hidden p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none mr-2"
               >
                 <Menu className="h-6 w-6" strokeWidth={1.5} />
               </button>
@@ -138,9 +148,19 @@ const Navbar: React.FC<NavbarProps> = ({ showNavigation = true }) => {
               {/* Logo */}
               <Link
                 to="/"
-                className="text-xl font-semibold text-gray-900 tracking-tight hover:text-gray-700 transition-colors"
+                className="hover:opacity-80 transition-opacity"
               >
-                Personal Manager
+                <svg width="140" height="32" viewBox="0 0 140 32" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-8 w-auto">
+                  {/* Book Icon */}
+                  <rect x="2" y="6" width="16" height="20" rx="2" fill="#2563EB"/>
+                  <path d="M6 10h8M6 14h8M6 18h6" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+                  <path d="M10 6v20" stroke="#2563EB" strokeWidth="2" strokeLinecap="round"/>
+                  <circle cx="10" cy="4" r="2" fill="#2563EB"/>
+                  <circle cx="10" cy="28" r="2" fill="#2563EB"/>
+
+                  {/* Text */}
+                  <text x="26" y="22" fontFamily="system-ui, -apple-system, sans-serif" fontSize="14" fontWeight="700" fill="#111827">Personal Manager</text>
+                </svg>
               </Link>
             </div>
 
@@ -153,10 +173,10 @@ const Navbar: React.FC<NavbarProps> = ({ showNavigation = true }) => {
                      <Link
                        key={item.name}
                        to={item.href}
-                       className={`inline-flex items-center px-1 pt-1 text-base font-medium border-b-2 transition-colors duration-200 ${
+                       className={`inline-flex items-center px-3 py-2 text-base font-medium rounded-md transition-all duration-200 ${
                          isCurrent
-                           ? 'border-blue-500 text-gray-900'
-                           : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+                           ? 'bg-blue-50 text-blue-700'
+                           : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
                        }`}
                      >
                        {item.name}
@@ -169,7 +189,7 @@ const Navbar: React.FC<NavbarProps> = ({ showNavigation = true }) => {
             {/* Right side - Notifications, Profile */}
             <div className="flex items-center space-x-4">
                {/* Notifications */}
-               <button className="p-2 text-gray-500 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+               <button className="p-2 text-gray-500 hover:text-gray-600 focus:outline-none">
                  <Bell className="h-5 w-5" strokeWidth={1.5} />
                </button>
 
@@ -177,7 +197,7 @@ const Navbar: React.FC<NavbarProps> = ({ showNavigation = true }) => {
               <div className="relative" ref={dropdownRef}>
                 <button
                   onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
-                  className="flex items-center max-w-xs bg-white rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 p-1"
+                  className="flex items-center max-w-xs bg-white rounded-full focus:outline-none p-1"
                 >
                   <div className="flex items-center space-x-3">
                     <div className="h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center">

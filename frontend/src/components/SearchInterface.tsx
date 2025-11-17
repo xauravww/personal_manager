@@ -21,7 +21,8 @@ import {
   Target,
   CheckCircle,
   AlertCircle,
-  Clock
+  Clock,
+  MessageSquare
 } from 'lucide-react';
 import { apiClient, API_BASE_URL } from '../api/client';
 
@@ -684,20 +685,16 @@ const SearchInterface: React.FC = () => {
 
         {/* Main Content */}
         <div className="absolute inset-0 flex flex-col overflow-hidden">
-          {/* Header */}
-          <header className="bg-white border-b border-gray-200 px-4 py-3 lg:px-6">
-            <div className="max-w-4xl mx-auto">
-              <div className="text-center">
-                <h1 className="text-xl font-semibold text-gray-900">Personal Resource Manager</h1>
-              </div>
-            </div>
-          </header>
 
 
 
-        {/* Search Bar */}
-        <div className="bg-white border-b border-gray-200 px-4 py-8 lg:px-6">
+
+        {/* Search Controls */}
+        <div className="bg-white border-b border-gray-200 px-4 py-6 lg:px-6">
            <div className="max-w-4xl mx-auto">
+             <div className="mb-6">
+               <h2 className="text-2xl font-bold text-gray-900 tracking-tight">AI Search Controls</h2>
+             </div>
             <div className="relative">
               <input
                 type="text"
@@ -796,13 +793,13 @@ const SearchInterface: React.FC = () => {
                     </div>
 
                   </div>
-            </div>
-          </div>
-        </div>
+             </div>
 
-        {/* Focus Mode Capsules */}
-        <div className="bg-white border-b border-gray-200 px-4 py-4 lg:px-6">
-           <div className="max-w-4xl mx-auto">
+             {/* Focus Mode Capsules */}
+             <div className="border-t border-gray-100 pt-6 mt-6">
+               <div className="mb-4">
+                 <h3 className="text-lg font-semibold text-gray-900">Search Modes</h3>
+               </div>
             <div className="flex items-center gap-2 flex-wrap">
               {enabledModes.map((modeId) => {
                 const mode = focusModes.find(m => m.id === modeId);
@@ -852,15 +849,20 @@ const SearchInterface: React.FC = () => {
                   <span className="font-medium">Current mode:</span> {focusModes.find(m => m.id === focusMode)?.description}
                 </p>
               </div>
-            )}
-          </div>
-        </div>
+             )}
+             </div>
+           </div>
+         </div>
 
 
 
         {/* Main Content Area */}
         <div className="flex-1 px-4 py-6 lg:px-6 overflow-y-auto">
           <div className="w-full">
+            {/* Conversation Section Title */}
+            <div className="mb-6 px-4">
+              <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Conversation</h2>
+            </div>
             {/* Conversation/Chat Area */}
             <div className="space-y-4 px-4">
                 {conversation.map((message) => (

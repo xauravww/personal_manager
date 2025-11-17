@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Filter, BookOpen } from 'lucide-react';
+import { Search, Filter, BookOpen, Grid3X3 } from 'lucide-react';
 import DashboardLayout from '../components/layout/DashboardLayout';
 import ResourceGrid from '../components/ResourceGrid';
 import Pagination from '../components/Pagination';
@@ -26,29 +26,29 @@ const Resources: React.FC = () => {
     <DashboardLayout>
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {/* Header Section */}
-          <div className="mb-8">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-              <div className="mb-4 sm:mb-0">
-                <div className="flex items-center space-x-3 mb-2">
-                  <div className="p-2 bg-primary-100 rounded-lg">
-                    <BookOpen className="w-6 h-6 text-primary-600" strokeWidth={1.5} />
-                  </div>
-                  <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Resources</h1>
-                </div>
-                <p className="text-gray-600 text-lg">Discover, organize, and manage your knowledge base</p>
-              </div>
+           {/* Header Section */}
+           <div className="mb-12 bg-gradient-to-r from-primary-50 to-blue-50 rounded-2xl p-8 border border-primary-100">
+             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
+               <div className="mb-6 lg:mb-0">
+                 <div className="flex items-center space-x-4 mb-3">
+                   <div className="p-3 bg-primary-100 rounded-xl">
+                     <BookOpen className="w-8 h-8 text-primary-600" strokeWidth={1.5} />
+                   </div>
+                   <h1 className="text-4xl lg:text-5xl font-bold text-gray-900 tracking-tight">Resources</h1>
+                 </div>
+                 <p className="text-gray-700 text-xl font-medium leading-relaxed">Discover, organize, and manage your knowledge base</p>
+               </div>
                <button
                  onClick={() => setIsNewResourceModalOpen(true)}
-                 className="inline-flex items-center px-6 py-3 bg-primary-600 text-white font-medium rounded-lg hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-all duration-200 shadow-sm hover:shadow-md"
+                 className="inline-flex items-center px-8 py-4 bg-primary-600 text-white font-semibold text-lg rounded-xl hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                >
                  Add Resource
                </button>
-            </div>
-          </div>
+             </div>
+           </div>
 
-          {/* Search and Filters Section */}
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+           {/* Search and Filters Section */}
+           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 mb-12">
             <div className="flex flex-col lg:flex-row gap-6">
               {/* Search Input */}
               <div className="flex-1 relative">
@@ -153,18 +153,24 @@ const Resources: React.FC = () => {
             </div>
           </div>
 
-          {/* Resources Grid */}
-          <div className="mb-8">
-            <ResourceGrid
-              currentPage={currentPage}
-              itemsPerPage={itemsPerPage}
-              searchQuery={debouncedSearchQuery}
-              typeFilter={typeFilter}
-              tagFilter={tagFilter}
-              sortBy={sortBy}
-              onTotalChange={setTotalResources}
-            />
-          </div>
+           {/* Resources Grid */}
+           <div className="mb-12">
+             <div className="flex items-center space-x-4 mb-6">
+               <div className="p-3 bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl">
+                 <Grid3X3 className="w-6 h-6 text-gray-600" strokeWidth={1.5} />
+               </div>
+               <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Your Resources</h2>
+             </div>
+             <ResourceGrid
+               currentPage={currentPage}
+               itemsPerPage={itemsPerPage}
+               searchQuery={debouncedSearchQuery}
+               typeFilter={typeFilter}
+               tagFilter={tagFilter}
+               sortBy={sortBy}
+               onTotalChange={setTotalResources}
+             />
+           </div>
 
           {/* Pagination */}
           {totalPages > 1 && (

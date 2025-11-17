@@ -329,8 +329,8 @@ router.get('/', [
       }
     }
 
-    // Perform web search if we have few local results or if explicitly requested
-    if (!isChat && aiEnhancedSearch && (forceWebSearch || resources.length === 0 || resources.length < 3)) {
+    // Perform web search only if explicitly requested via toggle
+     if (!isChat && aiEnhancedSearch && forceWebSearch) {
       try {
         console.log('🔍 Performing web search for query:', searchQuery);
         const webSearchResponse = await performWebSearch(searchQuery);
@@ -470,12 +470,8 @@ router.get('/', [
 
         const webContext = webResults.length > 0
           ? `Web results: ${webResults.slice(0, maxWebResults).map(r => {
-              try {
-                const content = (r.content || 'No description available').substring(0, 100); // Limit content length
-                return `${r.title}: ${content}`;
-              } catch (e) {
-                return `${r.title}: Web result`;
-              }
+              const content = (r.content || 'No description available').substring(0, 100); // Limit content length
+              return `${r.title} (${r.url}): ${content}`;
             }).join('. ')}`
           : '';
 
@@ -489,7 +485,7 @@ router.get('/', [
 
         if (truncatedContext.trim()) {
           aiSummary = await aiService.generateChatResponse(
-            `Summarize the following search results for the query "${searchQuery}". Provide a helpful response that analyzes and presents the key findings: ${truncatedContext}`,
+            `Summarize the following search results for the query "${searchQuery}". Focus only on relevant results. Include markdown hyperlinks for any URLs mentioned (format: [text](url)). Provide a helpful response that analyzes and presents the key findings: ${truncatedContext}`,
             '',
             timezone,
             focusMode,

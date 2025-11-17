@@ -787,29 +787,29 @@ const SearchInterface: React.FC = () => {
                   </span>
                 </div>
 
-                  {/* Search Toggles */}
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-500 flex items-center gap-1">
-                        <Brain className="w-4 h-4" strokeWidth={1.5} />
-                        Deep Research
-                      </span>
-                      <button
-                        onClick={() => setSearchMode(searchMode === 'normal' ? 'deep-research' : 'normal')}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                          searchMode === 'deep-research' ? 'bg-indigo-500' : 'bg-gray-300'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                            searchMode === 'deep-research' ? 'translate-x-6' : 'translate-x-1'
+                   {/* Search Toggles */}
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-500 flex items-center gap-1">
+                          <Brain className="w-4 h-4" strokeWidth={1.5} />
+                          Deep Research
+                        </span>
+                        <button
+                          onClick={() => setSearchMode(searchMode === 'normal' ? 'deep-research' : 'normal')}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                            searchMode === 'deep-research' ? 'bg-indigo-500' : 'bg-gray-300'
                           }`}
-                        />
-                      </button>
-                    </div>
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                              searchMode === 'deep-research' ? 'translate-x-6' : 'translate-x-1'
+                            }`}
+                          />
+                        </button>
+                      </div>
 
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-500">AI Enhanced</span>
+                      <div className="flex items-center gap-2">
+                       <span className="text-sm text-gray-500">AI Enhanced</span>
                       <button
                         onClick={() => setAiEnhancedSearch(!aiEnhancedSearch)}
                         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${

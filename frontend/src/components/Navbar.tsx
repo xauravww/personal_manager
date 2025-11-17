@@ -86,16 +86,16 @@ const Navbar: React.FC<NavbarProps> = ({ showNavigation = true }) => {
             {navigation.map((item) => {
               const isCurrent = location.pathname === item.href;
               return (
-                <Link
-                  key={item.name}
-                  to={item.href}
-                  className={`group flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors duration-200 ${
-                    isCurrent
-                      ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-700'
-                      : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                  }`}
-                  onClick={() => setSidebarOpen(false)}
-                >
+                 <Link
+                   key={item.name}
+                   to={item.href}
+                   className={`group flex items-center px-3 py-2 text-base font-medium rounded-md transition-colors duration-200 ${
+                     isCurrent
+                       ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-700'
+                       : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                   }`}
+                   onClick={() => setSidebarOpen(false)}
+                 >
                   <item.icon
                     className={`mr-3 h-5 w-5 flex-shrink-0 ${
                       isCurrent ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-500'
@@ -144,34 +144,34 @@ const Navbar: React.FC<NavbarProps> = ({ showNavigation = true }) => {
               </Link>
             </div>
 
-            {/* Center - Desktop Navigation */}
-            {showNavigation && (
-              <nav className="hidden md:flex space-x-8">
-                {navigation.map((item) => {
-                  const isCurrent = location.pathname === item.href;
-                  return (
-                    <Link
-                      key={item.name}
-                      to={item.href}
-                      className={`inline-flex items-center px-1 pt-1 text-sm font-medium border-b-2 transition-colors duration-200 ${
-                        isCurrent
-                          ? 'border-blue-500 text-gray-900'
-                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-                      }`}
-                    >
-                      {item.name}
-                    </Link>
-                  );
-                })}
-              </nav>
-            )}
+             {/* Center - Desktop Navigation */}
+             {showNavigation && (
+               <nav className="hidden md:flex space-x-8">
+                 {navigation.map((item) => {
+                   const isCurrent = location.pathname === item.href;
+                   return (
+                     <Link
+                       key={item.name}
+                       to={item.href}
+                       className={`inline-flex items-center px-1 pt-1 text-base font-medium border-b-2 transition-colors duration-200 ${
+                         isCurrent
+                           ? 'border-blue-500 text-gray-900'
+                           : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+                       }`}
+                     >
+                       {item.name}
+                     </Link>
+                   );
+                 })}
+               </nav>
+             )}
 
             {/* Right side - Notifications, Profile */}
             <div className="flex items-center space-x-4">
-              {/* Notifications */}
-              <button className="p-2 text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
-                <Bell className="h-6 w-6" strokeWidth={1.5} />
-              </button>
+               {/* Notifications */}
+               <button className="p-2 text-gray-500 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+                 <Bell className="h-5 w-5" strokeWidth={1.5} />
+               </button>
 
               {/* Profile dropdown */}
               <div className="relative" ref={dropdownRef}>
@@ -183,10 +183,10 @@ const Navbar: React.FC<NavbarProps> = ({ showNavigation = true }) => {
                     <div className="h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center">
                       <UserCircle className="h-5 w-5 text-primary-600" strokeWidth={1.5} />
                     </div>
-                    <div className="hidden lg:block text-left">
-                      <p className="text-sm font-medium text-gray-900">{user?.name || 'User'}</p>
-                      <p className="text-xs text-gray-500">{user?.email}</p>
-                    </div>
+                     <div className="hidden lg:block text-left">
+                       <p className="text-sm font-medium text-gray-700">{user?.name || 'User'}</p>
+                       <p className="text-xs text-gray-500">{user?.email}</p>
+                     </div>
                     <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${profileDropdownOpen ? 'rotate-180' : ''}`} strokeWidth={1.5} />
                   </div>
                 </button>

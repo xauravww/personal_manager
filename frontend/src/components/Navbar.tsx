@@ -4,7 +4,6 @@ import {
   Home,
   FolderOpen,
   Search,
-  Settings,
   Menu,
   X,
   Bell,
@@ -31,7 +30,6 @@ const Navbar: React.FC<NavbarProps> = ({ showNavigation = true }) => {
     { name: 'Dashboard', href: '/dashboard', icon: Home },
     { name: 'Resources', href: '/resources', icon: FolderOpen },
     { name: 'Search', href: '/search', icon: Search },
-    { name: 'Settings', href: '/dashboard', icon: Settings }, // For now, link to dashboard
   ];
 
   const handleLogout = async () => {

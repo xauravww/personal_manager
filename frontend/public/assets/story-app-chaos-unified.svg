@@ -1,0 +1,114 @@
+<svg width="600" height="300" viewBox="0 0 600 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="300" height="300" fill="#F9FAFB"/>
+  <rect x="300" width="300" height="300" fill="#F8FAFC"/>
+
+  <!-- Dividing line -->
+  <line x1="300" y1="0" x2="300" y2="300" stroke="#3B82F6" stroke-width="1" opacity="0.3"/>
+
+  <!-- LEFT SIDE - CHAOS -->
+  <!-- Scattered app icons -->
+  <!-- Evernote -->
+  <g transform="translate(50,50)">
+    <rect x="0" y="0" width="20" height="20" rx="3" fill="#00A82D"/>
+    <rect x="5" y="5" width="10" height="2" rx="1" fill="#FFFFFF"/>
+    <rect x="5" y="9" width="8" height="2" rx="1" fill="#FFFFFF"/>
+    <rect x="5" y="13" width="6" height="2" rx="1" fill="#FFFFFF"/>
+  </g>
+
+  <!-- Notion -->
+  <g transform="translate(120,80)">
+    <rect x="0" y="0" width="18" height="18" rx="2" fill="#000000"/>
+    <rect x="3" y="3" width="12" height="2" rx="1" fill="#FFFFFF"/>
+    <rect x="3" y="7" width="10" height="2" rx="1" fill="#FFFFFF"/>
+  </g>
+
+  <!-- Browser bookmarks -->
+  <g transform="translate(80,150)">
+    <rect x="0" y="0" width="16" height="20" rx="2" fill="#6B7280"/>
+    <rect x="2" y="3" width="12" height="2" rx="1" fill="#FFFFFF"/>
+    <rect x="2" y="7" width="10" height="2" rx="1" fill="#FFFFFF"/>
+    <rect x="2" y="11" width="8" height="2" rx="1" fill="#FFFFFF"/>
+  </g>
+
+  <!-- Google Keep -->
+  <g transform="translate(200,120)">
+    <rect x="0" y="0" width="18" height="18" rx="2" fill="#FFBB00"/>
+    <circle cx="9" cy="9" r="6" fill="#FFFFFF"/>
+    <rect x="6" y="6" width="6" height="2" rx="1" fill="#FFBB00"/>
+  </g>
+
+  <!-- Voice memos -->
+  <g transform="translate(150,200)">
+    <circle cx="0" cy="0" r="12" fill="#F97316"/>
+    <rect x="-4" y="-2" width="8" height="2" rx="1" fill="#FFFFFF"/>
+    <rect x="-4" y="2" width="8" height="2" rx="1" fill="#FFFFFF"/>
+    <rect x="-4" y="6" width="8" height="2" rx="1" fill="#FFFFFF"/>
+  </g>
+
+  <!-- Tangled arrows and lines -->
+  <path d="M70 70 Q100 90 130 70 Q160 50 190 70" stroke="#EF4444" stroke-width="2" fill="none" opacity="0.6"/>
+  <path d="M100 100 Q130 120 160 100 Q190 80 220 100" stroke="#EF4444" stroke-width="2" fill="none" opacity="0.6"/>
+  <path d="M120 150 Q150 170 180 150 Q210 130 240 150" stroke="#EF4444" stroke-width="2" fill="none" opacity="0.6"/>
+  <path d="M80 200 Q110 220 140 200 Q170 180 200 200" stroke="#EF4444" stroke-width="2" fill="none" opacity="0.6"/>
+
+  <!-- Chaos indicators -->
+  <text x="50" y="250" font-family="Arial, sans-serif" font-size="12" fill="#9CA3AF">Fragmented</text>
+  <text x="150" y="270" font-family="Arial, sans-serif" font-size="12" fill="#9CA3AF">Disconnected</text>
+
+  <!-- RIGHT SIDE - UNIFIED -->
+  <!-- Central glowing hub -->
+  <g transform="translate(450,150)">
+    <circle cx="0" cy="0" r="30" fill="#3B82F6" opacity="0.1"/>
+    <circle cx="0" cy="0" r="25" fill="#3B82F6" opacity="0.2"/>
+    <circle cx="0" cy="0" r="20" fill="#3B82F6" opacity="0.3"/>
+    <circle cx="0" cy="0" r="15" fill="#8B5CF6" opacity="0.4"/>
+    <circle cx="0" cy="0" r="10" fill="#8B5CF6"/>
+    <!-- Central icon -->
+    <circle cx="0" cy="0" r="3" fill="#FFFFFF"/>
+    <path d="M-1.5 -1.5 L1.5 1.5 M-1.5 1.5 L1.5 -1.5" stroke="#FFFFFF" stroke-width="0.5"/>
+  </g>
+
+  <!-- Clean arrows flowing to center -->
+  <!-- From Evernote -->
+  <path d="M120 70 L380 150" stroke="#3B82F6" stroke-width="2" fill="none"/>
+  <path d="M375 145 L380 150 L375 155" fill="#3B82F6"/>
+  <!-- From Notion -->
+  <path d="M180 100 L380 150" stroke="#06B6D4" stroke-width="2" fill="none"/>
+  <path d="M375 145 L380 150 L375 155" fill="#06B6D4"/>
+  <!-- From Browser -->
+  <path d="M140 170 L380 150" stroke="#8B5CF6" stroke-width="2" fill="none"/>
+  <path d="M375 145 L380 150 L375 155" fill="#8B5CF6"/>
+  <!-- From Google Keep -->
+  <path d="M240 140 L380 150" stroke="#10B981" stroke-width="2" fill="none"/>
+  <path d="M375 145 L380 150 L375 155" fill="#10B981"/>
+  <!-- From Voice memos -->
+  <path d="M190 220 L380 150" stroke="#F97316" stroke-width="2" fill="none"/>
+  <path d="M375 145 L380 150 L375 155" fill="#F97316"/>
+
+  <!-- Organized folders emerging -->
+  <g transform="translate(520,100)">
+    <!-- Folder 1 -->
+    <rect x="0" y="5" width="25" height="15" rx="2" fill="#3B82F6" opacity="0.8"/>
+    <rect x="0" y="0" width="25" height="8" rx="2" fill="#1E40AF"/>
+    <text x="3" y="17" font-family="Arial, sans-serif" font-size="8" fill="#FFFFFF">Ideas</text>
+  </g>
+
+  <g transform="translate(520,130)">
+    <!-- Folder 2 -->
+    <rect x="0" y="5" width="25" height="15" rx="2" fill="#06B6D4" opacity="0.8"/>
+    <rect x="0" y="0" width="25" height="8" rx="2" fill="#0891B2"/>
+    <text x="3" y="17" font-family="Arial, sans-serif" font-size="8" fill="#FFFFFF">Notes</text>
+  </g>
+
+  <g transform="translate(520,160)">
+    <!-- Folder 3 -->
+    <rect x="0" y="5" width="25" height="15" rx="2" fill="#8B5CF6" opacity="0.8"/>
+    <rect x="0" y="0" width="25" height="8" rx="2" fill="#7C3AED"/>
+    <text x="3" y="17" font-family="Arial, sans-serif" font-size="8" fill="#FFFFFF">Links</text>
+  </g>
+
+  <!-- Unified indicators -->
+  <text x="420" y="250" font-family="Arial, sans-serif" font-size="12" fill="#3B82F6">Unified</text>
+  <text x="480" y="270" font-family="Arial, sans-serif" font-size="12" fill="#3B82F6">Connected</text>
+</svg>

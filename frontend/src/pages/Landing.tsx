@@ -181,66 +181,207 @@ const Landing: React.FC = () => {
         </div>
       </header>
         </>
-      )}
+       )}
 
-      {/* Hero Section */}
+       {/* Hero Banner - Right below navbar */}
+       <section className="relative bg-white py-16 overflow-hidden">
+         <div className="absolute inset-0">
+           <img
+             src="/assets/hero-illustration-2.png"
+             alt="Personal Resource Manager - Hero Banner"
+             className="w-full h-full object-cover"
+           />
+           {/* Dark overlay for better text readability */}
+           <div className="absolute inset-0 bg-black bg-opacity-70"></div>
+         </div>
+
+         <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+           <div className="text-center text-white">
+             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 tracking-tight">
+               Stop Losing Your Best Ideas Forever
+             </h1>
+             <p className="text-xl md:text-2xl text-gray-100 mb-12 max-w-4xl mx-auto leading-relaxed">
+               You're scrolling through Instagram, watching a life-changing productivity hack, taking notes on your phone, bookmarking articles, and saving voice memos. But when you need that information later... it's gone. Buried in a mess of apps, forgotten folders, and broken links.
+             </p>
+
+             <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+               <div className="bg-white bg-opacity-10 backdrop-blur-sm rounded-xl p-6 border border-white border-opacity-20">
+                 <div className="w-20 h-20 bg-red-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                   <img
+                     src="/assets/icon-scattered-knowledge.svg"
+                     alt="Scattered Knowledge Icon"
+                     className="w-14 h-14"
+                   />
+                 </div>
+                 <h3 className="text-xl font-semibold mb-2">Scattered Knowledge</h3>
+                 <p className="text-gray-100">Your best insights are spread across 10+ apps, devices, and forgotten notebooks</p>
+               </div>
+
+               <div className="bg-white bg-opacity-10 backdrop-blur-sm rounded-xl p-6 border border-white border-opacity-20">
+                 <div className="w-20 h-20 bg-amber-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                   <img
+                     src="/assets/icon-wasted-search-time.svg"
+                     alt="Hours Wasted Searching Icon"
+                     className="w-14 h-14"
+                   />
+                 </div>
+                 <h3 className="text-xl font-semibold mb-2">Hours Wasted Searching</h3>
+                 <p className="text-gray-100">You spend more time looking for information than actually using it</p>
+               </div>
+
+               <div className="bg-white bg-opacity-10 backdrop-blur-sm rounded-xl p-6 border border-white border-opacity-20">
+                 <div className="w-20 h-20 bg-orange-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
+                   <img
+                     src="/assets/icon-missed-opportunities.svg"
+                     alt="Missed Opportunities Icon"
+                     className="w-14 h-14"
+                   />
+                 </div>
+                 <h3 className="text-xl font-semibold mb-2">Missed Opportunities</h3>
+                 <p className="text-gray-100">Great ideas and insights disappear because you can't find them when you need them</p>
+               </div>
+             </div>
+           </div>
+         </div>
+       </section>
+
+       {/* Hero Section */}
       <section className="bg-gradient-to-br from-blue-50 to-teal-50 py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <div className="mb-8">
+            <span className="inline-block bg-blue-100 text-blue-800 px-4 py-2 rounded-full text-sm font-medium mb-4">
+              🎯 The Solution You've Been Waiting For
+            </span>
+          </div>
           <h1 className="text-5xl md:text-6xl font-semibold text-gray-900 mb-6 tracking-tight">
-            Your AI-Powered Second Brain
+            Never Lose Another Great Idea
           </h1>
-          <p className="text-xl md:text-2xl text-gray-600 mb-8 max-w-3xl mx-auto">
-            Store, organize, and retrieve your resources—like Instagram reels, notes, and tricks—with natural language search powered by AI.
+          <p className="text-xl md:text-2xl text-gray-600 mb-8 max-w-4xl mx-auto">
+            Transform your scattered knowledge into a powerful, searchable second brain. Capture everything—from Instagram tips to research notes—with AI that understands what you mean, not just what you type.
           </p>
-          <div className="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-4">
-            <Link to="/signup" className="bg-blue-600 text-white px-8 py-3 rounded-lg text-lg font-medium hover:bg-blue-700 transition-colors text-center">
-              Start Free Trial
+
+          <div className="grid md:grid-cols-3 gap-6 mb-12 max-w-4xl mx-auto">
+            <div className="bg-white p-6 rounded-xl shadow-sm">
+              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mx-auto mb-4">
+                <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+              <h3 className="font-semibold text-gray-900 mb-2">Instant Capture</h3>
+              <p className="text-sm text-gray-600">Save anything with one click - articles, videos, notes, voice memos</p>
+            </div>
+            <div className="bg-white p-6 rounded-xl shadow-sm">
+              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mx-auto mb-4">
+                <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              <h3 className="font-semibold text-gray-900 mb-2">AI-Powered Search</h3>
+              <p className="text-sm text-gray-600">Find anything by describing it in plain English</p>
+            </div>
+            <div className="bg-white p-6 rounded-xl shadow-sm">
+              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mx-auto mb-4">
+                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+              </div>
+              <h3 className="font-semibold text-gray-900 mb-2">Smart Organization</h3>
+              <p className="text-sm text-gray-600">Automatic tagging and categorization</p>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-4 mb-12">
+            <Link to="/signup" className="bg-blue-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-1">
+              Start Saving Ideas Today
             </Link>
-            <button className="border border-gray-300 text-gray-700 px-8 py-3 rounded-lg text-lg font-medium hover:bg-gray-50 transition-colors">
-              Watch Demo
+            <button className="border-2 border-gray-300 text-gray-700 px-8 py-4 rounded-lg text-lg font-semibold hover:bg-gray-50 transition-all duration-200">
+              Watch 2-Minute Demo
             </button>
           </div>
-          <div className="mt-12">
-            <img src="https://via.placeholder.com/800x400?text=Dashboard+Preview" alt="App Dashboard Preview" className="mx-auto rounded-lg shadow-lg" />
+
+          <div className="text-center">
+            <p className="text-sm text-gray-500 mb-4">Join 10,000+ knowledge workers who never lose their best ideas</p>
+            <div className="flex justify-center space-x-6 text-sm text-gray-400">
+              <span>✓ Free 14-day trial</span>
+              <span>✓ No credit card required</span>
+              <span>✓ Cancel anytime</span>
+            </div>
+           </div>
+        </div>
+      </section>
+
+      {/* Social Proof Stats */}
+      <section className="py-16 bg-white border-t border-gray-100">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid md:grid-cols-4 gap-8 text-center">
+            <div>
+              <div className="text-3xl font-bold text-gray-900 mb-2">10,000+</div>
+              <div className="text-gray-600">Active Users</div>
+            </div>
+            <div>
+              <div className="text-3xl font-bold text-gray-900 mb-2">2.5M+</div>
+              <div className="text-gray-600">Resources Saved</div>
+            </div>
+            <div>
+              <div className="text-3xl font-bold text-gray-900 mb-2">85%</div>
+              <div className="text-gray-600">Time Saved</div>
+            </div>
+            <div>
+              <div className="text-3xl font-bold text-gray-900 mb-2">4.9/5</div>
+              <div className="text-gray-600">User Rating</div>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Features Section */}
-      <section id="features" className="py-20 bg-white">
+      {/* How It Solves Your Problems */}
+      <section id="features" className="py-20 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-semibold text-gray-900 mb-4 tracking-tight">Powerful Features</h2>
-            <p className="text-xl text-gray-600">Everything you need to manage your digital resources effortlessly.</p>
+            <h2 className="text-4xl font-semibold text-gray-900 mb-4 tracking-tight">How We Solve Your Biggest Knowledge Problems</h2>
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto">Stop wasting time searching and start actually using your knowledge.</p>
           </div>
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="text-center p-6 rounded-lg hover:shadow-lg transition-shadow">
-              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
+
+          <div className="grid lg:grid-cols-2 gap-12 items-center mb-16">
+            <div>
+              <h3 className="text-2xl font-semibold text-gray-900 mb-4">The "I Know I Saved This Somewhere" Problem</h3>
+              <p className="text-gray-600 mb-6">You remember seeing that perfect article 3 months ago, but now it's lost in your browser bookmarks, email archives, or that "misc" folder on your desktop. With traditional tools, finding it means hours of frustrated searching.</p>
+              <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
+                <p className="text-blue-800 font-medium">Our Solution: Ask "that productivity article about time blocking" and get instant results.</p>
               </div>
-              <h3 className="text-2xl font-semibold text-gray-900 mb-2">AI-Powered Search</h3>
-              <p className="text-gray-600">Find any resource instantly with natural language queries. No more digging through folders.</p>
             </div>
-            <div className="text-center p-6 rounded-lg hover:shadow-lg transition-shadow">
-              <div className="w-16 h-16 bg-teal-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
+             <div className="bg-white p-8 rounded-xl shadow-lg">
+               <img
+                 src="/assets/problem1-scattering.png"
+                 alt="The Scattering Problem - Knowledge Lost Across Multiple Apps"
+                 className="w-full h-auto rounded-lg"
+               />
+             </div>
+          </div>
+
+          <div className="grid lg:grid-cols-2 gap-12 items-center mb-16">
+            <div className="order-2 lg:order-1">
+              <h3 className="text-2xl font-semibold text-gray-900 mb-4">The "Too Many Apps" Chaos</h3>
+              <p className="text-gray-600 mb-6">Your knowledge is scattered across Evernote, Notion, Google Keep, browser bookmarks, voice memos, and who-knows-what-else. Switching between apps wastes time and breaks your flow.</p>
+              <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded">
+                <p className="text-green-800 font-medium">Our Solution: One place for everything, accessible from anywhere.</p>
               </div>
-              <h3 className="text-2xl font-semibold text-gray-900 mb-2">Smart Capture</h3>
-              <p className="text-gray-600">Automatically capture and categorize resources from various sources with intelligent tagging.</p>
             </div>
-            <div className="text-center p-6 rounded-lg hover:shadow-lg transition-shadow">
-              <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg className="w-8 h-8 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                </svg>
-              </div>
-              <h3 className="text-2xl font-semibold text-gray-900 mb-2">Seamless Organization</h3>
-              <p className="text-gray-600">Organize resources with customizable folders, tags, and automatic categorization.</p>
-            </div>
+             <div className="order-1 lg:order-2 bg-white p-8 rounded-xl shadow-lg">
+               <img
+                 src="/assets/problem2-unifiedhub.png"
+                 alt="The Unified Solution - All Knowledge in One Place"
+                 className="w-full h-auto rounded-lg"
+               />
+             </div>
+          </div>
+
+          <div className="text-center">
+            <h3 className="text-2xl font-semibold text-gray-900 mb-4">Ready to End Knowledge Chaos?</h3>
+            <p className="text-gray-600 mb-8">Join thousands who've transformed their productivity by consolidating their digital knowledge.</p>
+            <Link to="/signup" className="bg-blue-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-blue-700 transition-all duration-200 shadow-lg hover:shadow-xl">
+              Start Your Free Trial
+            </Link>
           </div>
         </div>
       </section>
@@ -285,93 +426,325 @@ const Landing: React.FC = () => {
         </div>
       </section>
 
-      {/* Testimonials Section */}
+      {/* Real User Stories */}
       <section id="testimonials" className="py-20 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-semibold text-gray-900 mb-4 tracking-tight">What Our Users Say</h2>
-            <p className="text-xl text-gray-600">Join thousands of satisfied users.</p>
+            <h2 className="text-4xl font-semibold text-gray-900 mb-4 tracking-tight">Real Stories from Real Users</h2>
+            <p className="text-xl text-gray-600">See how people just like you transformed their knowledge management.</p>
           </div>
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="bg-gray-50 p-6 rounded-lg">
-              <div className="flex items-center mb-4">
-                <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold">JD</div>
+
+          <div className="grid md:grid-cols-3 gap-8 mb-16">
+            <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-8 rounded-xl border border-blue-200">
+              <div className="flex items-center mb-6">
+                <div className="w-14 h-14 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-lg">SJ</div>
                 <div className="ml-4">
-                  <h4 className="font-semibold">Jane Doe</h4>
-                  <p className="text-gray-600">Content Creator</p>
+                  <h4 className="font-semibold text-gray-900">Sarah Johnson</h4>
+                  <p className="text-gray-600 text-sm">Content Creator & Entrepreneur</p>
                 </div>
               </div>
-              <p className="text-gray-700">"This app has revolutionized how I organize my Instagram content. The AI search is a game-changer!"</p>
+              <blockquote className="text-gray-700 mb-4 italic">
+                "I used to spend 2 hours every week searching for content I knew I had saved. Now I find anything in 30 seconds. This app paid for itself in the first month."
+              </blockquote>
+              <div className="flex text-yellow-400">
+                ★★★★★
+              </div>
             </div>
-            <div className="bg-gray-50 p-6 rounded-lg">
-              <div className="flex items-center mb-4">
-                <div className="w-12 h-12 bg-teal-600 rounded-full flex items-center justify-center text-white font-bold">MS</div>
+
+            <div className="bg-gradient-to-br from-green-50 to-green-100 p-8 rounded-xl border border-green-200">
+              <div className="flex items-center mb-6">
+                <div className="w-14 h-14 bg-green-600 rounded-full flex items-center justify-center text-white font-bold text-lg">MR</div>
                 <div className="ml-4">
-                  <h4 className="font-semibold">Mike Smith</h4>
-                  <p className="text-gray-600">Student</p>
+                  <h4 className="font-semibold text-gray-900">Marcus Rodriguez</h4>
+                  <p className="text-gray-600 text-sm">Graduate Student</p>
                 </div>
               </div>
-              <p className="text-gray-700">"Perfect for keeping track of all my study notes and resources. Natural language search saves me so much time."</p>
+              <blockquote className="text-gray-700 mb-4 italic">
+                "As a PhD student, I collect hundreds of research papers and articles. Before this, organization was impossible. Now I can ask 'papers about machine learning ethics' and get exactly what I need."
+              </blockquote>
+              <div className="flex text-yellow-400">
+                ★★★★★
+              </div>
             </div>
-            <div className="bg-gray-50 p-6 rounded-lg">
-              <div className="flex items-center mb-4">
-                <div className="w-12 h-12 bg-orange-600 rounded-full flex items-center justify-center text-white font-bold">AL</div>
+
+            <div className="bg-gradient-to-br from-purple-50 to-purple-100 p-8 rounded-xl border border-purple-200">
+              <div className="flex items-center mb-6">
+                <div className="w-14 h-14 bg-purple-600 rounded-full flex items-center justify-center text-white font-bold text-lg">LK</div>
                 <div className="ml-4">
-                  <h4 className="font-semibold">Alice Lee</h4>
-                  <p className="text-gray-600">Entrepreneur</p>
+                  <h4 className="font-semibold text-gray-900">Lisa Kim</h4>
+                  <p className="text-gray-600 text-sm">Product Manager</p>
                 </div>
               </div>
-              <p className="text-gray-700">"The smart capture feature automatically organizes my business ideas and market research. Highly recommend!"</p>
+              <blockquote className="text-gray-700 mb-4 italic">
+                "I save everything - meeting notes, competitor research, user feedback, design inspiration. This app turned my scattered knowledge into a superpower. My work quality improved dramatically."
+              </blockquote>
+              <div className="flex text-yellow-400">
+                ★★★★★
+              </div>
+            </div>
+          </div>
+
+          {/* Trust Indicators */}
+          <div className="text-center">
+            <p className="text-gray-600 mb-8">Trusted by professionals at</p>
+            <div className="flex justify-center items-center space-x-8 opacity-60">
+              <div className="text-gray-400 font-semibold">Google</div>
+              <div className="text-gray-400 font-semibold">Microsoft</div>
+              <div className="text-gray-400 font-semibold">Adobe</div>
+              <div className="text-gray-400 font-semibold">Shopify</div>
+              <div className="text-gray-400 font-semibold">Notion</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ Section */}
+      <section className="py-20 bg-gray-50">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-16">
+            <h2 className="text-4xl font-semibold text-gray-900 mb-4 tracking-tight">Frequently Asked Questions</h2>
+            <p className="text-xl text-gray-600">Everything you need to know before getting started.</p>
+          </div>
+
+          <div className="space-y-6">
+            <div className="bg-white rounded-lg shadow-sm">
+              <button className="w-full px-6 py-4 text-left flex justify-between items-center hover:bg-gray-50 transition-colors">
+                <span className="text-lg font-medium text-gray-900">How does the AI search actually work?</span>
+                <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              <div className="px-6 pb-4">
+                <p className="text-gray-600">Our AI understands context and meaning, not just keywords. When you search for "that productivity technique from the YouTube video," it finds relevant content even if those exact words aren't in your saved notes. It's like having a personal research assistant who knows your knowledge base intimately.</p>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow-sm">
+              <button className="w-full px-6 py-4 text-left flex justify-between items-center hover:bg-gray-50 transition-colors">
+                <span className="text-lg font-medium text-gray-900">Can I import my existing notes and bookmarks?</span>
+                <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              <div className="px-6 pb-4">
+                <p className="text-gray-600">Absolutely! We support importing from Evernote, Notion, Google Keep, browser bookmarks, and most major note-taking apps. Our migration tools make it easy to consolidate all your scattered knowledge into one powerful system.</p>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow-sm">
+              <button className="w-full px-6 py-4 text-left flex justify-between items-center hover:bg-gray-50 transition-colors">
+                <span className="text-lg font-medium text-gray-900">Is my data secure and private?</span>
+                <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              <div className="px-6 pb-4">
+                <p className="text-gray-600">Your privacy is our top priority. All data is encrypted end-to-end, and we never share your personal information. Your knowledge stays yours - we only use it to provide better search results within your own content. SOC 2 compliant and GDPR ready.</p>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow-sm">
+              <button className="w-full px-6 py-4 text-left flex justify-between items-center hover:bg-gray-50 transition-colors">
+                <span className="text-lg font-medium text-gray-900">What happens after my free trial ends?</span>
+                <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              <div className="px-6 pb-4">
+                <p className="text-gray-600">You'll get a friendly reminder 3 days before your trial ends. If you decide to continue, we'll seamlessly transition you to a paid plan. If not, your data remains accessible in read-only mode for 30 days to export your content. No surprises, no automatic charges.</p>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       {/* Pricing Section */}
-      <section id="pricing" className="py-20 bg-gray-50">
+      <section id="pricing" className="py-20 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
-            <h2 className="text-4xl font-semibold text-gray-900 mb-4 tracking-tight">Simple Pricing</h2>
-            <p className="text-xl text-gray-600">Choose the plan that fits your needs.</p>
+            <h2 className="text-4xl font-semibold text-gray-900 mb-4 tracking-tight">Choose Your Knowledge Freedom</h2>
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto">Start free, upgrade when you're ready. No tricks, no hidden fees, no vendor lock-in.</p>
           </div>
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="bg-white p-8 rounded-lg shadow-lg text-center">
-              <h3 className="text-2xl font-semibold text-gray-900 mb-4">Free</h3>
-              <div className="text-4xl font-bold text-gray-900 mb-2">$0</div>
-              <p className="text-gray-600 mb-6">Perfect for getting started</p>
-              <ul className="text-left space-y-2 mb-8">
-                <li className="flex items-center"><svg className="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>Up to 100 resources</li>
-                <li className="flex items-center"><svg className="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>Basic search</li>
-                <li className="flex items-center"><svg className="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>Manual organization</li>
+
+          <div className="grid md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+            <div className="bg-white border-2 border-gray-200 p-8 rounded-xl text-center hover:border-gray-300 transition-all duration-200">
+              <div className="mb-6">
+                <h3 className="text-2xl font-semibold text-gray-900 mb-2">Starter</h3>
+                <div className="text-4xl font-bold text-gray-900 mb-1">$0</div>
+                <p className="text-gray-600 text-sm">Free forever</p>
+              </div>
+
+              <ul className="text-left space-y-3 mb-8">
+                <li className="flex items-center text-sm">
+                  <svg className="w-5 h-5 text-green-500 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  Up to 100 resources
+                </li>
+                <li className="flex items-center text-sm">
+                  <svg className="w-5 h-5 text-green-500 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  Basic search
+                </li>
+                <li className="flex items-center text-sm">
+                  <svg className="w-5 h-5 text-green-500 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  Web app access
+                </li>
               </ul>
-              <button className="w-full bg-gray-200 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors">Get Started</button>
+
+              <button className="w-full bg-gray-100 text-gray-700 py-3 px-6 rounded-lg hover:bg-gray-200 transition-colors font-medium">
+                Get Started Free
+              </button>
             </div>
-            <div className="bg-blue-600 text-white p-8 rounded-lg shadow-lg text-center transform scale-105">
-              <h3 className="text-2xl font-semibold mb-4">Pro</h3>
-              <div className="text-4xl font-bold mb-2">$9.99<span className="text-lg font-normal">/month</span></div>
-              <p className="mb-6">For power users</p>
-              <ul className="text-left space-y-2 mb-8">
-                <li className="flex items-center"><svg className="w-5 h-5 text-white mr-2" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>Unlimited resources</li>
-                <li className="flex items-center"><svg className="w-5 h-5 text-white mr-2" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>AI-powered search</li>
-                <li className="flex items-center"><svg className="w-5 h-5 text-white mr-2" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>Smart capture</li>
-                <li className="flex items-center"><svg className="w-5 h-5 text-white mr-2" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>Advanced organization</li>
+
+            <div className="bg-gradient-to-br from-blue-600 to-blue-700 text-white p-8 rounded-xl text-center transform scale-105 shadow-xl relative">
+              <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
+                <span className="bg-yellow-400 text-yellow-900 px-4 py-1 rounded-full text-sm font-semibold">Most Popular</span>
+              </div>
+
+              <div className="mb-6">
+                <h3 className="text-2xl font-semibold mb-2">Professional</h3>
+                <div className="text-4xl font-bold mb-1">$12<span className="text-lg font-normal">/month</span></div>
+                <p className="text-blue-100 text-sm">or $99/year (save 25%)</p>
+              </div>
+
+              <ul className="text-left space-y-3 mb-8">
+                <li className="flex items-center text-sm">
+                  <svg className="w-5 h-5 text-white mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  Unlimited resources
+                </li>
+                <li className="flex items-center text-sm">
+                  <svg className="w-5 h-5 text-white mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  AI-powered search
+                </li>
+                <li className="flex items-center text-sm">
+                  <svg className="w-5 h-5 text-white mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  Smart capture & tagging
+                </li>
+                <li className="flex items-center text-sm">
+                  <svg className="w-5 h-5 text-white mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  Priority support
+                </li>
               </ul>
-              <Link to="/signup" className="w-full bg-white text-blue-600 py-2 px-4 rounded-lg hover:bg-gray-100 transition-colors font-semibold text-center block">Start Free Trial</Link>
+
+              <Link to="/signup" className="w-full bg-white text-blue-600 py-3 px-6 rounded-lg hover:bg-blue-50 transition-colors font-semibold text-center block shadow-lg">
+                Start Free 14-Day Trial
+              </Link>
             </div>
-            <div className="bg-white p-8 rounded-lg shadow-lg text-center">
-              <h3 className="text-2xl font-semibold text-gray-900 mb-4">Enterprise</h3>
-              <div className="text-4xl font-bold text-gray-900 mb-2">Custom</div>
-              <p className="text-gray-600 mb-6">For teams and organizations</p>
-              <ul className="text-left space-y-2 mb-8">
-                <li className="flex items-center"><svg className="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>Everything in Pro</li>
-                <li className="flex items-center"><svg className="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>Team collaboration</li>
-                <li className="flex items-center"><svg className="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>Priority support</li>
+
+            <div className="bg-white border-2 border-gray-200 p-8 rounded-xl text-center hover:border-gray-300 transition-all duration-200">
+              <div className="mb-6">
+                <h3 className="text-2xl font-semibold text-gray-900 mb-2">Enterprise</h3>
+                <div className="text-4xl font-bold text-gray-900 mb-1">Custom</div>
+                <p className="text-gray-600 text-sm">For teams & organizations</p>
+              </div>
+
+              <ul className="text-left space-y-3 mb-8">
+                <li className="flex items-center text-sm">
+                  <svg className="w-5 h-5 text-green-500 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  Everything in Professional
+                </li>
+                <li className="flex items-center text-sm">
+                  <svg className="w-5 h-5 text-green-500 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  Team collaboration
+                </li>
+                <li className="flex items-center text-sm">
+                  <svg className="w-5 h-5 text-green-500 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  Advanced analytics
+                </li>
+                <li className="flex items-center text-sm">
+                  <svg className="w-5 h-5 text-green-500 mr-3 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                  Dedicated success manager
+                </li>
               </ul>
-              <button className="w-full bg-gray-200 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors">Contact Sales</button>
+
+              <button className="w-full bg-gray-100 text-gray-700 py-3 px-6 rounded-lg hover:bg-gray-200 transition-colors font-medium">
+                Contact Sales
+              </button>
+            </div>
+          </div>
+
+          <div className="text-center mt-12">
+            <p className="text-gray-600 mb-4">All plans include 14-day free trial • No setup fees • Cancel anytime</p>
+            <div className="flex justify-center space-x-8 text-sm text-gray-500">
+              <span>🔒 Enterprise-grade security</span>
+              <span>📊 SOC 2 compliant</span>
+              <span>🔄 Easy data export</span>
             </div>
           </div>
         </div>
       </section>
+
+       {/* Final CTA Section */}
+       <section className="py-20 bg-gradient-to-r from-blue-600 to-purple-600 text-white">
+         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+           <div className="grid lg:grid-cols-2 gap-12 items-center">
+             <div className="text-center lg:text-left">
+               <h2 className="text-4xl font-bold mb-6">Ready to Never Lose Another Great Idea?</h2>
+               <p className="text-xl mb-8 text-blue-100">
+                 Join 10,000+ knowledge workers who've transformed how they capture, organize, and retrieve information.
+               </p>
+
+               <div className="bg-white bg-opacity-10 backdrop-blur-sm rounded-2xl p-8 mb-8">
+                 <div className="grid md:grid-cols-3 gap-6 text-center">
+                   <div>
+                     <div className="text-3xl font-bold mb-2">5 min</div>
+                     <div className="text-blue-100">Setup time</div>
+                   </div>
+                   <div>
+                     <div className="text-3xl font-bold mb-2">85%</div>
+                     <div className="text-blue-100">Time saved searching</div>
+                   </div>
+                   <div>
+                     <div className="text-3xl font-bold mb-2">$0</div>
+                     <div className="text-blue-100">To get started</div>
+                   </div>
+                 </div>
+               </div>
+
+               <div className="flex flex-col sm:flex-row justify-center lg:justify-start space-y-4 sm:space-y-0 sm:space-x-4">
+                 <Link to="/signup" className="bg-white text-blue-600 px-8 py-4 rounded-lg text-lg font-semibold hover:bg-blue-50 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-1">
+                   Start Your Free Trial Now
+                 </Link>
+                 <button className="border-2 border-white text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-white hover:text-blue-600 transition-all duration-200">
+                   Schedule a Demo
+                 </button>
+               </div>
+
+               <p className="text-sm text-blue-100 mt-6">
+                 No credit card required • 14-day free trial • Upgrade or cancel anytime
+               </p>
+             </div>
+
+             <div className="text-center">
+               <img
+                 src="/assets/cta-knowledge-freedom.svg"
+                 alt="Knowledge Freedom Illustration"
+                 className="mx-auto rounded-xl shadow-2xl max-w-full h-auto"
+               />
+             </div>
+           </div>
+         </div>
+       </section>
 
       {/* Footer */}
       <footer className="bg-gray-900 text-white py-12">

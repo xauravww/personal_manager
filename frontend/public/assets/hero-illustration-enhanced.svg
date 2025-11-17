@@ -1,0 +1,125 @@
+<svg width="800" height="400" viewBox="0 0 800 400" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background gradient -->
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#F3F4F6;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#E0E7FF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#E9D5FF;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="personGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#6B7280" />
+      <stop offset="100%" style="stop-color:#374151" />
+    </linearGradient>
+  </defs>
+  <rect width="800" height="400" fill="url(#bgGradient)"/>
+
+  <!-- Center dividing line -->
+  <line x1="400" y1="50" x2="400" y2="350" stroke="#3B82F6" stroke-width="2" stroke-dasharray="5,5" opacity="0.3"/>
+
+  <!-- LEFT SIDE - PROBLEM/CHAOS -->
+  <!-- Frustrated person -->
+  <g transform="translate(200,150)">
+    <!-- Head -->
+    <circle cx="0" cy="-20" r="15" fill="url(#personGradient)"/>
+    <!-- Frustrated expression -->
+    <circle cx="-5" cy="-23" r="2" fill="#374151"/>
+    <circle cx="5" cy="-23" r="2" fill="#374151"/>
+    <path d="M-8 -15 Q0 -10 8 -15" stroke="#374151" stroke-width="2" fill="none"/>
+    <!-- Sweat drops -->
+    <circle cx="-12" cy="-28" r="2" fill="#EF4444" opacity="0.7"/>
+    <circle cx="12" cy="-28" r="2" fill="#EF4444" opacity="0.7"/>
+    <!-- Body -->
+    <rect x="-12" y="-5" width="24" height="30" rx="3" fill="url(#personGradient)"/>
+    <!-- Arms raised in frustration -->
+    <rect x="-18" y="-2" width="6" height="20" rx="3" fill="url(#personGradient)" transform="rotate(-30 -15 8)"/>
+    <rect x="12" y="-2" width="6" height="20" rx="3" fill="url(#personGradient)" transform="rotate(30 18 8)"/>
+  </g>
+
+  <!-- Scattered documents and chaos -->
+  <g transform="translate(100,100)">
+    <!-- Scattered papers -->
+    <rect x="0" y="0" width="25" height="35" rx="2" fill="#9CA3AF" transform="rotate(-25 12.5 17.5)"/>
+    <rect x="50" y="20" width="25" height="35" rx="2" fill="#9CA3AF" transform="rotate(15 62.5 37.5)"/>
+    <rect x="20" y="60" width="25" height="35" rx="2" fill="#9CA3AF" transform="rotate(-40 32.5 77.5)"/>
+    <rect x="70" y="50" width="25" height="35" rx="2" fill="#9CA3AF" transform="rotate(35 82.5 67.5)"/>
+    <!-- Question marks -->
+    <text x="30" y="40" font-family="Arial, sans-serif" font-size="24" fill="#EF4444">?</text>
+    <text x="80" y="30" font-family="Arial, sans-serif" font-size="20" fill="#EF4444">?</text>
+    <text x="10" y="80" font-family="Arial, sans-serif" font-size="18" fill="#EF4444">?</text>
+  </g>
+
+  <!-- App icons scattered -->
+  <g transform="translate(80,200)">
+    <!-- Browser bookmark -->
+    <rect x="0" y="0" width="15" height="20" rx="2" fill="#6B7280"/>
+    <rect x="3" y="3" width="9" height="2" rx="1" fill="#9CA3AF"/>
+    <rect x="3" y="7" width="6" height="2" rx="1" fill="#9CA3AF"/>
+    <!-- Notion icon -->
+    <rect x="25" y="10" width="12" height="12" rx="2" fill="#000000"/>
+    <!-- Evernote icon -->
+    <rect x="45" y="-5" width="12" height="12" rx="2" fill="#00A82D"/>
+    <!-- Voice memo -->
+    <circle cx="70" cy="5" r="8" fill="#F97316"/>
+    <rect x="66" y="1" width="8" height="2" rx="1" fill="#FFFFFF"/>
+    <rect x="66" y="5" width="8" height="2" rx="1" fill="#FFFFFF"/>
+  </g>
+
+  <!-- Tangled lines -->
+  <path d="M50 150 Q100 120 150 180 Q120 220 80 200" stroke="#EF4444" stroke-width="2" fill="none" opacity="0.5"/>
+  <path d="M120 100 Q180 130 140 180 Q160 220 100 210" stroke="#EF4444" stroke-width="2" fill="none" opacity="0.5"/>
+
+  <!-- RIGHT SIDE - SOLUTION/PEACE -->
+  <!-- Calm person -->
+  <g transform="translate(600,150)">
+    <!-- Head -->
+    <circle cx="0" cy="-20" r="15" fill="url(#personGradient)"/>
+    <!-- Calm expression -->
+    <circle cx="-5" cy="-23" r="2" fill="#374151"/>
+    <circle cx="5" cy="-23" r="2" fill="#374151"/>
+    <path d="M-6 -15 Q0 -12 6 -15" stroke="#374151" stroke-width="2" fill="none"/>
+    <!-- Body -->
+    <rect x="-12" y="-5" width="24" height="30" rx="3" fill="url(#personGradient)"/>
+    <!-- Relaxed arms -->
+    <rect x="-18" y="5" width="6" height="15" rx="3" fill="url(#personGradient)"/>
+    <rect x="12" y="5" width="6" height="15" rx="3" fill="url(#personGradient)"/>
+  </g>
+
+  <!-- Organized knowledge cards -->
+  <g transform="translate(450,120)">
+    <!-- Knowledge cards -->
+    <rect x="0" y="0" width="30" height="20" rx="3" fill="#3B82F6" opacity="0.9"/>
+    <text x="5" y="12" font-family="Arial, sans-serif" font-size="8" fill="#FFFFFF">Ideas</text>
+    <rect x="35" y="10" width="30" height="20" rx="3" fill="#06B6D4" opacity="0.9"/>
+    <text x="40" y="22" font-family="Arial, sans-serif" font-size="8" fill="#FFFFFF">Notes</text>
+    <rect x="15" y="35" width="30" height="20" rx="3" fill="#8B5CF6" opacity="0.9"/>
+    <text x="20" y="47" font-family="Arial, sans-serif" font-size="8" fill="#FFFFFF">Links</text>
+    <!-- Checkmarks -->
+    <path d="M5 10 L10 15 L20 5" stroke="#FFFFFF" stroke-width="2" fill="none"/>
+    <path d="M40 20 L45 25 L55 15" stroke="#FFFFFF" stroke-width="2" fill="none"/>
+    <path d="M20 45 L25 50 L35 40" stroke="#FFFFFF" stroke-width="2" fill="none"/>
+  </g>
+
+  <!-- Unified glowing hub -->
+  <g transform="translate(520,200)">
+    <circle cx="0" cy="0" r="25" fill="#3B82F6" opacity="0.2"/>
+    <circle cx="0" cy="0" r="20" fill="#3B82F6" opacity="0.3"/>
+    <circle cx="0" cy="0" r="15" fill="#3B82F6" opacity="0.4"/>
+    <circle cx="0" cy="0" r="10" fill="#3B82F6"/>
+    <!-- Central icon -->
+    <circle cx="0" cy="0" r="4" fill="#FFFFFF"/>
+    <path d="M-2 -2 L2 2 M-2 2 L2 -2" stroke="#FFFFFF" stroke-width="1"/>
+  </g>
+
+  <!-- Search results appearing -->
+  <g transform="translate(480,80)">
+    <rect x="0" y="0" width="60" height="25" rx="3" fill="#FFFFFF" stroke="#3B82F6" stroke-width="1"/>
+    <text x="5" y="12" font-family="Arial, sans-serif" font-size="9" fill="#374151">Find productivity article...</text>
+    <rect x="0" y="30" width="60" height="20" rx="3" fill="#F0F9FF" stroke="#3B82F6" stroke-width="1"/>
+    <text x="5" y="42" font-family="Arial, sans-serif" font-size="8" fill="#3B82F6">✓ Found instantly</text>
+  </g>
+
+  <!-- Connecting elements -->
+  <path d="M350 200 Q375 180 400 200 Q425 220 450 200" stroke="#3B82F6" stroke-width="3" fill="none" opacity="0.6"/>
+  <!-- Arrow -->
+  <path d="M440 195 L450 200 L440 205" fill="#3B82F6" opacity="0.6"/>
+</svg>

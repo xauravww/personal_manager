@@ -1,0 +1,91 @@
+<svg width="600" height="300" viewBox="0 0 600 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="600" height="150" fill="#F9FAFB"/>
+  <rect y="150" width="600" height="150" fill="#F0F9FF"/>
+
+  <!-- Dividing line -->
+  <line x1="0" y1="150" x2="600" y2="150" stroke="#3B82F6" stroke-width="1" opacity="0.3"/>
+
+  <!-- TOP HALF - PROBLEM -->
+  <!-- Frustrated person -->
+  <g transform="translate(80,70)">
+    <!-- Head -->
+    <circle cx="0" cy="-15" r="12" fill="#6B7280"/>
+    <!-- Frustrated expression -->
+    <circle cx="-4" cy="-18" r="1.5" fill="#374151"/>
+    <circle cx="4" cy="-18" r="1.5" fill="#374151"/>
+    <path d="M-6 -12 Q0 -8 6 -12" stroke="#374151" stroke-width="1.5" fill="none"/>
+    <!-- Sweat -->
+    <circle cx="-8" cy="-22" r="1.5" fill="#EF4444" opacity="0.7"/>
+    <circle cx="8" cy="-22" r="1.5" fill="#EF4444" opacity="0.7"/>
+    <!-- Body -->
+    <rect x="-10" y="0" width="20" height="25" rx="2" fill="#6B7280"/>
+    <!-- Arms typing -->
+    <rect x="-15" y="5" width="5" height="15" rx="2" fill="#6B7280"/>
+    <rect x="10" y="5" width="5" height="15" rx="2" fill="#6B7280"/>
+  </g>
+
+  <!-- Problem search interface -->
+  <g transform="translate(200,50)">
+    <!-- Search bar -->
+    <rect x="0" y="0" width="200" height="30" rx="15" fill="#FFFFFF" stroke="#D1D5DB" stroke-width="1"/>
+    <text x="15" y="20" font-family="Arial, sans-serif" font-size="12" fill="#6B7280">productivity time management article...</text>
+    <!-- Magnifying glass -->
+    <circle cx="175" cy="15" r="8" fill="none" stroke="#6B7280" stroke-width="1.5"/>
+    <line x1="180" y1="20" x2="185" y2="25" stroke="#6B7280" stroke-width="1.5"/>
+  </g>
+
+  <!-- Zero results -->
+  <g transform="translate(200,90)">
+    <text x="0" y="0" font-family="Arial, sans-serif" font-size="14" fill="#9CA3AF">No results found</text>
+    <text x="0" y="20" font-family="Arial, sans-serif" font-size="10" fill="#9CA3AF">Try different keywords</text>
+  </g>
+
+  <!-- Question marks and confusion -->
+  <text x="450" y="60" font-family="Arial, sans-serif" font-size="24" fill="#EF4444">?</text>
+  <text x="480" y="80" font-family="Arial, sans-serif" font-size="20" fill="#EF4444">?</text>
+  <text x="420" y="100" font-family="Arial, sans-serif" font-size="18" fill="#EF4444">?</text>
+
+  <!-- BOTTOM HALF - SOLUTION -->
+  <!-- Calm person -->
+  <g transform="translate(80,220)">
+    <!-- Head -->
+    <circle cx="0" cy="-15" r="12" fill="#6B7280"/>
+    <!-- Calm expression -->
+    <circle cx="-4" cy="-18" r="1.5" fill="#374151"/>
+    <circle cx="4" cy="-18" r="1.5" fill="#374151"/>
+    <path d="M-4 -12 Q0 -10 4 -12" stroke="#374151" stroke-width="1.5" fill="none"/>
+    <!-- Body -->
+    <rect x="-10" y="0" width="20" height="25" rx="2" fill="#6B7280"/>
+    <!-- Relaxed arms -->
+    <rect x="-15" y="10" width="5" height="12" rx="2" fill="#6B7280"/>
+    <rect x="10" y="10" width="5" height="12" rx="2" fill="#6B7280"/>
+  </g>
+
+  <!-- Solution search interface -->
+  <g transform="translate(200,200)">
+    <!-- Search bar -->
+    <rect x="0" y="0" width="200" height="30" rx="15" fill="#FFFFFF" stroke="#3B82F6" stroke-width="1"/>
+    <text x="15" y="20" font-family="Arial, sans-serif" font-size="12" fill="#3B82F6">that productivity article about time blocking</text>
+    <!-- AI indicator -->
+    <circle cx="175" cy="15" r="8" fill="#06B6D4"/>
+    <text x="172" y="19" font-family="Arial, sans-serif" font-size="10" fill="#FFFFFF">AI</text>
+  </g>
+
+  <!-- Instant results -->
+  <g transform="translate(200,240)">
+    <!-- Result 1 -->
+    <rect x="0" y="0" width="180" height="25" rx="5" fill="#F0F9FF" stroke="#3B82F6" stroke-width="1"/>
+    <circle cx="10" cy="12" r="3" fill="#10B981"/>
+    <text x="20" y="16" font-family="Arial, sans-serif" font-size="10" fill="#374151">Time Blocking Guide - 95% match</text>
+    <!-- Result 2 -->
+    <rect x="0" y="30" width="180" height="25" rx="5" fill="#F0F9FF" stroke="#3B82F6" stroke-width="1"/>
+    <circle cx="10" cy="42" r="3" fill="#10B981"/>
+    <text x="20" y="46" font-family="Arial, sans-serif" font-size="10" fill="#374151">Productivity Techniques - 87% match</text>
+  </g>
+
+  <!-- Checkmarks and success -->
+  <path d="M430 210 L435 215 L445 205" stroke="#10B981" stroke-width="2" fill="none"/>
+  <path d="M450 225 L455 230 L465 220" stroke="#10B981" stroke-width="2" fill="none"/>
+  <text x="470" y="235" font-family="Arial, sans-serif" font-size="12" fill="#10B981">Found instantly!</text>
+</svg>

@@ -1021,13 +1021,702 @@ Return a JSON object:
        };
     }
 
-    /**
-     * Get the AI service configuration
-     */
-    getConfig(): AIConfig {
-      return this.config;
+  /**
+   * Get the AI service configuration
+   */
+  getConfig(): AIConfig {
+    return this.config;
+  }
+
+  /**
+   * Analyze user resources to assess current knowledge level and generate course recommendations
+   */
+  async analyzeUserResourcesForCourse(
+    subjectName: string,
+    userResources: Array<{
+      title: string;
+      content?: string;
+      type: string;
+      tags?: string[];
+    }>,
+    currentLevel?: string
+  ): Promise<{
+    assessedLevel: string;
+    knowledgeGaps: string[];
+    recommendedModules: Array<{
+      title: string;
+      description: string;
+      difficulty: string;
+      estimatedHours: number;
+      prerequisites: string[];
+    }>;
+    confidence: number;
+  }> {
+    try {
+      const resourcesText = userResources.map(r =>
+        `Title: ${r.title}\nType: ${r.type}\nTags: ${r.tags?.join(', ') || 'none'}\nContent: ${r.content?.substring(0, 500) || 'No content'}`
+      ).join('\n\n---\n\n');
+
+      const systemPrompt = `You are an educational assessment AI. Analyze the user's existing resources for learning ${subjectName} and assess their current knowledge level.
+
+Current self-reported level: ${currentLevel || 'unknown'}
+
+Based on the resources provided, determine:
+1. Their actual knowledge level (beginner, intermediate, advanced)
+2. Knowledge gaps they need to fill
+3. Recommended learning modules to bridge those gaps
+4. Realistic time estimates
+
+Return a JSON object with this structure:
+{
+  "assessedLevel": "beginner|intermediate|advanced",
+  "knowledgeGaps": ["gap1", "gap2", "gap3"],
+  "recommendedModules": [
+    {
+      "title": "Module Title",
+      "description": "Brief description of what this module covers",
+      "difficulty": "beginner|intermediate|advanced",
+      "estimatedHours": 2,
+      "prerequisites": ["prereq1", "prereq2"]
+    }
+  ],
+  "confidence": 0-100
+}
+
+Be realistic about time estimates and difficulty progression.`;
+
+      const response = await this.createChatCompletion({
+        model: this.config.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Analyze these resources for ${subjectName} learning:\n\n${resourcesText}` }
+        ],
+        temperature: 0.3,
+      });
+
+      const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
+      if (content) {
+        try {
+          const analysis = JSON.parse(content);
+          return {
+            assessedLevel: analysis.assessedLevel || 'beginner',
+            knowledgeGaps: analysis.knowledgeGaps || [],
+            recommendedModules: analysis.recommendedModules || [],
+            confidence: analysis.confidence || 50
+          };
+        } catch (error) {
+          console.warn('Error parsing resource analysis:', error);
+          return {
+            assessedLevel: 'beginner',
+            knowledgeGaps: ['Unable to analyze resources'],
+            recommendedModules: [],
+            confidence: 0
+          };
+        }
+      }
+
+      return {
+        assessedLevel: 'beginner',
+        knowledgeGaps: ['Analysis failed'],
+        recommendedModules: [],
+        confidence: 0
+      };
+    } catch (error) {
+      console.warn('Error analyzing user resources:', error);
+      return {
+        assessedLevel: 'beginner',
+        knowledgeGaps: ['Analysis error'],
+        recommendedModules: [],
+        confidence: 0
+      };
     }
   }
+
+  /**
+   * Generate a personalized learning path with latest content
+   */
+  async generatePersonalizedCourse(
+    subjectName: string,
+    userLevel: string,
+    goals: string[],
+    knowledgeGaps: string[],
+    existingModules: Array<{
+      title: string;
+      completed: boolean;
+    }> = []
+  ): Promise<{
+    courseTitle: string;
+    description: string;
+    totalHours: number;
+    modules: Array<{
+      id: string;
+      title: string;
+      description: string;
+      content: string;
+      difficulty: string;
+      estimatedHours: number;
+      order: number;
+      prerequisites: string[];
+      assignments: Array<{
+        title: string;
+        type: string;
+        description: string;
+      }>;
+    }>;
+    mindmapStructure: any;
+  }> {
+    try {
+      const goalsText = goals.join(', ');
+      const gapsText = knowledgeGaps.join(', ');
+      const existingText = existingModules.map(m => `${m.title} (${m.completed ? 'completed' : 'pending'})`).join(', ');
+
+      const systemPrompt = `You are a course designer AI specializing in creating personalized learning paths with the latest industry knowledge.
+
+Subject: ${subjectName}
+User Level: ${userLevel}
+Learning Goals: ${goalsText}
+Knowledge Gaps: ${gapsText}
+Existing Progress: ${existingText || 'None'}
+
+Create a comprehensive course that:
+1. Incorporates the latest developments and best practices (as of 2024-2025)
+2. Addresses the specific knowledge gaps identified
+3. Builds upon existing completed modules
+4. Includes practical assignments and projects
+5. Provides realistic time estimates
+6. Creates a mindmap structure for visual learning
+
+Return a JSON object with this structure:
+{
+  "courseTitle": "Complete Course Title",
+  "description": "Course overview and objectives",
+  "totalHours": 40,
+  "modules": [
+    {
+      "id": "module-1",
+      "title": "Module Title",
+      "description": "What this module covers",
+      "content": "Detailed module content and learning objectives",
+      "difficulty": "beginner|intermediate|advanced",
+      "estimatedHours": 4,
+      "order": 1,
+      "prerequisites": ["module-0"],
+      "assignments": [
+        {
+          "title": "Assignment Title",
+          "type": "exercise|quiz|project",
+          "description": "Assignment details"
+        }
+      ]
+    }
+  ],
+  "mindmapStructure": {
+    "title": "Subject Mindmap",
+    "nodes": [
+      {
+        "id": "core-concept",
+        "label": "Core Concept",
+        "children": ["sub-concept-1", "sub-concept-2"]
+      }
+    ]
+  }
+}
+
+Make the course practical, up-to-date, and progressive in difficulty.`;
+
+      const response = await this.createChatCompletion({
+        model: this.config.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Design a personalized course for ${subjectName}` }
+        ],
+        temperature: 0.4,
+      });
+
+      const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
+      if (content) {
+        try {
+          const course = JSON.parse(content);
+          return {
+            courseTitle: course.courseTitle || `${subjectName} Learning Path`,
+            description: course.description || `Comprehensive ${subjectName} course`,
+            totalHours: course.totalHours || 20,
+            modules: course.modules || [],
+            mindmapStructure: course.mindmapStructure || { title: subjectName, nodes: [] }
+          };
+        } catch (error) {
+          console.warn('Error parsing course generation:', error);
+          return {
+            courseTitle: `${subjectName} Learning Path`,
+            description: `Personalized course for ${subjectName}`,
+            totalHours: 20,
+            modules: [],
+            mindmapStructure: { title: subjectName, nodes: [] }
+          };
+        }
+      }
+
+      return {
+        courseTitle: `${subjectName} Learning Path`,
+        description: `Personalized course for ${subjectName}`,
+        totalHours: 20,
+        modules: [],
+        mindmapStructure: { title: subjectName, nodes: [] }
+      };
+    } catch (error) {
+      console.warn('Error generating personalized course:', error);
+      return {
+        courseTitle: `${subjectName} Learning Path`,
+        description: `Personalized course for ${subjectName}`,
+        totalHours: 20,
+        modules: [],
+        mindmapStructure: { title: subjectName, nodes: [] }
+      };
+    }
+  }
+
+  /**
+   * Analyze assignment submission and identify weak points
+   */
+  async analyzeAssignmentSubmission(
+    assignment: {
+      title: string;
+      description: string;
+      solution?: string;
+    },
+    submission: string,
+    subjectName: string
+  ): Promise<{
+    score: number;
+    feedback: string;
+    weakPoints: Array<{
+      topic: string;
+      description: string;
+      severity: string;
+      suggestions: string[];
+    }>;
+    strengths: string[];
+    improvementAreas: string[];
+  }> {
+    try {
+      const systemPrompt = `You are an educational assessment AI analyzing a ${subjectName} assignment submission.
+
+Assignment: ${assignment.title}
+Description: ${assignment.description}
+Expected Solution: ${assignment.solution || 'Not provided'}
+
+Analyze the submission for:
+1. Correctness and understanding
+2. Code quality/style (if applicable)
+3. Problem-solving approach
+4. Common mistakes or misconceptions
+5. Areas for improvement
+
+Return a JSON object with this structure:
+{
+  "score": 0-100,
+  "feedback": "Detailed feedback explaining the score and main issues",
+  "weakPoints": [
+    {
+      "topic": "specific topic or concept",
+      "description": "what went wrong or is missing",
+      "severity": "low|medium|high",
+      "suggestions": ["specific improvement suggestion", "another suggestion"]
+    }
+  ],
+  "strengths": ["strength1", "strength2"],
+  "improvementAreas": ["area1", "area2"]
+}
+
+Be constructive, specific, and helpful in your feedback.`;
+
+      const response = await this.createChatCompletion({
+        model: this.config.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Submission to analyze:\n\n${submission}` }
+        ],
+        temperature: 0.3,
+      });
+
+      const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
+      if (content) {
+        try {
+          const analysis = JSON.parse(content);
+          return {
+            score: analysis.score || 0,
+            feedback: analysis.feedback || 'Analysis completed',
+            weakPoints: analysis.weakPoints || [],
+            strengths: analysis.strengths || [],
+            improvementAreas: analysis.improvementAreas || []
+          };
+        } catch (error) {
+          console.warn('Error parsing assignment analysis:', error);
+          return {
+            score: 50,
+            feedback: 'Analysis completed with some issues',
+            weakPoints: [],
+            strengths: [],
+            improvementAreas: ['Unable to analyze submission']
+          };
+        }
+      }
+
+      return {
+        score: 50,
+        feedback: 'Analysis completed',
+        weakPoints: [],
+        strengths: [],
+        improvementAreas: []
+      };
+    } catch (error) {
+      console.warn('Error analyzing assignment submission:', error);
+      return {
+        score: 50,
+        feedback: 'Analysis failed',
+        weakPoints: [],
+        strengths: [],
+        improvementAreas: ['Analysis error']
+      };
+    }
+  }
+
+  /**
+   * Generate mindmap for a subject or progress visualization
+   */
+  async generateMindmap(
+    subjectName: string,
+    type: 'concept' | 'progress' | 'weak_points',
+    context: {
+      completedModules?: string[];
+      weakPoints?: string[];
+      currentLevel?: string;
+      goals?: string[];
+    } = {}
+  ): Promise<{
+    title: string;
+    structure: any;
+    description: string;
+  }> {
+    try {
+      const contextText = Object.entries(context)
+        .filter(([_, value]) => value && (Array.isArray(value) ? value.length > 0 : true))
+        .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : value}`)
+        .join('\n');
+
+      const systemPrompt = `You are a mindmap generation AI creating visual knowledge structures for learning.
+
+Subject: ${subjectName}
+Type: ${type}
+Context: ${contextText}
+
+Create a mindmap structure that visually represents the knowledge in an organized, hierarchical way.
+
+For concept maps: Show relationships between core concepts and subtopics
+For progress maps: Show completed vs pending learning areas
+For weak points maps: Highlight areas needing reinforcement
+
+Return a JSON object with this structure:
+{
+  "title": "Mindmap Title",
+  "structure": {
+    "nodes": [
+      {
+        "id": "core-concept",
+        "label": "Core Concept",
+        "x": 0,
+        "y": 0,
+        "color": "#4F46E5",
+        "size": "large",
+        "children": ["child-id-1", "child-id-2"]
+      },
+      {
+        "id": "child-id-1",
+        "label": "Sub-concept",
+        "x": -100,
+        "y": 100,
+        "color": "#7C3AED",
+        "size": "medium",
+        "connections": ["core-concept"]
+      }
+    ],
+    "connections": [
+      {
+        "from": "core-concept",
+        "to": "child-id-1",
+        "label": "relationship",
+        "style": "solid"
+      }
+    ]
+  },
+  "description": "Brief description of what this mindmap shows"
+}
+
+Use appropriate colors and positioning for visual clarity.`;
+
+      const response = await this.createChatCompletion({
+        model: this.config.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Generate a ${type} mindmap for ${subjectName}` }
+        ],
+        temperature: 0.4,
+      });
+
+      const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
+      if (content) {
+        try {
+          const mindmap = JSON.parse(content);
+          return {
+            title: mindmap.title || `${subjectName} Mindmap`,
+            structure: mindmap.structure || { nodes: [], connections: [] },
+            description: mindmap.description || `Visual representation of ${subjectName} knowledge`
+          };
+        } catch (error) {
+          console.warn('Error parsing mindmap generation:', error);
+          return {
+            title: `${subjectName} Mindmap`,
+            structure: { nodes: [], connections: [] },
+            description: `Generated mindmap for ${subjectName}`
+          };
+        }
+      }
+
+      return {
+        title: `${subjectName} Mindmap`,
+        structure: { nodes: [], connections: [] },
+        description: `Generated mindmap for ${subjectName}`
+      };
+    } catch (error) {
+      console.warn('Error generating mindmap:', error);
+      return {
+        title: `${subjectName} Mindmap`,
+        structure: { nodes: [], connections: [] },
+        description: `Generated mindmap for ${subjectName}`
+      };
+    }
+  }
+
+  /**
+   * Generate a dynamic knowledge summary based on user's progress and resources
+   */
+  async generateKnowledgeSummary(
+    subjectName: string,
+    progress: {
+      completedModules: Array<{
+        title: string;
+        score?: number;
+        completedAt: Date;
+      }>;
+      currentModules: Array<{
+        title: string;
+        progress: number;
+      }>;
+      weakPoints: Array<{
+        topic: string;
+        severity: string;
+        frequency: number;
+      }>;
+      totalTimeSpent: number;
+      assignmentSubmissions: Array<{
+        score?: number;
+        feedback?: string;
+        weakPoints?: string[];
+      }>;
+    },
+    resources: Array<{
+      title: string;
+      type: string;
+      tags: string[];
+      embedding?: string;
+    }>,
+    userLevel: string
+  ): Promise<{
+    summary: string;
+    strengths: string[];
+    areasForImprovement: string[];
+    confidence: number;
+    nextMilestones: string[];
+  }> {
+    try {
+      const progressText = `
+Completed Modules: ${progress.completedModules.map(m => `${m.title} (${m.score || 'N/A'}%)`).join(', ')}
+Current Progress: ${progress.currentModules.map(m => `${m.title} (${m.progress}%)`).join(', ')}
+Weak Points: ${progress.weakPoints.map(wp => `${wp.topic} (${wp.severity})`).join(', ')}
+Total Time Spent: ${progress.totalTimeSpent} minutes
+Assignment Performance: ${progress.assignmentSubmissions.length} submissions, avg score: ${progress.assignmentSubmissions.filter(s => s.score).reduce((sum, s) => sum + (s.score || 0), 0) / Math.max(1, progress.assignmentSubmissions.filter(s => s.score).length)}%
+      `.trim();
+
+      const resourcesText = resources.slice(0, 10).map(r =>
+        `Title: ${r.title}, Type: ${r.type}, Tags: ${r.tags.join(', ')}`
+      ).join('\n');
+
+      const systemPrompt = `You are an educational progress analyzer. Create a dynamic knowledge summary for a ${subjectName} learner.
+
+Current Level: ${userLevel}
+Progress Data: ${progressText}
+Resources: ${resourcesText}
+
+Generate a comprehensive knowledge summary that includes:
+1. Current knowledge level and expertise areas
+2. Learning progress and achievements
+3. Strengths and well-developed skills
+4. Areas needing more attention
+5. Realistic assessment of overall competence
+6. Next learning milestones
+
+Return a JSON object with this structure:
+{
+  "summary": "A 2-3 sentence overview of current knowledge level and progress",
+  "strengths": ["specific strength 1", "specific strength 2", "specific strength 3"],
+  "areasForImprovement": ["area 1", "area 2", "area 3"],
+  "confidence": 0-100,
+  "nextMilestones": ["milestone 1", "milestone 2", "milestone 3"]
+}
+
+Be specific, encouraging, and accurate based on the data provided.`;
+
+      const response = await this.createChatCompletion({
+        model: this.config.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Generate knowledge summary for ${subjectName} learner` }
+        ],
+        temperature: 0.3,
+      });
+
+      const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
+      if (content) {
+        try {
+          const analysis = JSON.parse(content);
+          return {
+            summary: analysis.summary || 'Knowledge assessment in progress...',
+            strengths: analysis.strengths || [],
+            areasForImprovement: analysis.areasForImprovement || [],
+            confidence: analysis.confidence || 50,
+            nextMilestones: analysis.nextMilestones || []
+          };
+        } catch (error) {
+          console.warn('Error parsing knowledge summary:', error);
+          return {
+            summary: 'Analyzing your learning progress...',
+            strengths: [],
+            areasForImprovement: [],
+            confidence: 50,
+            nextMilestones: []
+          };
+        }
+      }
+
+      return {
+        summary: 'Knowledge summary generation in progress...',
+        strengths: [],
+        areasForImprovement: [],
+        confidence: 50,
+        nextMilestones: []
+      };
+    } catch (error) {
+      console.warn('Error generating knowledge summary:', error);
+      return {
+        summary: 'Unable to generate knowledge summary at this time.',
+        strengths: [],
+        areasForImprovement: [],
+        confidence: 50,
+        nextMilestones: []
+      };
+    }
+  }
+
+  /**
+   * Get learning recommendations based on user progress and weak points
+   */
+  async getLearningRecommendations(
+    subjectName: string,
+    progress: {
+      completedModules: number;
+      totalModules: number;
+      weakPoints: string[];
+      timeSpent: number;
+      currentStreak: number;
+    },
+    goals: string[]
+  ): Promise<{
+    nextSteps: string[];
+    focusAreas: string[];
+    timeSuggestions: string[];
+    motivationalMessage: string;
+  }> {
+    try {
+      const progressText = `Completed: ${progress.completedModules}/${progress.totalModules} modules, Time spent: ${progress.timeSpent} hours, Current streak: ${progress.currentStreak} days`;
+      const weakPointsText = progress.weakPoints.join(', ');
+      const goalsText = goals.join(', ');
+
+      const systemPrompt = `You are a learning coach AI providing personalized recommendations.
+
+Subject: ${subjectName}
+Progress: ${progressText}
+Weak Points: ${weakPointsText}
+Goals: ${goalsText}
+
+Provide helpful, encouraging recommendations that help the user stay motivated and make progress.
+
+Return a JSON object with this structure:
+{
+  "nextSteps": ["specific actionable step", "another step"],
+  "focusAreas": ["area to focus on", "another area"],
+  "timeSuggestions": ["time management tip", "study schedule suggestion"],
+  "motivationalMessage": "Encouraging message tailored to their progress"
+}
+
+Be specific, actionable, and supportive.`;
+
+      const response = await this.createChatCompletion({
+        model: this.config.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Provide learning recommendations for ${subjectName}` }
+        ],
+        temperature: 0.6,
+      });
+
+      const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
+      if (content) {
+        try {
+          const recommendations = JSON.parse(content);
+          return {
+            nextSteps: recommendations.nextSteps || [],
+            focusAreas: recommendations.focusAreas || [],
+            timeSuggestions: recommendations.timeSuggestions || [],
+            motivationalMessage: recommendations.motivationalMessage || 'Keep up the great work!'
+          };
+        } catch (error) {
+          console.warn('Error parsing learning recommendations:', error);
+          return {
+            nextSteps: ['Continue with next module'],
+            focusAreas: ['Review weak points'],
+            timeSuggestions: ['Study regularly'],
+            motivationalMessage: 'You\'re making great progress!'
+          };
+        }
+      }
+
+      return {
+        nextSteps: ['Continue learning'],
+        focusAreas: ['Practice regularly'],
+        timeSuggestions: ['Set aside dedicated study time'],
+        motivationalMessage: 'Keep learning!'
+      };
+    } catch (error) {
+      console.warn('Error getting learning recommendations:', error);
+      return {
+        nextSteps: ['Continue learning'],
+        focusAreas: ['Practice regularly'],
+        timeSuggestions: ['Set aside dedicated study time'],
+        motivationalMessage: 'Keep learning!'
+      };
+    }
+  }
+}
 
 // Export singleton instance
 export const aiService = new AIService();

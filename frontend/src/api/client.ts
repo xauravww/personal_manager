@@ -391,6 +391,116 @@ class ApiClient {
 
     return eventSource;
   }
+
+  // Learning methods
+  async getLearningSubjects(): Promise<ApiResponse<any[]>> {
+    return this.request('/learning/subjects');
+  }
+
+  async createLearningSubject(subject: { name: string; description?: string; goals?: string[] }): Promise<ApiResponse<any>> {
+    return this.request('/learning/subjects', {
+      method: 'POST',
+      body: JSON.stringify(subject),
+    });
+  }
+
+  async updateLearningSubject(id: string, subject: Partial<{ name: string; description?: string; goals?: string[] }>): Promise<ApiResponse<any>> {
+    return this.request(`/learning/subjects/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(subject),
+    });
+  }
+
+  async deleteLearningSubject(id: string): Promise<ApiResponse<any>> {
+    return this.request(`/learning/subjects/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getLearningModules(subjectId: string): Promise<ApiResponse<any[]>> {
+    return this.request(`/learning/subjects/${subjectId}/modules`);
+  }
+
+  async createLearningModule(module: {
+    subject_id: string;
+    title: string;
+    description?: string;
+    content?: string;
+    order_index?: number;
+    prerequisites?: string[];
+    estimated_time?: number;
+    difficulty?: string;
+    is_optional?: boolean;
+  }): Promise<ApiResponse<any>> {
+    return this.request('/learning/modules', {
+      method: 'POST',
+      body: JSON.stringify(module),
+    });
+  }
+
+  async updateProgress(progress: {
+    module_id: string;
+    status: string;
+    score?: number;
+    time_spent?: number;
+    notes?: string;
+  }): Promise<ApiResponse<any>> {
+    return this.request('/learning/progress', {
+      method: 'POST',
+      body: JSON.stringify(progress),
+    });
+  }
+
+  async submitAssignment(submission: {
+    assignment_id: string;
+    content: string;
+  }): Promise<ApiResponse<any>> {
+    return this.request('/learning/assignments/submit', {
+      method: 'POST',
+      body: JSON.stringify(submission),
+    });
+  }
+
+  async getProgressOverview(): Promise<ApiResponse<any[]>> {
+    return this.request('/learning/progress/overview');
+  }
+
+  async generateCourse(params: {
+    subject_name: string;
+    user_resources?: string[];
+    current_level?: string;
+    goals?: string[];
+  }): Promise<ApiResponse<any>> {
+    return this.request('/learning/generate-course', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  }
+
+  async getKnowledgeSummary(subjectId: string): Promise<ApiResponse<{
+    summary: string;
+    strengths: string[];
+    areasForImprovement: string[];
+    confidence: number;
+    nextMilestones: string[];
+  }>> {
+    return this.request(`/learning/subjects/${subjectId}/knowledge-summary`);
+  }
+
+  async getMindmaps(): Promise<ApiResponse<any[]>> {
+    return this.request('/learning/mindmaps');
+  }
+
+  async generateMindmap(params: {
+    subject_id?: string;
+    type: 'concept' | 'progress' | 'weak_points';
+    context?: any;
+  }): Promise<ApiResponse<any>> {
+    return this.request('/learning/mindmaps/generate', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  }
 }
 
 // Create and export a singleton instance

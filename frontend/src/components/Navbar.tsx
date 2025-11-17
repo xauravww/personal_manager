@@ -11,6 +11,7 @@ import {
   ChevronDown,
   LogOut,
   UserCircle,
+  GraduationCap,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -30,6 +31,7 @@ const Navbar: React.FC<NavbarProps> = ({ showNavigation = true }) => {
     { name: 'Dashboard', href: '/dashboard', icon: Home },
     { name: 'Resources', href: '/resources', icon: FolderOpen },
     { name: 'Search', href: '/search', icon: Search },
+    { name: 'Learning', href: '/learning', icon: GraduationCap },
   ];
 
   const handleLogout = async () => {

@@ -21,6 +21,11 @@ model User {
   // Relations
   resources Resource[]
   tags      Tag[]
+  learningSubjects LearningSubject[]
+  learningProgress LearningProgress[]
+  assignmentSubmissions AssignmentSubmission[]
+  weakPoints WeakPoint[]
+  mindmaps MindMap[]
 
   @@map("users")
 }
@@ -65,4 +70,150 @@ enum ResourceType {
   video
   link
   document
+}
+
+model LearningSubject {
+  id          String   @id @default(uuid())
+  user_id     String
+  name        String   // e.g., "Python", "Machine Learning"
+  description String?
+  current_level String? // "beginner", "intermediate", "advanced"
+  goals       String?  // JSON string of learning goals
+  estimated_hours Int?
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now()) @map("created_at")
+  updated_at  DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user     User              @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  modules  LearningModule[]
+  progress LearningProgress[]
+  weakPoints WeakPoint[]
+  mindmaps MindMap[]
+
+  @@map("learning_subjects")
+}
+
+model LearningModule {
+  id            String   @id @default(uuid())
+  subject_id    String
+  title         String
+  description   String?
+  content       String?  // Module content or instructions
+  order_index   Int      @default(0)
+  prerequisites String?  // JSON array of prerequisite module IDs
+  estimated_time Int?    // in minutes
+  difficulty    String?  // "easy", "medium", "hard"
+  is_optional   Boolean  @default(false)
+  created_at    DateTime @default(now()) @map("created_at")
+  updated_at    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  subject  LearningSubject  @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+  progress LearningProgress[]
+  assignments Assignment[]
+
+  @@map("learning_modules")
+}
+
+model LearningProgress {
+  id         String   @id @default(uuid())
+  user_id    String
+  subject_id String
+  module_id  String
+  status     String   @default("not_started") // "not_started", "in_progress", "completed"
+  score      Float?   // percentage score for assignments
+  time_spent Int      @default(0) // in minutes
+  started_at DateTime?
+  completed_at DateTime?
+  notes      String?  // user notes or reflections
+  created_at DateTime @default(now()) @map("created_at")
+  updated_at DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user    User            @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  subject LearningSubject @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+  module  LearningModule  @relation(fields: [module_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, module_id])
+  @@map("learning_progress")
+}
+
+model Assignment {
+  id          String   @id @default(uuid())
+  module_id   String
+  title       String
+  description String?
+  type        String   @default("exercise") // "quiz", "exercise", "project"
+  content     String?  // assignment content or questions
+  solution    String?  // correct solution or rubric
+  max_score   Float    @default(100)
+  time_limit  Int?     // in minutes
+  is_required Boolean  @default(true)
+  created_at  DateTime @default(now()) @map("created_at")
+  updated_at  DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  module      LearningModule @relation(fields: [module_id], references: [id], onDelete: Cascade)
+  submissions AssignmentSubmission[]
+
+  @@map("assignments")
+}
+
+model AssignmentSubmission {
+  id            String   @id @default(uuid())
+  assignment_id String
+  user_id       String
+  content       String   // user's submission
+  score         Float?   // AI-assigned score
+  feedback      String?  // AI-generated feedback
+  weak_points   String?  // JSON array of identified weak points
+  submitted_at  DateTime @default(now())
+  graded_at     DateTime?
+
+  // Relations
+  assignment Assignment @relation(fields: [assignment_id], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([assignment_id, user_id])
+  @@map("assignment_submissions")
+}
+
+model WeakPoint {
+  id          String   @id @default(uuid())
+  user_id     String
+  subject_id  String?
+  topic       String   // e.g., "error handling", "regex", "async programming"
+  description String?
+  frequency   Int      @default(1) // how many times identified
+  severity    String   @default("medium") // "low", "medium", "high"
+  suggestions String?  // JSON array of improvement suggestions
+  last_identified DateTime @default(now())
+  created_at  DateTime @default(now()) @map("created_at")
+  updated_at  DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user    User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  subject LearningSubject? @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, topic])
+  @@map("weak_points")
+}
+
+model MindMap {
+  id         String   @id @default(uuid())
+  user_id    String
+  subject_id String?
+  title      String
+  content    String   // JSON structure of the mindmap
+  type       String   @default("concept") // "concept", "progress", "weak_points"
+  generated_at DateTime @default(now())
+  created_at DateTime @default(now()) @map("created_at")
+  updated_at DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user    User             @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  subject LearningSubject? @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+
+  @@map("mindmaps")
 }

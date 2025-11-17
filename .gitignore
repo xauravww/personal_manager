@@ -9,3 +9,10 @@ backend/.env
 settings.json
 backend/error.log
 backend/combined.log
+backend/backend.log
+backend/*.log
+prisma/*.db
+prisma/*.db-*
+*.log
+.DS_Store
+Thumbs.db

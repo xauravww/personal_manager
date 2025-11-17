@@ -375,10 +375,12 @@ class ApiClient {
   async performDeepResearch(params: {
     query: string;
     maxThoughts?: number;
+    timezone?: string;
   }): Promise<EventSource> {
     const searchParams = new URLSearchParams();
     searchParams.set('query', params.query);
     if (params.maxThoughts) searchParams.set('maxThoughts', params.maxThoughts.toString());
+    if (params.timezone) searchParams.set('timezone', params.timezone);
     if (this.token) searchParams.set('token', this.token);
 
     const url = `${API_BASE_URL}/deep-research?${searchParams.toString()}`;

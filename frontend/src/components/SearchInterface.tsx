@@ -17,7 +17,13 @@ import {
   Loader2,
   Bot,
   User,
-  Plus
+  Plus,
+  Brain,
+  Lightbulb,
+  Target,
+  CheckCircle,
+  AlertCircle,
+  Clock
 } from 'lucide-react';
 import { apiClient, API_BASE_URL } from '../api/client';
 
@@ -51,6 +57,7 @@ interface ConversationMessage {
 }
 
 type FocusMode = 'general' | 'quick-search' | 'academic';
+type SearchMode = 'normal' | 'deep-research';
 
 const SearchInterface: React.FC = () => {
   const focusModes = [
@@ -76,6 +83,7 @@ const SearchInterface: React.FC = () => {
 
   const [focusMode, setFocusMode] = useState<FocusMode>('general');
   const [enabledModes, setEnabledModes] = useState<FocusMode[]>(['general', 'quick-search', 'academic']);
+  const [searchMode, setSearchMode] = useState<SearchMode>('normal');
   const [aiEnhancedSearch, setAiEnhancedSearch] = useState<boolean>(true);
   const [includeWebSearch, setIncludeWebSearch] = useState<boolean>(false);
   const [userTimezone, setUserTimezone] = useState<string>('UTC');
@@ -83,6 +91,15 @@ const SearchInterface: React.FC = () => {
   const [query, setQuery] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
+  const [deepResearchProgress, setDeepResearchProgress] = useState<{
+    current: number;
+    total: number;
+    currentStep: string;
+    status: 'idle' | 'searching' | 'thinking' | 'reading' | 'analyzing' | 'complete' | 'error';
+    currentThought?: any;
+    latestTotalThoughts?: number;
+  } | null>(null);
+  const [deepResearchEventSource, setDeepResearchEventSource] = useState<EventSource | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
 
@@ -109,6 +126,24 @@ const SearchInterface: React.FC = () => {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [conversation]);
+
+  // Cleanup EventSource on unmount or mode change
+  useEffect(() => {
+    return () => {
+      if (deepResearchEventSource) {
+        deepResearchEventSource.close();
+      }
+    };
+  }, [deepResearchEventSource]);
+
+  // Cleanup when search mode changes
+  useEffect(() => {
+    if (deepResearchEventSource && searchMode !== 'deep-research') {
+      deepResearchEventSource.close();
+      setDeepResearchEventSource(null);
+      setDeepResearchProgress(null);
+    }
+  }, [searchMode, deepResearchEventSource]);
 
   // Detect user's timezone on component mount
   useEffect(() => {
@@ -163,6 +198,208 @@ const SearchInterface: React.FC = () => {
     };
 
     setConversation(prev => [...prev, userMessage]);
+
+    // Handle Deep Research Mode
+    if (searchMode === 'deep-research') {
+      console.log('🧠 Starting deep research mode inline');
+      setDeepResearchProgress({ current: 0, total: 5, currentStep: 'Initializing research...' });
+
+      try {
+        const eventSource = await apiClient.performDeepResearch({
+          query: searchQuery,
+          maxThoughts: 10,
+          timezone: userTimezone
+        });
+
+        setDeepResearchEventSource(eventSource);
+
+        let aiContent = '';
+        let currentStep = '';
+        let thoughtProcess: any[] = [];
+        let sources: any[] = [];
+        let finalResult = '';
+        let latestTotalThoughts = 5;
+        let researchCompleted = false;
+        let errorShown = false;
+
+        eventSource.onmessage = (event) => {
+          try {
+            // Handle the [DONE] message
+            if (event.data === '[DONE]') {
+              console.log('Deep research stream completed');
+              eventSource.close();
+              setDeepResearchEventSource(null);
+              // Clear progress after a short delay to show completion
+              setTimeout(() => {
+                setDeepResearchProgress(null);
+              }, 2000);
+              return;
+            }
+
+            const data = JSON.parse(event.data);
+            console.log('Deep research event:', data.type, data);
+
+            if (data.type === 'start') {
+              setDeepResearchProgress({
+                current: 0,
+                total: 5,
+                currentStep: 'Initializing research...',
+                status: 'searching',
+                latestTotalThoughts: 5
+              });
+            } else if (data.type === 'thought') {
+              const thought = data.thought;
+
+              // Check if this is an intermediate status thought (decimal thought number)
+              const isIntermediate = thought.thoughtNumber % 1 !== 0;
+
+              if (isIntermediate) {
+                // Update status based on intermediate thought
+                let status: 'searching' | 'thinking' | 'reading' | 'analyzing' = 'thinking';
+                if (thought.action === 'search') {
+                  status = 'searching';
+                } else if (thought.action === 'read_url') {
+                  status = 'reading';
+                } else if (thought.action === 'analyze') {
+                  status = 'analyzing';
+                }
+
+                setDeepResearchProgress(prev => prev ? {
+                  ...prev,
+                  status,
+                  currentStep: getResearchStatusText(status),
+                  currentThought: thought
+                } : null);
+                // Don't add intermediate thoughts to the main thoughts list
+                return;
+              }
+
+              // Update latest total thoughts estimate
+              latestTotalThoughts = Math.max(latestTotalThoughts, thought.totalThoughts);
+
+              // Set new current thought
+              thoughtProcess.push(thought);
+
+              // Update status based on completed thought action
+              let status: 'searching' | 'thinking' | 'reading' | 'analyzing' = 'thinking';
+              if (thought.action === 'search') {
+                status = 'searching';
+              } else if (thought.action === 'read_url') {
+                status = 'reading';
+              } else if (thought.action === 'analyze') {
+                status = 'analyzing';
+              }
+
+              setDeepResearchProgress({
+                current: thought.thoughtNumber,
+                total: latestTotalThoughts,
+                currentStep: getResearchStatusText(status),
+                status,
+                currentThought: thought,
+                latestTotalThoughts
+              });
+            } else if (data.type === 'complete') {
+              console.log('Deep research completed successfully');
+              researchCompleted = true;
+              setDeepResearchProgress(prev => prev ? { ...prev, status: 'complete' } : null);
+              setIsLoading(false);
+              // Don't close the EventSource here, let it close naturally with [DONE]
+
+              // Format the final response
+              let content = data.result.finalAnswer;
+
+              if (thoughtProcess.length > 0) {
+                const thoughtProcessText = thoughtProcess
+                  .map((thought: any, index: number) =>
+                    `**Step ${index + 1}:** ${thought.thought}`
+                  )
+                  .join('\n\n');
+                content += `\n\n## Research Analysis\n\n${thoughtProcessText}\n\n---\n\n*Research completed with ${thoughtProcess.length} steps and ${data.result.confidence}% confidence.*`;
+              }
+
+              const aiMessage: ConversationMessage = {
+                id: (Date.now() + 2).toString(),
+                type: 'ai',
+                content: content,
+                timestamp: new Date(),
+                citations: data.result.sources?.map((source: any, index: number) => ({
+                  id: `source-${index + 1}`,
+                  title: source.title || source.url,
+                  url: source.url,
+                  snippet: source.snippet || source.content?.substring(0, 200) + '...' || ''
+                })) || []
+              };
+
+              setConversation(prev => [...prev, aiMessage]);
+            } else if (data.type === 'error') {
+              if (!researchCompleted && !errorShown) {
+                errorShown = true;
+                setError(data.message);
+                setDeepResearchProgress(prev => prev ? { ...prev, status: 'error' } : null);
+                setIsLoading(false);
+                eventSource.close();
+                setDeepResearchEventSource(null);
+
+                const errorMessage: ConversationMessage = {
+                  id: (Date.now() + 2).toString(),
+                  type: 'ai',
+                  content: `Sorry, I encountered an error during deep research: ${data.message}`,
+                  timestamp: new Date()
+                };
+                setConversation(prev => [...prev, errorMessage]);
+              }
+            }
+          } catch (parseError) {
+            console.error('Error parsing deep research event:', parseError);
+          }
+        };
+
+        eventSource.onopen = () => {
+          console.log('Deep research EventSource opened successfully');
+        };
+
+        eventSource.onerror = (error) => {
+          console.error('Deep research EventSource error:', error, 'Research completed:', researchCompleted, 'Error shown:', errorShown);
+
+          // Delay error handling to allow complete event to process first
+          setTimeout(() => {
+            if (!researchCompleted && !errorShown) {
+              errorShown = true;
+              console.log('Showing error message for deep research');
+              const errorMessage: ConversationMessage = {
+                id: (Date.now() + 2).toString(),
+                type: 'ai',
+                content: 'Sorry, I encountered a connection error during deep research. Please try again.',
+                timestamp: new Date()
+              };
+              setConversation(prev => [...prev, errorMessage]);
+              setDeepResearchProgress(null);
+              setIsLoading(false);
+            }
+            eventSource.close();
+            setDeepResearchEventSource(null);
+          }, 1000); // Wait 1 second for complete event
+        };
+
+
+
+      } catch (error) {
+        console.error('❌ Deep research error:', error);
+        const aiMessage: ConversationMessage = {
+          id: (Date.now() + 2).toString(),
+          type: 'ai',
+          content: 'Sorry, I encountered an error starting deep research. Please try again.',
+          timestamp: new Date()
+        };
+        setConversation(prev => [...prev, aiMessage]);
+      } finally {
+        setIsLoading(false);
+        setDeepResearchProgress(null);
+        setQuery('');
+      }
+
+      return;
+    }
 
     try {
 
@@ -366,6 +603,60 @@ const SearchInterface: React.FC = () => {
     }
   };
 
+  const getResearchStatusIcon = (status: string) => {
+    switch (status) {
+      case 'searching':
+        return <Search className="w-5 h-5 text-blue-500 animate-pulse" strokeWidth={1.5} />;
+      case 'thinking':
+        return <Brain className="w-5 h-5 text-purple-500 animate-pulse" strokeWidth={1.5} />;
+      case 'reading':
+        return <BookOpen className="w-5 h-5 text-green-500 animate-pulse" strokeWidth={1.5} />;
+      case 'analyzing':
+        return <Target className="w-5 h-5 text-orange-500 animate-pulse" strokeWidth={1.5} />;
+      case 'complete':
+        return <CheckCircle className="w-5 h-5 text-green-600" strokeWidth={1.5} />;
+      case 'error':
+        return <AlertCircle className="w-5 h-5 text-red-500" strokeWidth={1.5} />;
+      default:
+        return <Clock className="w-5 h-5 text-gray-400" strokeWidth={1.5} />;
+    }
+  };
+
+  const getResearchStatusText = (status: string) => {
+    switch (status) {
+      case 'searching':
+        return 'Searching the web...';
+      case 'thinking':
+        return 'Analyzing and planning...';
+      case 'reading':
+        return 'Reading content...';
+      case 'analyzing':
+        return 'Synthesizing information...';
+      case 'complete':
+        return 'Research complete!';
+      case 'error':
+        return 'Research failed';
+      default:
+        return 'Initializing research...';
+    }
+  };
+
+  const getThoughtIcon = (thought: any) => {
+    if (thought.isRevision) {
+      return <AlertCircle className="w-4 h-4 text-yellow-500" strokeWidth={1.5} />;
+    }
+    if (thought.action === 'search') {
+      return <Search className="w-4 h-4 text-blue-500" strokeWidth={1.5} />;
+    }
+    if (thought.action === 'read_url') {
+      return <BookOpen className="w-4 h-4 text-green-500" strokeWidth={1.5} />;
+    }
+    if (thought.action === 'analyze') {
+      return <Target className="w-4 h-4 text-orange-500" strokeWidth={1.5} />;
+    }
+    return <Lightbulb className="w-4 h-4 text-purple-500" strokeWidth={1.5} />;
+  };
+
   const renderCitations = (citations: Citation[]) => (
     <div className="mt-4 border-t border-gray-200 pt-4">
       <h4 className="text-sm font-medium text-gray-700 mb-2">Sources</h4>
@@ -455,11 +746,13 @@ const SearchInterface: React.FC = () => {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && !isLoading && handleSearch(query)}
-                 placeholder={
-                   aiEnhancedSearch
-                     ? "Ask me anything about your resources, paste a URL to read its content, or search the web..."
-                     : "Ask me anything about your resources..."
-                 }
+                  placeholder={
+                    searchMode === 'deep-research'
+                      ? "Enter a research topic for comprehensive AI-powered analysis..."
+                      : aiEnhancedSearch
+                      ? "Ask me anything about your resources, paste a URL to read its content, or search the web..."
+                      : "Ask me anything about your resources..."
+                  }
                  disabled={isLoading}
                   className="w-full px-6 py-4 rounded-full focus:outline-none focus:ring-2 text-lg shadow-sm disabled:opacity-50 disabled:cursor-not-allowed bg-gray-50 border border-gray-300 focus:ring-blue-500 focus:border-transparent"
               />
@@ -491,41 +784,60 @@ const SearchInterface: React.FC = () => {
                   </span>
                 </div>
 
-                 {/* Search Toggles */}
-                 <div className="flex items-center gap-4">
-                   <div className="flex items-center gap-2">
-                     <span className="text-sm text-gray-500">AI Enhanced</span>
-                     <button
-                       onClick={() => setAiEnhancedSearch(!aiEnhancedSearch)}
-                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                         aiEnhancedSearch ? 'bg-purple-500' : 'bg-gray-300'
-                       }`}
-                     >
-                       <span
-                         className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                           aiEnhancedSearch ? 'translate-x-6' : 'translate-x-1'
-                         }`}
-                       />
-                     </button>
-                   </div>
+                  {/* Search Toggles */}
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-500 flex items-center gap-1">
+                        <Brain className="w-4 h-4" strokeWidth={1.5} />
+                        Deep Research
+                      </span>
+                      <button
+                        onClick={() => setSearchMode(searchMode === 'normal' ? 'deep-research' : 'normal')}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                          searchMode === 'deep-research' ? 'bg-indigo-500' : 'bg-gray-300'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            searchMode === 'deep-research' ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
 
-                   <div className="flex items-center gap-2">
-                     <span className="text-sm text-gray-500">Web Search</span>
-                     <button
-                       onClick={() => setIncludeWebSearch(!includeWebSearch)}
-                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                         includeWebSearch ? 'bg-orange-500' : 'bg-gray-300'
-                       }`}
-                     >
-                       <span
-                         className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                           includeWebSearch ? 'translate-x-6' : 'translate-x-1'
-                         }`}
-                       />
-                     </button>
-                   </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-500">AI Enhanced</span>
+                      <button
+                        onClick={() => setAiEnhancedSearch(!aiEnhancedSearch)}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                          aiEnhancedSearch ? 'bg-purple-500' : 'bg-gray-300'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            aiEnhancedSearch ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
 
-                 </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-500">Web Search</span>
+                      <button
+                        onClick={() => setIncludeWebSearch(!includeWebSearch)}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                          includeWebSearch ? 'bg-orange-500' : 'bg-gray-300'
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            includeWebSearch ? 'translate-x-6' : 'translate-x-1'
+                          }`}
+                        />
+                      </button>
+                    </div>
+
+                  </div>
             </div>
           </div>
         </div>
@@ -663,18 +975,127 @@ const SearchInterface: React.FC = () => {
               <div ref={chatEndRef} />
 
                 {/* Loading State */}
-                {isLoading && (
-                 <div className="flex gap-4">
-                   <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-white">
-                     <Bot className="w-4 h-4" strokeWidth={1.5} />
-                   </div>
-                   <div className="flex-1 space-y-2">
-                     <div className="animate-pulse bg-gray-200 h-4 rounded w-3/4"></div>
-                     <div className="animate-pulse bg-gray-200 h-4 rounded w-1/2"></div>
-                     <div className="animate-pulse bg-gray-200 h-4 rounded w-2/3"></div>
-                   </div>
-                 </div>
-               )}
+                {isLoading && !deepResearchProgress && (
+                  <div className="flex gap-4">
+                    <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-white">
+                      <Bot className="w-4 h-4" strokeWidth={1.5} />
+                    </div>
+                    <div className="flex-1 space-y-2">
+                      <div className="animate-pulse bg-gray-200 h-4 rounded w-3/4"></div>
+                      <div className="animate-pulse bg-gray-200 h-4 rounded w-1/2"></div>
+                      <div className="animate-pulse bg-gray-200 h-4 rounded w-2/3"></div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Deep Research Progress */}
+                {deepResearchProgress && (
+                  <div className="flex gap-4">
+                    <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center text-white">
+                      {getResearchStatusIcon(deepResearchProgress.status)}
+                    </div>
+                    <div className="flex-1">
+                      <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+                        {/* Header with status */}
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-blue-500 rounded-lg flex items-center justify-center">
+                              <Brain className="w-5 h-5 text-white" strokeWidth={1.5} />
+                            </div>
+                            <div>
+                              <h3 className="text-lg font-semibold text-gray-900">Deep Research</h3>
+                              <p className="text-sm text-gray-600">{getResearchStatusText(deepResearchProgress.status)}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                if (deepResearchEventSource) {
+                                  deepResearchEventSource.close();
+                                  setDeepResearchEventSource(null);
+                                }
+                                setDeepResearchProgress(null);
+                                setIsLoading(false);
+                              }}
+                              className="text-gray-400 hover:text-red-500 transition-colors"
+                              title="Cancel research"
+                            >
+                              <X className="w-5 h-5" strokeWidth={1.5} />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Progress Bar */}
+                        <div className="mb-6">
+                          <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
+                            <span>Step {deepResearchProgress.current} of {deepResearchProgress.latestTotalThoughts || deepResearchProgress.total}</span>
+                            <span>{Math.round((deepResearchProgress.current / (deepResearchProgress.latestTotalThoughts || deepResearchProgress.total)) * 100)}% complete</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-3">
+                            <div
+                              className="bg-gradient-to-r from-blue-500 to-purple-600 h-3 rounded-full transition-all duration-700 ease-out"
+                              style={{ width: `${Math.min((deepResearchProgress.current / (deepResearchProgress.latestTotalThoughts || deepResearchProgress.total)) * 100, 100)}%` }}
+                            ></div>
+                          </div>
+                        </div>
+
+                        {/* Current Thought Content */}
+                        {deepResearchProgress.currentThought && (
+                          <div className="animate-fade-in">
+                            <div className="flex items-start gap-4">
+                              <div className="flex-shrink-0 mt-1">
+                                {getThoughtIcon(deepResearchProgress.currentThought)}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <h4 className="text-xl font-semibold text-gray-900">
+                                    {deepResearchProgress.currentThought.isRevision ? 'Revision' : deepResearchProgress.currentThought.action ? `${deepResearchProgress.currentThought.action.replace('_', ' ').toUpperCase()}` : 'Analysis'}
+                                  </h4>
+                                  {deepResearchProgress.currentThought.isRevision && (
+                                    <span className="px-3 py-1 bg-yellow-100 text-yellow-800 text-sm rounded-full">
+                                      Revising step {deepResearchProgress.currentThought.revisesThought}
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="prose prose-lg max-w-none text-gray-700 mb-4">
+                                  <ReactMarkdown>{deepResearchProgress.currentThought.thought}</ReactMarkdown>
+                                </div>
+
+                                {deepResearchProgress.currentThought.actionDetails && (
+                                  <div className="mb-4 p-4 bg-gray-50 rounded-lg border-l-4 border-blue-400">
+                                    <div className="text-sm text-gray-600 mb-2">Action Details:</div>
+                                    <div className="text-sm font-mono text-gray-800 break-all">
+                                      {deepResearchProgress.currentThought.actionDetails}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {deepResearchProgress.currentThought.result && (
+                                  <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                                    <div className="text-sm text-green-700 mb-2 font-medium">Result:</div>
+                                    <div className="text-sm text-green-800 whitespace-pre-wrap break-words">
+                                      {deepResearchProgress.currentThought.result.length > 500 ? `${deepResearchProgress.currentThought.result.substring(0, 500)}...` : deepResearchProgress.currentThought.result}
+                                    </div>
+                                  </div>
+                                )}
+
+                                <div className="mt-4 text-xs text-gray-500 flex items-center gap-4">
+                                  <span>{new Date(deepResearchProgress.currentThought.timestamp).toLocaleTimeString()}</span>
+                                  {!deepResearchProgress.currentThought.nextThoughtNeeded && (
+                                    <span className="text-green-600 font-medium">Final step</span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+
 
 
             </div>

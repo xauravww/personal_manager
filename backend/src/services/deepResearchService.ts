@@ -38,6 +38,7 @@ export class DeepResearchService {
     content: string;
     relevance: number;
   }> = [];
+  private finalConfidence: number = 0;
 
   constructor() {
     this.reset();
@@ -46,6 +47,7 @@ export class DeepResearchService {
   private reset(): void {
     this.thoughtHistory = [];
     this.sources = [];
+    this.finalConfidence = 0;
   }
 
   private formatThought(thoughtData: DeepResearchThought): string {
@@ -180,7 +182,7 @@ export class DeepResearchService {
     }
   }
 
-  async *performDeepResearch(query: string, maxThoughts: number = 10): AsyncIterable<DeepResearchThought> {
+  async *performDeepResearch(query: string, maxThoughts: number = 10, userTimezone?: string): AsyncIterable<DeepResearchThought> {
     this.reset();
 
     let currentThought = 1;
@@ -189,9 +191,51 @@ export class DeepResearchService {
     let finalAnswer = '';
     let confidence = 0;
 
-    console.log(`🚀 Starting deep research for: "${query}"`);
+    console.log(`🚀 Starting deep research for: "${query}" (timezone: ${userTimezone})`);
 
-    // Yield initial status
+    // Check if this is a time-related query that we can handle directly
+    const timeKeywords = ['current time', 'what time', 'time now', 'what\'s the time', 'tell me the time', 'what time is it'];
+    const isTimeQuery = timeKeywords.some(keyword =>
+      query.toLowerCase().includes(keyword.toLowerCase())
+    );
+
+    if (isTimeQuery && userTimezone) {
+      console.log('🕐 Detected time query, providing direct answer');
+
+      const now = new Date();
+      const timeString = now.toLocaleString('en-US', {
+        timeZone: userTimezone,
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true
+      });
+
+      finalAnswer = `The current time is ${timeString} (${userTimezone}).`;
+      confidence = 100;
+      this.finalConfidence = confidence;
+
+      // Yield direct answer thought
+      const directAnswerThought: DeepResearchThought = {
+        thoughtNumber: 1,
+        totalThoughts: 1,
+        thought: `Direct time lookup: ${finalAnswer}`,
+        nextThoughtNeeded: false,
+        timestamp: new Date()
+      };
+
+      this.thoughtHistory.push(directAnswerThought);
+      yield directAnswerThought;
+
+      console.log(`\n✅ Time query answered directly with ${confidence}% confidence`);
+      return;
+    }
+
+    // Yield initial status for non-time queries
     const initThought: DeepResearchThought = {
       thoughtNumber: 0,
       totalThoughts: totalThoughts,
@@ -310,6 +354,7 @@ Return JSON:
           if (thoughtResult.finalAnswer && thoughtResult.confidence > 70) {
             finalAnswer = thoughtResult.finalAnswer;
             confidence = thoughtResult.confidence;
+            this.finalConfidence = confidence;
             nextThoughtNeeded = false;
           }
 
@@ -337,6 +382,7 @@ Return JSON:
         if (synthesis.confidence > confidence) {
           finalAnswer = synthesis.answer;
           confidence = synthesis.confidence;
+          this.finalConfidence = confidence;
         }
       }
 
@@ -430,14 +476,31 @@ Return JSON:
 
   getResearchResult(): DeepResearchResult {
     const finalThought = this.thoughtHistory[this.thoughtHistory.length - 1];
-    const finalAnswer = finalThought?.thought.includes('Final answer:')
-      ? finalThought.thought.split('Final answer:')[1].trim()
-      : 'Research completed without definitive answer';
+
+    let finalAnswer = 'Research completed without definitive answer';
+
+    if (finalThought) {
+      // Check for direct time lookup
+      if (finalThought.thought.includes('Direct time lookup:')) {
+        finalAnswer = finalThought.thought.split('Direct time lookup:')[1].trim();
+      }
+      // Check for final answer
+      else if (finalThought.thought.includes('Final answer:')) {
+        finalAnswer = finalThought.thought.split('Final answer:')[1].trim();
+      }
+      // Check for research completed message
+      else if (finalThought.thought.includes('Research completed.')) {
+        const match = finalThought.thought.match(/Final answer:\s*(.+)/);
+        if (match) {
+          finalAnswer = match[1].trim();
+        }
+      }
+    }
 
     return {
       finalAnswer,
       thoughtProcess: this.thoughtHistory,
-      confidence: 80, // Default confidence
+      confidence: this.finalConfidence || 80, // Use calculated confidence or default
       sources: this.sources
     };
   }

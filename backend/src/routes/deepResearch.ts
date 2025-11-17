@@ -59,7 +59,7 @@ const authenticateFromQuery = (req: express.Request, res: express.Response, next
  */
 router.get('/', authenticateFromQuery, async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
-    const { query, maxThoughts = '10' } = req.query;
+    const { query, maxThoughts = '10', timezone } = req.query;
 
     // Manual validation since we're using query params
     if (!query || typeof query !== 'string' || query.trim().length === 0 || query.length > 500) {
@@ -93,7 +93,7 @@ router.get('/', authenticateFromQuery, async (req: express.Request, res: express
 
     try {
       // Perform deep research and stream thoughts
-      for await (const thought of deepResearchService.performDeepResearch(queryStr, maxThoughtsNum)) {
+      for await (const thought of deepResearchService.performDeepResearch(queryStr, maxThoughtsNum, timezone as string)) {
         const eventData = {
           type: 'thought',
           thought: {

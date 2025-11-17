@@ -3,6 +3,15 @@ import { User, Resource, Tag, ResourceType } from '@prisma/client';
 export { User, Resource, Tag };
 export type { ResourceType };
 
+export interface WebSearchResult {
+  title: string;
+  url: string;
+  content: string;
+  engine: string;
+  category?: string;
+  publishedDate?: string;
+}
+
 export interface AuthResponse {
   user: Omit<User, 'password_hash'>;
   token: string;
@@ -46,6 +55,7 @@ export interface SearchResponse {
   resources: (Resource & { tags: Pick<Tag, 'id' | 'name'>[] })[];
   total: number;
   has_more: boolean;
+  webResults?: WebSearchResult[];
   ai?: {
     enhancedQuery: string;
     searchTerms: string[];

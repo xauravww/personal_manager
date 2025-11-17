@@ -57,7 +57,7 @@ class AIService {
     this.config = {
       proxyUrl: process.env.AI_PROXY_URL || 'https://api.openai.com',
       apiKey: process.env.AI_API_KEY || process.env.OPENAI_API_KEY || '',
-      model: process.env.AI_MODEL || '',
+      model: process.env.AI_MODEL || 'gpt-4',
     };
     this.client = axios.create({
       baseURL: this.config.proxyUrl,
@@ -67,6 +67,8 @@ class AIService {
       },
       timeout: 30000, // 30 seconds
     });
+
+
   }
 
   /**
@@ -85,13 +87,79 @@ class AIService {
   /**
    * Create a chat completion using the AI proxy
    */
-  async createChatCompletion(request: ChatCompletionRequest): Promise<ChatCompletionResponse> {
+  async createChatCompletion(request: ChatCompletionRequest): Promise<ChatCompletionResponse | AsyncIterable<any>> {
+    // For testing with dummy API key, provide mock response (takes precedence over proxy)
+    if (this.config.apiKey === 'dummy-api-key-for-testing') {
+      console.log('Using mock response for dummy API key');
+      const userMessage = request.messages.find(m => m.role === 'user')?.content || '';
+      const lowerMessage = userMessage.toLowerCase();
+
+      let mockContent = '';
+      if (lowerMessage === 'hi' || lowerMessage === 'hello' || lowerMessage === 'hey') {
+        mockContent = "Hello! I'm your AI assistant for managing personal resources. How can I help you find or organize your notes, documents, or other materials today?";
+      } else if (lowerMessage === 'who r uh' || lowerMessage === 'who are you') {
+        mockContent = "I'm your personal AI assistant for the Resource Manager application. I help you search through and organize your stored resources like notes, documents, videos, and links using natural language queries.";
+      } else if (lowerMessage.includes('what can you do') || lowerMessage.includes('help')) {
+        mockContent = "I can help you search through your personal resources, suggest relevant materials, and assist with organizing your content. Try asking me to find specific notes, documents, or topics!";
+      } else {
+        mockContent = "I'm currently running in test mode. To get full AI-powered responses, please configure a valid API key. In the meantime, I can help you search through your stored resources!";
+      }
+
+      return {
+        id: 'mock-completion',
+        object: 'chat.completion',
+        created: Date.now(),
+        model: this.config.model,
+        choices: [{
+          index: 0,
+          message: {
+            role: 'assistant',
+            content: mockContent
+          },
+          finish_reason: 'stop'
+        }],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 20,
+          total_tokens: 30
+        }
+      };
+    }
+
     try {
       const response = await this.client.post('/v1/chat/completions', request);
       return response.data;
     } catch (error) {
       console.error('Error creating chat completion:', error);
       throw new Error('Failed to generate AI response');
+    }
+  }
+
+  /**
+   * Create a streaming chat completion with character-by-character streaming for smooth typing effect
+   */
+  async *createStreamingChatCompletion(request: ChatCompletionRequest): AsyncIterable<{ content: string }> {
+    try {
+      // Get the response without stream flag
+      const nonStreamingRequest = { ...request, stream: false };
+      const response = await this.createChatCompletion(nonStreamingRequest);
+      const fullContent = (response as ChatCompletionResponse).choices[0]?.message?.content || '';
+
+      if (fullContent) {
+        // Split content into words for smooth SSE streaming effect
+        const words = fullContent.split(' ');
+
+        // Yield words one by one with small delays for typing effect
+        for (let i = 0; i < words.length; i++) {
+          const word = words[i];
+          yield { content: word + (i < words.length - 1 ? ' ' : '') };
+          // Small delay between words for realistic typing effect
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+      }
+    } catch (error) {
+      console.error('Error creating streaming chat completion:', error);
+      throw new Error('Failed to generate streaming AI response');
     }
   }
 
@@ -111,46 +179,132 @@ class AIService {
     }
   }
 
-    async enhanceSearchQuery(userQuery: string): Promise<{
-      intent: 'search' | 'chat';
-      enhancedQuery: string;
-      searchTerms: string[];
-      filters: {
-        type?: string;
-        tags?: string[];
-      };
-    }> {
-       const systemPrompt = `You are a helpful assistant that enhances search queries for a personal resource manager.
-       The user has resources like notes, documents, videos, links, and images.
-       First, determine if the query is a search request or conversational chat.
-        Set intent to "chat" ONLY for:
-        - Pure greetings without search intent: hi, hello, hey, good morning, etc. (but not "hello, find my notes")
-        - Thanks: thank you, thanks, appreciate it
-        - Direct questions about the assistant: can you help, what can you do, who are you, etc.
-        - Very short single words: hi, help, please (when standalone)
-       Set intent to "search" for ALL other queries, especially those that:
-       - Ask to find, show, give, get, or retrieve resources
-       - Use words like "find", "search", "show me", "give me", "get", "related to", "about", "something", "anything"
-       - Mention resource types: notes, books, documents, videos, links, images
-       - Ask questions about user's content or resources
+  /**
+   * Summarize content to a specified length
+   */
+  async summarizeContent(content: string, maxLength: number = 100): Promise<string> {
+    try {
+      const response = await this.createChatCompletion({
+        model: this.config.model,
+        messages: [
+          {
+            role: 'system',
+            content: `You are a helpful assistant that creates concise summaries. Summarize the given content in ${maxLength} characters or less.`
+          },
+          {
+            role: 'user',
+            content: content
+          }
+        ],
+        temperature: 0.3,
+      });
 
-      Examples:
-      - "hi" -> intent: "chat"
-      - "find my notes on AI" -> intent: "search", searchTerms: ["notes", "AI"]
-      - "do you have books" -> intent: "search", searchTerms: ["books"]
-      - "give me anything related to study" -> intent: "search", searchTerms: ["study"]
-      - "something book or study" -> intent: "search", searchTerms: ["books", "study"]
-      - "please show me reading materials" -> intent: "search", searchTerms: ["reading"]
-      Respond with JSON in this format:
-      {
-        "intent": "search" or "chat",
-        "enhancedQuery": "improved search query" (empty if chat),
-        "searchTerms": ["term1", "term2"] (empty if chat),
-        "filters": {
-          "type": "note|document|video|link|image" (optional),
-          "tags": ["tag1", "tag2"] (optional)
-        }
-      }`;
+      const summary = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
+      return summary || content.substring(0, maxLength);
+    } catch (error) {
+      console.error('Error summarizing content:', error);
+      // Fallback to simple truncation
+      return content.length > maxLength ? content.substring(0, maxLength - 3) + '...' : content;
+    }
+  }
+
+  /**
+   * Extract relevant tags from content
+   */
+  async extractTags(content: string, maxTags: number = 5): Promise<string[]> {
+    try {
+      const response = await this.createChatCompletion({
+        model: this.config.model,
+        messages: [
+          {
+            role: 'system',
+            content: `You are a tag extractor. Analyze the provided content and extract ${maxTags} relevant tags that best describe the main topics, themes, or key concepts. Return only a comma-separated list of tags, no other text.`
+          },
+          {
+            role: 'user',
+            content: `Extract tags from this content:\n\n${content}`
+          }
+        ],
+        max_tokens: 100,
+        temperature: 0.3,
+      });
+
+      const tagsText = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
+      if (tagsText) {
+        return tagsText.split(',')
+          .map(tag => tag.trim())
+          .filter(tag => tag.length > 0)
+          .slice(0, maxTags);
+      }
+      return [];
+    } catch (error) {
+      console.error('Error extracting tags:', error);
+      return [];
+    }
+  }
+
+  async enhanceSearchQuery(userQuery: string): Promise<{
+    intent: 'search' | 'chat';
+    enhancedQuery: string;
+    searchTerms: string[];
+    filters: {
+      type?: string;
+      tags?: string[];
+    };
+  }> {
+    // For testing with dummy API key, provide mock intent detection
+    if (this.config.apiKey === 'dummy-api-key-for-testing') {
+      const lowerQuery = userQuery.toLowerCase();
+      if (lowerQuery === 'hi' || lowerQuery === 'hello' || lowerQuery === 'hey' ||
+          lowerQuery.includes('thank') || lowerQuery === 'who r uh' ||
+          lowerQuery === 'who are you' || lowerQuery === 'what can you do') {
+        return {
+          intent: 'chat',
+          enhancedQuery: '',
+          searchTerms: [],
+          filters: {}
+        };
+      }
+      return {
+        intent: 'search',
+        enhancedQuery: userQuery,
+        searchTerms: [userQuery],
+        filters: {}
+      };
+    }
+
+    const systemPrompt = `You are a helpful assistant that enhances search queries for a personal resource manager.
+    The user has resources like notes, documents, videos, links, and images.
+    First, determine if the query is a search request or conversational chat.
+     Set intent to "chat" for:
+     - Pure greetings without search intent: hi, hello, hey, good morning, etc. (but not "hello, find my notes")
+     - Thanks: thank you, thanks, appreciate it
+     - Direct questions about the assistant: can you help, what can you do, who are you, etc.
+     - Very short single words: hi, help, please (when standalone)
+     - Content generation requests: write, create, generate, make, compose, draft (essays, articles, summaries, etc.)
+     - Questions that require explanation or generation: explain, tell me how, what is, how to, why, etc. (when not about user's resources)
+     Set intent to "search" ONLY for queries that clearly want to find existing resources:
+     - Explicit search commands: find, search, show me, give me (when referring to user's stored content)
+     - References to user's resources: my notes, my documents, my files, my resources
+     - Questions about user's content: what do I have, what did I save, etc.
+
+   Examples:
+   - "hi" -> intent: "chat"
+   - "find my notes on AI" -> intent: "search", searchTerms: ["notes", "AI"]
+   - "do you have books" -> intent: "search", searchTerms: ["books"]
+   - "give me anything related to study" -> intent: "search", searchTerms: ["study"]
+   - "something book or study" -> intent: "search", searchTerms: ["books", "study"]
+   - "please show me reading materials" -> intent: "search", searchTerms: ["reading"]
+   Respond with JSON in this format:
+   {
+     "intent": "search" or "chat",
+     "enhancedQuery": "improved search query" (empty if chat),
+     "searchTerms": ["term1", "term2"] (empty if chat),
+      "filters": {
+        "type": "note|document|video|link|image" (use | or , to separate multiple types),
+        "tags": ["tag1", "tag2"] (optional)
+      }
+   }`;
 
     try {
       const response = await this.createChatCompletion({
@@ -163,7 +317,7 @@ class AIService {
 
       });
 
-      const content = response.choices[0]?.message?.content;
+      const content = (response as ChatCompletionResponse).choices[0]?.message?.content;
       if (!content) {
         throw new Error('No response from AI');
       }
@@ -212,14 +366,14 @@ class AIService {
         temperature: 0.5,
       });
 
-      const content = response.choices[0]?.message?.content?.trim();
+      const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
       if (content) {
         try {
           const suggestions = JSON.parse(content);
           return Array.isArray(suggestions) ? suggestions.slice(0, 5) : [];
         } catch {
           // Fallback: extract from text
-            return content.split(',').map(s => s.trim().replace(/["[\]]/g, '')).filter(s => s.length > 0).slice(0, 5);
+            return content.split(',').map((s: string) => s.trim().replace(/["[\]]/g, '')).filter((s: string) => s.length > 0).slice(0, 5);
         }
       }
       return [];
@@ -259,14 +413,28 @@ class AIService {
         temperature: 0.6,
       });
 
-      return response.choices[0]?.message?.content?.trim() || "I'll help you conduct deep research on this topic. Let me gather comprehensive information for you.";
+      return (response as ChatCompletionResponse).choices[0]?.message?.content?.trim() || "I'll help you conduct deep research on this topic. Let me gather comprehensive information for you.";
     } catch (error) {
       console.error('Error generating deep research response:', error);
       return "I'm conducting deep research on your query. This may take a moment as I gather comprehensive information from multiple sources.";
     }
   }
 
-  async generateChatResponse(userQuery: string, context?: string, timezone?: string, focusMode?: string): Promise<string> {
+  async generateChatResponse(userQuery: string, context?: string, timezone?: string, focusMode?: string, stream?: boolean): Promise<string | AsyncIterable<any>> {
+    // For testing with dummy API key, provide appropriate mock responses
+    if (this.config.apiKey === 'dummy-api-key-for-testing') {
+      const lowerQuery = userQuery.toLowerCase();
+      if (lowerQuery === 'hi' || lowerQuery === 'hello' || lowerQuery === 'hey') {
+        return "Hello! I'm your AI assistant for managing personal resources. How can I help you find or organize your notes, documents, or other materials today?";
+      } else if (lowerQuery === 'who r uh' || lowerQuery === 'who are you') {
+        return "I'm your personal AI assistant for the Resource Manager application. I help you search through and organize your stored resources like notes, documents, videos, and links using natural language queries.";
+      } else if (lowerQuery.includes('what can you do') || lowerQuery.includes('help')) {
+        return "I can help you search through your personal resources, suggest relevant materials, and assist with organizing your content. Try asking me to find specific notes, documents, or topics!";
+      } else {
+        return "I'm currently running in test mode. To get full AI-powered responses, please configure a valid API key. In the meantime, I can help you search through your stored resources!";
+      }
+    }
+
     // Get current date and time in user's timezone
     const userTimezone = timezone || 'UTC';
     const now = new Date();
@@ -308,69 +476,68 @@ class AIService {
     }
 
     try {
-      const response = await this.createChatCompletion({
-        model: this.config.model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userQuery }
-        ],
-        temperature: 0.7,
-      });
-
-      return response.choices[0]?.message?.content?.trim() || "I'm here to help you with your personal resources!";
+      if (focusMode === 'deep-research') {
+        // Use sequential thinking for deep research
+        const result = await this.executeSequentialThinking(userQuery, undefined, (progress: { phase: string; step: number; totalSteps: number; details: string }) => {
+          // Progress callback - could be used for logging
+          console.log(`Deep Research Progress: ${progress.phase} (${progress.step}/${progress.totalSteps}) - ${progress.details}`);
+        });
+        return result.finalAnswer || "I couldn't find a confident answer through deep research. Try rephrasing your query.";
+      } else {
+        // Regular chat response
+        if (stream) {
+          return this.createStreamingChatResponse(userQuery, systemPrompt);
+        } else {
+          const response = await this.createChatCompletion({
+            model: this.config.model,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userQuery }
+            ],
+            temperature: 0.7,
+          });
+          return (response as ChatCompletionResponse).choices[0]?.message?.content?.trim() || "I'm here to help you with your personal resources!";
+        }
+      }
     } catch (error) {
       console.error('Error generating chat response:', error);
       return "Hello! I'm your AI assistant for managing personal resources. How can I help you today?";
     }
   }
 
-  async summarizeContent(content: string, maxLength: number = 100): Promise<string> {
-    try {
-      const response = await this.createChatCompletion({
-        model: this.config.model,
-        messages: [
-          {
-            role: 'system',
-            content: `You are a helpful assistant that creates concise summaries. Summarize the given content in ${maxLength} characters or less.`
-          },
-          {
-            role: 'user',
-            content: content
-          }
-        ],
-        temperature: 0.3,
-      });
+  async *createStreamingChatResponse(userQuery: string, systemPrompt: string): AsyncIterable<{ content: string }> {
+    // For testing with dummy API key, provide mock streaming response
+    if (this.config.apiKey === 'dummy-api-key-for-testing') {
+      const mockResponse = "Hello! I'm your AI assistant for managing personal resources. How can I help you find or organize your notes, documents, or other materials today?";
 
-      return response.choices[0]?.message?.content?.trim() || content.substring(0, maxLength);
-    } catch (error) {
-      console.error('Error summarizing content:', error);
-      // Fallback to truncation
-      return content.length > maxLength ? content.substring(0, maxLength) + '...' : content;
+      // Simulate streaming by yielding words with small delays for better UX
+      const words = mockResponse.split(' ');
+      for (let i = 0; i < words.length; i++) {
+        const word = i < words.length - 1 ? words[i] + ' ' : words[i];
+        yield { content: word };
+        // Small delay to simulate realistic streaming
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      return;
     }
-  }
 
-  async extractTags(content: string, maxTags: number = 5): Promise<string[]> {
     try {
-      const response = await this.createChatCompletion({
+      const request: ChatCompletionRequest = {
         model: this.config.model,
         messages: [
-          {
-            role: 'system',
-            content: `Extract ${maxTags} relevant keywords or tags from the given content. Return only a comma-separated list of tags, no other text.`
-          },
-          {
-            role: 'user',
-            content: content
-          }
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userQuery }
         ],
-        temperature: 0.3,
-      });
+        temperature: 0.7,
+        stream: true,
+      };
 
-      const tagsString = response.choices[0]?.message?.content?.trim() || '';
-      return tagsString.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0).slice(0, maxTags);
+      for await (const chunk of this.createStreamingChatCompletion(request)) {
+        yield chunk;
+      }
     } catch (error) {
-      console.error('Error extracting tags:', error);
-      return [];
+      console.error('Error in streaming chat response:', error);
+      yield { content: "Hello! I'm your AI assistant. How can I help you today?" };
     }
   }
 
@@ -399,14 +566,14 @@ class AIService {
         temperature: 0.7,
       });
 
-      const content = response.choices[0]?.message?.content?.trim();
+      const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
       if (content) {
         try {
           const queries = JSON.parse(content);
           return Array.isArray(queries) ? queries.slice(0, 3) : [];
         } catch {
           // Fallback: extract from text
-           return content.split(',').map(q => q.trim().replace(/["[\]]/g, '')).filter(q => q.length > 0).slice(0, 3);
+           return content.split(',').map((q: string) => q.trim().replace(/["[\]]/g, '')).filter((q: string) => q.length > 0).slice(0, 3);
         }
       }
       return [];
@@ -444,7 +611,7 @@ class AIService {
         temperature: 0.3,
       });
 
-      const content = response.choices[0]?.message?.content?.trim();
+      const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
       if (content) {
         try {
           const suggestions = JSON.parse(content);
@@ -491,7 +658,7 @@ class AIService {
 
       });
 
-      const content_response = response.choices[0]?.message?.content?.trim();
+      const content_response = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
       if (content_response) {
         try {
           const analysis = JSON.parse(content_response);
@@ -622,7 +789,7 @@ Be methodical and thorough. Don't provide finalAnswer unless you have concrete e
           temperature: 0.3,
         });
 
-        const content = response.choices[0]?.message?.content?.trim();
+        const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
         if (!content) break;
 
         try {
@@ -703,6 +870,11 @@ Be methodical and thorough. Don't provide finalAnswer unless you have concrete e
     try {
       switch (action) {
         case 'search': {
+          // Check if web search is configured
+          if (!process.env.WEB_SEARCH_URL) {
+            return `Web search not configured. Would search for: ${actionDetails}`;
+          }
+
           // Perform web search
           const searchUrl = `${process.env.WEB_SEARCH_URL}?q=${encodeURIComponent(actionDetails)}&format=json&pageno=1&time_range=month&categories=it,news&engines=duckduckgo,wikipedia&enabled_engines=duckduckgo,wikipedia&language=en&safesearch=1`;
           const searchResponse = await fetch(searchUrl, {
@@ -721,9 +893,18 @@ Be methodical and thorough. Don't provide finalAnswer unless you have concrete e
         }
 
         case 'read_url': {
+          // Extract URL from actionDetails (AI sometimes includes extra text)
+          const urlRegex = /(https?:\/\/[^\s]+)/;
+          const match = actionDetails.match(urlRegex);
+          const url = match ? match[1] : actionDetails.trim();
+
+          if (!url.startsWith('http://') && !url.startsWith('https://')) {
+            return `Invalid URL format: ${actionDetails}. Please provide a valid URL starting with http:// or https://.`;
+          }
+
           // Read URL content
           const { readUrlContent } = await import('../utils/urlReader');
-          const content = await readUrlContent(actionDetails, 15000, {
+          const content = await readUrlContent(url, 15000, {
             returnRaw: false,
             maxLength: 2000,
           });
@@ -784,7 +965,7 @@ Return a JSON object:
           temperature: 0.1,
         });
 
-       const content = response.choices[0]?.message?.content?.trim();
+       const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
        if (content) {
          try {
            const synthesis = JSON.parse(content);

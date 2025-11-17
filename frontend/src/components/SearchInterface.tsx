@@ -7,7 +7,6 @@ import {
   History,
   BookOpen,
   Zap,
-  Brain,
   GraduationCap,
   ChevronDown,
   ExternalLink,
@@ -20,7 +19,7 @@ import {
   User,
   Plus
 } from 'lucide-react';
-import { apiClient } from '../api/client';
+import { apiClient, API_BASE_URL } from '../api/client';
 
 interface SearchResult {
   id: string;
@@ -51,7 +50,7 @@ interface ConversationMessage {
   suggestions?: string[];
 }
 
-type FocusMode = 'general' | 'deep-research' | 'quick-search' | 'academic';
+type FocusMode = 'general' | 'quick-search' | 'academic';
 
 const SearchInterface: React.FC = () => {
   const focusModes = [
@@ -60,12 +59,6 @@ const SearchInterface: React.FC = () => {
       label: 'General',
       icon: Search,
       description: 'Balanced search across your resources with AI enhancement for relevant results'
-    },
-    {
-      id: 'deep-research' as FocusMode,
-      label: 'Deep Research',
-      icon: Brain,
-      description: 'Sequential thinking approach with web searches, URL reading, and comprehensive analysis'
     },
     {
       id: 'quick-search' as FocusMode,
@@ -82,21 +75,17 @@ const SearchInterface: React.FC = () => {
   ];
 
   const [focusMode, setFocusMode] = useState<FocusMode>('general');
-  const [enabledModes, setEnabledModes] = useState<FocusMode[]>(['general', 'deep-research', 'quick-search', 'academic']);
+  const [enabledModes, setEnabledModes] = useState<FocusMode[]>(['general', 'quick-search', 'academic']);
   const [aiEnhancedSearch, setAiEnhancedSearch] = useState<boolean>(true);
+  const [includeWebSearch, setIncludeWebSearch] = useState<boolean>(false);
   const [userTimezone, setUserTimezone] = useState<string>('UTC');
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
   const [query, setQuery] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [researchProgress, setResearchProgress] = useState<{
-    active: boolean;
-    phase: string;
-    step: number;
-    totalSteps: number;
-    details: string;
-  } | null>(null);
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+
   const [conversation, setConversation] = useState<ConversationMessage[]>([
     {
       id: '1',
@@ -115,7 +104,6 @@ const SearchInterface: React.FC = () => {
         timestamp: new Date()
       }
     ]);
-    setResearchProgress(null);
   };
 
   useEffect(() => {
@@ -128,11 +116,38 @@ const SearchInterface: React.FC = () => {
     setUserTimezone(timezone);
   }, []);
 
-  const handleSearch = async (searchQuery: string) => {
+  // Load search history from localStorage on component mount
+  useEffect(() => {
+    const savedHistory = localStorage.getItem('searchHistory');
+    if (savedHistory) {
+      try {
+        setSearchHistory(JSON.parse(savedHistory));
+      } catch (error) {
+        console.warn('Failed to parse search history from localStorage:', error);
+      }
+    }
+  }, []);
+
+  const handleSearch = async (searchQuery: string, options: { forceWebSearch?: boolean } = {}) => {
     if (!searchQuery.trim()) return;
 
+    console.log('🔍 Starting search');
+    console.log('🔐 Is authenticated:', apiClient.isAuthenticated());
+    console.log('🎫 Auth token exists:', !!localStorage.getItem('authToken'));
+
+    if (!apiClient.isAuthenticated()) {
+      console.error('❌ Not authenticated - cannot make search request');
+      const errorMessage: ConversationMessage = {
+        id: (Date.now() + 1).toString(),
+        type: 'ai',
+        content: 'You need to log in to use the search functionality. Please go to the login page.',
+        timestamp: new Date()
+      };
+      setConversation(prev => [...prev, errorMessage]);
+      return;
+    }
+
     setIsLoading(true);
-    setResearchProgress(null); // Clear any previous progress
 
     // Add to history
     const newHistory = [searchQuery, ...searchHistory.filter(h => h !== searchQuery)].slice(0, 10);
@@ -149,34 +164,26 @@ const SearchInterface: React.FC = () => {
 
     setConversation(prev => [...prev, userMessage]);
 
-    // Initialize progress for deep research mode
-    if (focusMode === 'deep-research') {
-      setResearchProgress({
-        active: true,
-        phase: 'Initializing Research',
-        step: 1,
-        totalSteps: 5,
-        details: 'Analyzing your query and planning research approach...'
-      });
-    }
-
     try {
-      // Update progress for URL detection
-      if (focusMode === 'deep-research') {
-        setResearchProgress(prev => prev ? {
-          ...prev,
-          phase: 'Query Analysis',
-          step: 2,
-          details: 'Checking if this is a direct URL or search query...'
-        } : null);
-      }
+
 
       // Check if query is JUST a URL
       const urlRegex = /^https?:\/\/[^\s]+$/i;
       const trimmedQuery = searchQuery.trim();
       const isUrlQuery = urlRegex.test(trimmedQuery) && trimmedQuery.split(/\s+/).length === 1;
 
+      let aiContent = '';
+      let citations: Citation[] = [];
+      let results: SearchResult[] = [];
+      let webResults: any[] = [];
+
+      console.log('🔄 Using regular search path');
+      console.log('🔑 Auth status:', apiClient.isAuthenticated());
+      console.log('🎯 Search query:', searchQuery);
+      console.log('🔗 Is URL query:', isUrlQuery);
+
       if (isUrlQuery) {
+        console.log('🌐 Detected as URL query, handling URL reading');
         // Handle URL reading
         const urlResponse = await apiClient.readUrlContent({
           url: searchQuery.trim(),
@@ -198,22 +205,23 @@ const SearchInterface: React.FC = () => {
 
         setConversation(prev => [...prev, aiMessage]);
       } else {
-        // Update progress for search execution
-        if (focusMode === 'deep-research') {
-          setResearchProgress(prev => prev ? {
-            ...prev,
-            phase: 'Executing Search',
-            step: 3,
-            details: 'Searching your resources and analyzing with AI...'
-          } : null);
-        }
+        console.log('🔍 About to call apiClient.searchResources');
+        console.log('📊 Search params:', {
+          q: searchQuery,
+          timezone: userTimezone,
+          focusMode: focusMode,
+          forceWebSearch: options.forceWebSearch || includeWebSearch
+        });
 
         // Use AI-enhanced search that determines intent and combines sources
+        console.log('🚀 Making API call now...');
         const response = await apiClient.searchResources({
           q: searchQuery,
           timezone: userTimezone,
           focusMode: focusMode,
+          forceWebSearch: options.forceWebSearch || includeWebSearch,
         });
+        console.log('✅ API call completed, response:', response);
 
         let aiContent = '';
         let citations: Citation[] = [];
@@ -239,49 +247,50 @@ const SearchInterface: React.FC = () => {
             }));
           }
 
-          // If AI-enhanced search is enabled and we have few/no local results, try web search
-          if (aiEnhancedSearch && (results.length === 0 || results.length < 3)) {
-            try {
-              const webSearchResponse = await apiClient.performWebSearch({
-                query: searchQuery,
-              });
-
-              if (webSearchResponse.success && webSearchResponse.data) {
-                webResults = webSearchResponse.data.results.slice(0, 5); // Limit to top 5 web results
-              }
-            } catch (webError) {
-              console.log('Web search failed, continuing with local results only:', webError);
-            }
+          // Get web results from backend response
+          if (response.data && response.data.webResults) {
+            webResults = response.data.webResults;
           }
+
+
         }
 
-        // Update progress for results processing
-        if (focusMode === 'deep-research') {
-          setResearchProgress(prev => prev ? {
-            ...prev,
-            phase: 'Processing Results',
-            step: 4,
-            details: 'Analyzing search results and preparing comprehensive response...'
-          } : null);
-        }
+
 
         // Generate AI-enhanced response
         if (response.ai && response.ai.intent === 'chat') {
           // Chat response - no need for web search or local results
           aiContent = response.ai.chatResponse || "Hello! I'm your AI assistant for personal resources. How can I help you?";
-        } else {
-          // Combine local and web results with AI analysis
-          const hasLocalResults = results.length > 0;
-          const hasWebResults = webResults.length > 0;
 
-          if (hasLocalResults && hasWebResults) {
-            aiContent = `I found both local resources and web information for "${searchQuery}":\n\n**From your resources:**\n${results.slice(0, 3).map((r, i) => `${i + 1}. ${r.title} (${r.type})`).join('\n')}\n\n**From the web:**\n${webResults.slice(0, 3).map((r, i) => `${i + 1}. ${r.title}`).join('\n')}\n\nWould you like me to show more details from any of these sources?`;
-          } else if (hasLocalResults) {
-            aiContent = `I found ${results.length} relevant resources in your collection for "${searchQuery}". Here are the most relevant:`;
-          } else if (hasWebResults) {
-            aiContent = `I didn't find local resources for "${searchQuery}", but here's what I found on the web (${webResults.length} results):`;
+          // Check if this is a deep research response with thought process
+          if (response.ai.deepResearch && response.ai.deepResearch.thoughtProcess) {
+            // Add thought process to the content
+            const thoughtProcessText = response.ai.deepResearch.thoughtProcess
+              .map((thought: any, index: number) =>
+                `**Step ${index + 1}:** ${thought.thought}`
+              )
+              .join('\n\n');
+
+            aiContent += `\n\n## Research Analysis\n\n${thoughtProcessText}\n\n---\n\n*Research completed in ${response.ai.deepResearch.thoughtCount} steps with ${response.ai.deepResearch.confidence}% confidence.*`;
+          }
+        } else {
+          // Use AI-generated summary from backend if available
+          if (response.ai && response.ai.summary) {
+            aiContent = response.ai.summary;
           } else {
-            aiContent = `I couldn't find relevant information for "${searchQuery}" in your resources or on the web. Try rephrasing your query or check your search terms.`;
+            // Fallback to basic combination if no AI summary
+            const hasLocalResults = results.length > 0;
+            const hasWebResults = webResults.length > 0;
+
+            if (hasLocalResults && hasWebResults) {
+              aiContent = `I found both local resources and web information for "${searchQuery}":\n\n**From your resources:**\n${results.slice(0, 3).map((r, i) => `${i + 1}. ${r.title} (${r.type})`).join('\n')}\n\n**From the web:**\n${webResults.slice(0, 3).map((r, i) => `${i + 1}. ${r.title}`).join('\n')}\n\nWould you like me to show more details from any of these sources?`;
+            } else if (hasLocalResults) {
+              aiContent = `I found ${results.length} relevant resources in your collection for "${searchQuery}". Here are the most relevant:`;
+            } else if (hasWebResults) {
+              aiContent = `I didn't find local resources for "${searchQuery}", but here's what I found on the web (${webResults.length} results):`;
+            } else {
+              aiContent = `I couldn't find relevant information for "${searchQuery}" in your resources or on the web. Try rephrasing your query or check your search terms.`;
+            }
           }
         }
 
@@ -314,20 +323,11 @@ const SearchInterface: React.FC = () => {
         setConversation(prev => [...prev, aiMessage]);
       }
 
-      // Final progress update
-      if (focusMode === 'deep-research') {
-        setResearchProgress(prev => prev ? {
-          ...prev,
-          phase: 'Research Complete',
-          step: 5,
-          totalSteps: 5,
-          details: 'Research completed successfully!'
-        } : null);
 
-        // Clear progress after a short delay
-        setTimeout(() => setResearchProgress(null), 2000);
-      }
     } catch (error) {
+      console.error('❌ Search error:', error);
+      console.error('❌ Error stack:', error.stack);
+
       const aiMessage: ConversationMessage = {
         id: (Date.now() + 1).toString(),
         type: 'ai',
@@ -336,9 +336,6 @@ const SearchInterface: React.FC = () => {
       };
 
       setConversation(prev => [...prev, aiMessage]);
-
-      // Clear progress on error
-      setResearchProgress(null);
     } finally {
       setIsLoading(false);
       setQuery('');
@@ -438,9 +435,12 @@ const SearchInterface: React.FC = () => {
             <button onClick={() => setSidebarOpen(true)} className="lg:hidden text-gray-500 hover:text-gray-700">
               <Menu className="w-6 h-6" strokeWidth={1.5} />
             </button>
-            <div className="flex-1 max-w-2xl mx-auto">
-              <h1 className="text-xl font-semibold text-gray-900 text-center">Personal Resource Manager</h1>
-            </div>
+             <div className="flex-1 max-w-2xl mx-auto">
+               <div className="text-center">
+                 <h1 className="text-xl font-semibold text-gray-900">Personal Resource Manager</h1>
+
+               </div>
+             </div>
             <div className="w-6 lg:w-0"></div> {/* Spacer */}
           </header>
 
@@ -460,8 +460,8 @@ const SearchInterface: React.FC = () => {
                      ? "Ask me anything about your resources, paste a URL to read its content, or search the web..."
                      : "Ask me anything about your resources..."
                  }
-                disabled={isLoading}
-                className="w-full px-6 py-4 bg-gray-50 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-lg shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                 disabled={isLoading}
+                  className="w-full px-6 py-4 rounded-full focus:outline-none focus:ring-2 text-lg shadow-sm disabled:opacity-50 disabled:cursor-not-allowed bg-gray-50 border border-gray-300 focus:ring-blue-500 focus:border-transparent"
               />
               <div className="absolute right-4 top-1/2 transform -translate-y-1/2 flex gap-2">
                 {(query.trim() || conversation.length > 1) && (
@@ -484,29 +484,48 @@ const SearchInterface: React.FC = () => {
                 </button>
               </div>
             </div>
-            <div className="flex items-center justify-between mt-4">
-              <span className="px-3 py-1 bg-gray-100 rounded-full text-sm text-gray-500">
-                {focusModes.find(m => m.id === focusMode)?.label}
-              </span>
+             <div className="flex items-center justify-between mt-4">
+                <div className="flex items-center gap-2">
+                  <span className="px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-600">
+                    {focusModes.find(m => m.id === focusMode)?.label}
+                  </span>
+                </div>
 
-               {/* AI Enhanced Search Toggle */}
-               <div className="flex items-center gap-4">
-                 <div className="flex items-center gap-2">
-                   <span className="text-sm text-gray-500">AI Enhanced</span>
-                   <button
-                     onClick={() => setAiEnhancedSearch(!aiEnhancedSearch)}
-                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                       aiEnhancedSearch ? 'bg-purple-500' : 'bg-gray-300'
-                     }`}
-                   >
-                     <span
-                       className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                         aiEnhancedSearch ? 'translate-x-6' : 'translate-x-1'
+                 {/* Search Toggles */}
+                 <div className="flex items-center gap-4">
+                   <div className="flex items-center gap-2">
+                     <span className="text-sm text-gray-500">AI Enhanced</span>
+                     <button
+                       onClick={() => setAiEnhancedSearch(!aiEnhancedSearch)}
+                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                         aiEnhancedSearch ? 'bg-purple-500' : 'bg-gray-300'
                        }`}
-                     />
-                   </button>
+                     >
+                       <span
+                         className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                           aiEnhancedSearch ? 'translate-x-6' : 'translate-x-1'
+                         }`}
+                       />
+                     </button>
+                   </div>
+
+                   <div className="flex items-center gap-2">
+                     <span className="text-sm text-gray-500">Web Search</span>
+                     <button
+                       onClick={() => setIncludeWebSearch(!includeWebSearch)}
+                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                         includeWebSearch ? 'bg-orange-500' : 'bg-gray-300'
+                       }`}
+                     >
+                       <span
+                         className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                           includeWebSearch ? 'translate-x-6' : 'translate-x-1'
+                         }`}
+                       />
+                     </button>
+                   </div>
+
                  </div>
-               </div>
             </div>
           </div>
         </div>
@@ -567,35 +586,7 @@ const SearchInterface: React.FC = () => {
           </div>
         </div>
 
-        {/* Research Progress Indicator */}
-        {researchProgress?.active && (
-          <div className="bg-white border-b border-gray-200 px-4 py-4 lg:px-6">
-            <div className="max-w-2xl mx-auto">
-              <div className="flex items-center gap-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="flex-shrink-0">
-                  <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-                    <Brain className="w-4 h-4 text-white animate-pulse" strokeWidth={1.5} />
-                  </div>
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-sm font-medium text-blue-800">{researchProgress.phase}</h3>
-                    <span className="text-xs text-blue-600">
-                      Step {researchProgress.step} of {researchProgress.totalSteps}
-                    </span>
-                  </div>
-                  <div className="w-full bg-blue-200 rounded-full h-2 mb-2">
-                    <div
-                      className="bg-blue-500 h-2 rounded-full transition-all duration-300 ease-out"
-                      style={{ width: `${(researchProgress.step / researchProgress.totalSteps) * 100}%` }}
-                    ></div>
-                  </div>
-                  <p className="text-xs text-blue-700">{researchProgress.details}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+
 
         {/* Main Content Area */}
         <div className="flex-1 px-4 py-6 lg:px-6 overflow-y-auto">
@@ -611,21 +602,21 @@ const SearchInterface: React.FC = () => {
                       }`}>
                         {message.type === 'user' ? <User className="w-4 h-4" strokeWidth={1.5} /> : <Bot className="w-4 h-4" strokeWidth={1.5} />}
                       </div>
-                      <div className={`rounded-2xl px-4 py-3 ${
-                        message.type === 'user' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-800'
-                      }`}>
-                        <div className={`prose prose-sm max-w-none ${message.type === 'user' ? 'prose-invert' : ''}`}>
-                          {message.type === 'user' ? (
-                            <p className="leading-relaxed m-0">{message.content}</p>
-                          ) : (
-                            <div className="leading-relaxed m-0 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-                              <ReactMarkdown>
-                                {message.content}
-                              </ReactMarkdown>
-                            </div>
-                          )}
-                        </div>
-                      </div>
+                     <div className={`rounded-2xl px-4 py-3 ${
+                         message.type === 'user' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-800'
+                       }`}>
+                         <div className={`prose prose-sm max-w-none ${message.type === 'user' ? 'prose-invert' : ''}`}>
+                           {message.type === 'user' ? (
+                             <p className="leading-relaxed m-0">{message.content}</p>
+                           ) : (
+                               <div className="leading-relaxed m-0 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                                 <ReactMarkdown>
+                                   {message.content}
+                                 </ReactMarkdown>
+                               </div>
+                           )}
+                         </div>
+                       </div>
                     </div>
 
                     {message.results && message.type === 'ai' && (
@@ -636,22 +627,31 @@ const SearchInterface: React.FC = () => {
 
                     {message.citations && message.type === 'ai' && renderCitations(message.citations)}
 
-                    {message.suggestions && message.suggestions.length > 0 && message.type === 'ai' && (
-                      <div className="mt-4 ml-11 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                        <h4 className="text-sm font-medium text-blue-800 mb-3">Try these search terms:</h4>
-                        <div className="flex flex-wrap gap-3">
-                          {message.suggestions.map((suggestion, index) => (
-                            <button
-                              key={index}
-                              onClick={() => handleSearch(suggestion)}
-                              className="px-4 py-2 bg-blue-100 text-blue-800 rounded-full text-sm font-medium hover:bg-blue-200 transition-colors shadow-sm"
-                            >
-                              {suggestion}
-                            </button>
-                          ))}
+                      {message.suggestions && message.suggestions.length > 0 && message.type === 'ai' && (
+                        <div className="mt-4 ml-11 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl">
+                          <h4 className="text-sm font-semibold text-blue-900 mb-3 flex items-center gap-2">
+                            <div className="w-5 h-5 bg-blue-100 rounded-lg flex items-center justify-center">
+                              <Search className="w-3 h-3 text-blue-700" strokeWidth={1.5} />
+                            </div>
+                            Suggested follow-ups
+                          </h4>
+                          <div className="flex flex-wrap gap-3">
+                            {message.suggestions.map((suggestion, index) => (
+                              <button
+                                key={index}
+                                onClick={() => handleSearch(suggestion)}
+                                className="px-4 py-2 bg-white text-blue-800 rounded-full text-sm font-medium hover:bg-blue-50 transition-all duration-200 shadow-sm border border-blue-200 hover:border-blue-300 hover:shadow-md"
+                              >
+                                {suggestion}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
+
+
+
+
 
                     <div className="text-xs text-gray-500 mt-2 ml-11">
                       {message.timestamp.toLocaleTimeString()}
@@ -662,19 +662,21 @@ const SearchInterface: React.FC = () => {
 
               <div ref={chatEndRef} />
 
-              {/* Loading State */}
-              {isLoading && (
-                <div className="flex gap-4">
-                  <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-white">
-                    <Bot className="w-4 h-4" strokeWidth={1.5} />
-                  </div>
-                  <div className="flex-1 space-y-2">
-                    <div className="animate-pulse bg-gray-200 h-4 rounded w-3/4"></div>
-                    <div className="animate-pulse bg-gray-200 h-4 rounded w-1/2"></div>
-                    <div className="animate-pulse bg-gray-200 h-4 rounded w-2/3"></div>
-                  </div>
-                </div>
-              )}
+                {/* Loading State */}
+                {isLoading && (
+                 <div className="flex gap-4">
+                   <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center text-white">
+                     <Bot className="w-4 h-4" strokeWidth={1.5} />
+                   </div>
+                   <div className="flex-1 space-y-2">
+                     <div className="animate-pulse bg-gray-200 h-4 rounded w-3/4"></div>
+                     <div className="animate-pulse bg-gray-200 h-4 rounded w-1/2"></div>
+                     <div className="animate-pulse bg-gray-200 h-4 rounded w-2/3"></div>
+                   </div>
+                 </div>
+               )}
+
+
             </div>
           </div>
         </div>

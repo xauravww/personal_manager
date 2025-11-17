@@ -17,11 +17,16 @@ const getApiBaseUrl = () => {
     return apiUrl;
   }
 
+  // In development, use relative path to work with Vite proxy
+  if (nodeEnv !== 'production') {
+    return '/api';
+  }
+
   // Fallback to base URL + /api
   return `${apiBaseUrl || 'http://localhost:3001'}/api`;
 };
 
-const API_BASE_URL = getApiBaseUrl();
+export const API_BASE_URL = getApiBaseUrl();
 
 interface ApiResponse<T> {
   success: boolean;
@@ -56,6 +61,7 @@ interface SearchResponse {
   resources: Resource[];
   total: number;
   has_more: boolean;
+  webResults?: WebSearchResult[];
 }
 
 interface CreateResourceRequest {
@@ -267,6 +273,8 @@ class ApiClient {
     offset?: number;
     timezone?: string;
     focusMode?: string;
+    stream?: boolean;
+    forceWebSearch?: boolean;
   }): Promise<{ success: boolean; data: SearchResponse; ai?: any; error?: string }> {
     const searchParams = new URLSearchParams();
 
@@ -277,6 +285,8 @@ class ApiClient {
     if (params.offset) searchParams.set('offset', params.offset.toString());
     if (params.timezone) searchParams.set('timezone', params.timezone);
     if (params.focusMode) searchParams.set('focusMode', params.focusMode);
+    if (params.stream) searchParams.set('stream', '1');
+    if (params.forceWebSearch) searchParams.set('forceWebSearch', 'true');
 
     const url = `${API_BASE_URL}/search?${searchParams.toString()}`;
 

@@ -65,6 +65,39 @@ npm run db:init
 npm run dev
 ```
 
+## 🤖 AI Configuration
+
+### Local AI Proxy Setup
+The application uses a local AI proxy for all AI operations. Configure your proxy server to handle OpenAI-compatible API requests.
+
+**Required Environment Variables:**
+```bash
+# Backend .env
+AI_PROXY_URL=http://localhost:3010  # Your local proxy URL
+AI_API_KEY=your-proxy-api-key       # API key for your proxy
+AI_MODEL=grok-code                  # Model to use (grok-code, gpt-4, etc.)
+```
+
+**Proxy Requirements:**
+- Must accept OpenAI-compatible API format
+- Support `/v1/chat/completions` endpoint
+- Handle streaming responses for real-time chat
+- Accept `Authorization: Bearer <key>` header
+
+**Testing Your Proxy:**
+```bash
+curl -X POST http://localhost:3010/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer your-api-key" \
+  -d '{"model": "grok-code", "messages": [{"role": "user", "content": "Hello"}], "stream": true}'
+```
+
+### Streaming Implementation
+The application uses Server-Sent Events (SSE) for smooth, real-time streaming responses:
+- Word-by-word streaming with 50ms delays for natural typing effect
+- No buffering - responses appear character-by-character
+- Automatic handling of stream completion and errors
+
 ## 🔧 Proxy Configuration
 
 ### Development

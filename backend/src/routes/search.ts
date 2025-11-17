@@ -4,6 +4,7 @@ import prisma from '../config/database';
 import { authenticateToken } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
 import aiService from '../services/aiService';
+import { performWebSearch } from '../utils/webSearch';
 import { SearchResponse } from '../types';
 
 // Simple in-memory cache for recent search results (userId -> results)
@@ -79,6 +80,7 @@ router.get('/', [
   query('tags').optional().trim().isLength({ max: 200 }),
   query('limit').optional().isInt({ min: 1, max: 50 }),
   query('offset').optional().isInt({ min: 0 }),
+  query('forceWebSearch').optional().isBoolean(),
 ], async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
     const errors = validationResult(req);
@@ -94,6 +96,8 @@ router.get('/', [
     const limit = parseInt(req.query.limit as string) || 20;
     const timezone = req.query.timezone as string || 'UTC';
     const focusMode = req.query.focusMode as string || 'general';
+    const aiEnhancedSearch = req.query.aiEnhanced !== 'false'; // Default to true
+    const forceWebSearch = req.query.forceWebSearch === 'true'; // Default to false
 
     // Build where clause for Prisma
     const where: any = {
@@ -190,7 +194,16 @@ router.get('/', [
     if (type) {
       where.type = type;
     } else if (aiFilters.type) {
-      where.type = aiFilters.type;
+      // Handle multiple types separated by pipe or comma
+      const types = aiFilters.type.split(/[|,]/).filter(t => t.trim());
+      if (types.length === 1) {
+        where.type = types[0];
+      } else if (types.length > 1) {
+        where.OR = where.OR || [];
+        where.OR.push({
+          type: { in: types }
+        });
+      }
     }
 
     // Apply tags filter (query param takes precedence over AI)
@@ -214,8 +227,9 @@ router.get('/', [
     }
 
     let resources: any[] = [];
+    let webResults: any[] = [];
     let total: number = 0;
-    let chatResponse = '';
+    let chatResponse: string | AsyncIterable<any> | null = null;
 
     if (isChat) {
       // Generate AI chat response with context from recent searches
@@ -227,24 +241,24 @@ router.get('/', [
         ).join('. ')}`;
       }
 
-      try {
-        // Check if this is a date/time query
-        const dateTimeQueries = ['current date', 'what date', 'what time', 'current time', 'today', 'now', 'date time', 'time date', 'what day', 'current day'];
-        const queryLower = searchQuery.toLowerCase().trim();
-        const isDateTimeQuery = dateTimeQueries.some(phrase => queryLower.includes(phrase));
+        try {
+          // Check if this is a date/time query
+          const dateTimeQueries = ['current date', 'what date', 'what time', 'current time', 'today', 'now', 'date time', 'time date', 'what day', 'current day'];
+          const queryLower = searchQuery.toLowerCase().trim();
+          const isDateTimeQuery = dateTimeQueries.some(phrase => queryLower.includes(phrase));
 
-        if (isDateTimeQuery) {
-          // Provide accurate current date/time information in user's timezone
-          const currentDateTime = aiService.getCurrentDateTime(timezone);
-          chatResponse = `Today is ${currentDateTime.day}, ${currentDateTime.date}. The current time is ${currentDateTime.time}. Is there anything I can help you with in your personal resources?`;
-        } else {
-          chatResponse = await aiService.generateChatResponse(searchQuery, context, timezone, focusMode);
+          if (isDateTimeQuery) {
+            // Provide accurate current date/time information in user's timezone
+            const currentDateTime = aiService.getCurrentDateTime(timezone);
+            chatResponse = `Today is ${currentDateTime.day}, ${currentDateTime.date}. The current time is ${currentDateTime.time}. Is there anything I can help you with in your personal resources?`;
+          } else {
+            chatResponse = await aiService.generateChatResponse(searchQuery, context, timezone, focusMode, false) as string;
+            console.log('Generated chat response:', chatResponse);
+          }
+        } catch (error) {
+          console.warn('Failed to generate chat response:', error);
+          chatResponse = "Hello! I'm your AI assistant for personal resources. How can I help you?";
         }
-        console.log('Generated chat response:', chatResponse);
-      } catch (error) {
-        console.warn('Failed to generate chat response:', error);
-        chatResponse = "Hello! I'm your AI assistant for personal resources. How can I help you?";
-      }
     }
 
     if (!isChat) {
@@ -315,6 +329,25 @@ router.get('/', [
       }
     }
 
+    // Perform web search if we have few local results or if explicitly requested
+    if (!isChat && aiEnhancedSearch && (forceWebSearch || resources.length === 0 || resources.length < 3)) {
+      try {
+        console.log('🔍 Performing web search for query:', searchQuery);
+        const webSearchResponse = await performWebSearch(searchQuery);
+
+        if (webSearchResponse.results?.length > 0) {
+          webResults = webSearchResponse.results.slice(0, 5); // Limit to top 5 web results
+          console.log('📚 Found web results:', webResults.length);
+        } else {
+          console.log('Web search returned no results');
+        }
+      } catch (webError) {
+        console.warn('Web search failed, continuing with local results only:', webError);
+        // Reset webResults to empty array to avoid issues downstream
+        webResults = [];
+      }
+    }
+
     // Cache recent search results for chat context
     if (!isChat && resources.length > 0) {
       recentSearchCache.set(userId, resources.slice(0, 5)); // Store up to 5 recent results
@@ -324,72 +357,25 @@ router.get('/', [
       resources,
       total,
       has_more: offset + limit < total,
+      webResults: webResults.length > 0 ? webResults : undefined,
     };
 
-    // Handle different focus modes
-    let researchSummary: any = null;
 
-     if (!isChat && searchQuery) {
-       if (focusMode === 'deep-research') {
-         try {
-           console.log('Deep research mode activated - using sequential thinking for query:', searchQuery);
 
-           // Use sequential thinking for complex research tasks
-           const recentResults = recentSearchCache.get(userId);
-           const contextString = recentResults ? recentResults.map(r => `${r.title}: ${r.content || r.description || ''}`).join('. ') : '';
-
-           // Progress callback for logging sequential thinking progress
-           const progressCallback = (progress: { phase: string; step: number; totalSteps: number; details: string }) => {
-             console.log(`[Sequential Thinking] ${progress.phase} (${progress.step}/${progress.totalSteps}): ${progress.details}`);
-           };
-
-           const sequentialResult = await aiService.executeSequentialThinking(searchQuery, contextString, progressCallback);
-           console.log('Sequential thinking completed:', {
-             finalAnswer: sequentialResult.finalAnswer,
-             thoughtCount: sequentialResult.thoughtProcess.length,
-             confidence: sequentialResult.confidence
-           });
-
-           // Handle sequential thinking results
-           if (sequentialResult.finalAnswer && sequentialResult.confidence > 70) {
-             // High confidence answer found - set as chat response instead of resources
-             chatResponse = `**Deep Research Result:** ${sequentialResult.finalAnswer}\n\n*Confidence: ${sequentialResult.confidence}% | Research completed in ${sequentialResult.thoughtProcess.length} steps*`;
-             isChat = true; // Treat as chat response to avoid showing resources
-           } else if (sequentialResult.thoughtProcess.length > 0) {
-             // No confident answer, but we have thought process - show summary
-             const lastThought = sequentialResult.thoughtProcess[sequentialResult.thoughtProcess.length - 1];
-             chatResponse = `I conducted deep research on "${searchQuery}" but couldn't reach a confident conclusion. Here's what I found:\n\n**Latest Analysis:** ${lastThought.thought}\n\n*Research completed ${sequentialResult.thoughtProcess.length} steps with ${sequentialResult.confidence}% confidence. Try rephrasing your query or providing more context.*`;
-             isChat = true;
-           } else {
-             // No results at all
-             chatResponse = `I attempted deep research on "${searchQuery}" but encountered issues during the analysis. Please try again or use a different search approach.`;
-             isChat = true;
-           }
-
-           researchSummary = {
-             method: 'sequential-thinking',
-             finalAnswer: sequentialResult.finalAnswer,
-             confidence: sequentialResult.confidence,
-             thoughtCount: sequentialResult.thoughtProcess.length
-           };
-         } catch (error) {
-           console.warn('Deep research failed:', error);
-           chatResponse = `Deep research failed for "${searchQuery}". Error: ${error instanceof Error ? error.message : 'Unknown error'}. Falling back to regular search.`;
-           isChat = true;
-         }
-      } else if (focusMode === 'quick-search') {
-        // Quick search mode - prioritize speed over depth
-        console.log('Quick search mode activated for query:', searchQuery);
-        // For quick search, we could limit the number of results or use faster search methods
-        // Currently uses the same logic but could be optimized for speed
-      } else if (focusMode === 'academic') {
-        // Academic mode - emphasize credible sources and citations
-        console.log('Academic mode activated for query:', searchQuery);
-        // Could prioritize academic sources, add citation requirements, etc.
-        // For now, uses enhanced search with academic focus in AI responses
+      if (!isChat && searchQuery) {
+        if (focusMode === 'quick-search') {
+          // Quick search mode - prioritize speed over depth
+          console.log('Quick search mode activated for query:', searchQuery);
+          // For quick search, we could limit the number of results or use faster search methods
+          // Currently uses the same logic but could be optimized for speed
+        } else if (focusMode === 'academic') {
+          // Academic mode - emphasize credible sources and citations
+          console.log('Academic mode activated for query:', searchQuery);
+          // Could prioritize academic sources, add citation requirements, etc.
+          // For now, uses enhanced search with academic focus in AI responses
+        }
+        // General mode uses the default search behavior
       }
-      // General mode uses the default search behavior
-    }
 
     // Generate suggestions if no results found
     let suggestions: string[] = [];
@@ -467,6 +453,59 @@ router.get('/', [
       suggestions = suggestions.slice(0, 8);
     }
 
+    // Generate AI summary for search results
+    let aiSummary: string | null = null;
+    if (!isChat && searchQuery && (resources.length > 0 || webResults.length > 0)) {
+      try {
+        // Limit context to prevent token overflow
+        const maxLocalResults = 2;
+        const maxWebResults = 2;
+
+        const localContext = resources.length > 0
+          ? `Local resources: ${resources.slice(0, maxLocalResults).map(r => {
+              const content = (r.content || r.description || '').substring(0, 100); // Limit content length
+              return `${r.title}: ${content}`;
+            }).join('. ')}`
+          : '';
+
+        const webContext = webResults.length > 0
+          ? `Web results: ${webResults.slice(0, maxWebResults).map(r => {
+              try {
+                const content = (r.content || 'No description available').substring(0, 100); // Limit content length
+                return `${r.title}: ${content}`;
+              } catch (e) {
+                return `${r.title}: Web result`;
+              }
+            }).join('. ')}`
+          : '';
+
+        const contextString = [localContext, webContext].filter(Boolean).join('. ');
+
+        // Limit total context length to prevent token overflow
+        const maxContextLength = 1000;
+        const truncatedContext = contextString.length > maxContextLength
+          ? contextString.substring(0, maxContextLength) + '...'
+          : contextString;
+
+        if (truncatedContext.trim()) {
+          aiSummary = await aiService.generateChatResponse(
+            `Summarize the following search results for the query "${searchQuery}". Provide a helpful response that analyzes and presents the key findings: ${truncatedContext}`,
+            '',
+            timezone,
+            focusMode,
+            false
+          ) as string;
+          console.log('Generated AI summary for search results');
+        } else {
+          console.log('No context available for AI summary');
+          aiSummary = null;
+        }
+      } catch (error) {
+        console.warn('Failed to generate AI summary for search results:', error);
+        aiSummary = null;
+      }
+    }
+
     // Include AI enhancement info if search was performed
     let aiInfo: any = searchQuery ? {
       intent: isChat ? 'chat' : 'search',
@@ -477,18 +516,8 @@ router.get('/', [
         tags: aiFilters.tags || null,
       },
       ...(isChat && chatResponse && { chatResponse }),
+      ...(!isChat && aiSummary && { summary: aiSummary }),
       ...(suggestions.length > 0 && { suggestions }),
-      // Add deep research summary if applicable
-      ...(researchSummary && {
-        deepResearch: {
-          method: researchSummary.method,
-          thoughtCount: researchSummary.thoughtCount,
-          confidence: researchSummary.confidence,
-          answerFound: researchSummary.confidence > 70,
-          ...(researchSummary.confidence > 70 && { answer: researchSummary.finalAnswer }),
-          summary: `Sequential thinking completed with ${researchSummary.thoughtCount} thoughts.${researchSummary.confidence > 70 ? ` Found answer: ${researchSummary.finalAnswer}` : ' No confident answer found.'}`
-        }
-      }),
     } : null;
 
     res.json({

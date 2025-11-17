@@ -19,7 +19,12 @@ export const authenticateToken = async (
 ): Promise<void> => {
   try {
     const authHeader = req.headers.authorization;
-    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+    let token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+
+    // Also check query parameter for streaming requests
+    if (!token) {
+      token = req.query.token as string;
+    }
 
     if (!token) {
       throw createError('Access token required', 401);

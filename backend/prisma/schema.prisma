@@ -140,18 +140,19 @@ model LearningProgress {
 }
 
 model Assignment {
-  id          String   @id @default(uuid())
+  id          String    @id @default(uuid())
   module_id   String
   title       String
   description String?
-  type        String   @default("exercise") // "quiz", "exercise", "project"
-  content     String?  // assignment content or questions
-  solution    String?  // correct solution or rubric
-  max_score   Float    @default(100)
-  time_limit  Int?     // in minutes
-  is_required Boolean  @default(true)
-  created_at  DateTime @default(now()) @map("created_at")
-  updated_at  DateTime @updatedAt @map("updated_at")
+  type        String    @default("exercise") // "quiz", "exercise", "project", "code_challenge", "file_upload"
+  content     String?   // assignment content or questions
+  solution    String?   // correct solution or rubric
+  max_score   Float     @default(100)
+  time_limit  Int?      // in minutes
+  due_date    DateTime? // assignment due date
+  is_required Boolean   @default(true)
+  created_at  DateTime  @default(now()) @map("created_at")
+  updated_at  DateTime  @updatedAt @map("updated_at")
 
   // Relations
   module      LearningModule @relation(fields: [module_id], references: [id], onDelete: Cascade)
@@ -175,7 +176,6 @@ model AssignmentSubmission {
   assignment Assignment @relation(fields: [assignment_id], references: [id], onDelete: Cascade)
   user       User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
-  @@unique([assignment_id, user_id])
   @@map("assignment_submissions")
 }
 

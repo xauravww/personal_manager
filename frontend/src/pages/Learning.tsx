@@ -99,6 +99,19 @@ const Learning: React.FC = () => {
   const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
   const [showAssignmentSubmission, setShowAssignmentSubmission] = useState(false);
   const [assignmentSubmission, setAssignmentSubmission] = useState('');
+  const [quizQuestions, setQuizQuestions] = useState<Array<{
+    question: string;
+    options: string[];
+    correctAnswer: number;
+  }>>([]);
+  const [quizAnswers, setQuizAnswers] = useState<number[]>([]);
+  const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
+  const [quizResults, setQuizResults] = useState<{
+    score: number;
+    feedback: string;
+    showResults: boolean;
+    canRetake: boolean;
+  } | null>(null);
   const [chatMessages, setChatMessages] = useState<Array<{role: 'user' | 'assistant', content: string, timestamp: Date}>>([]);
   const [currentMessage, setCurrentMessage] = useState('');
   const [isAiTyping, setIsAiTyping] = useState(false);
@@ -154,10 +167,13 @@ const Learning: React.FC = () => {
             modules: modulesWithProgress
           });
         }
+
+        return modulesWithProgress; // Return the updated modules
       }
     } catch (error) {
       console.error('Error loading modules:', error);
     }
+    return [];
   };
 
   useEffect(() => {
@@ -202,15 +218,19 @@ const Learning: React.FC = () => {
       if (response.success && response.data) {
         // Reload modules to get updated progress data
         if (selectedSubject) {
-          await loadModules(selectedSubject.id, currentModulesPage);
+          const updatedModules = await loadModules(selectedSubject.id, currentModulesPage);
+          // Return the updated module with progress
+          const updatedModule = updatedModules.find(m => m.id === moduleId);
+          return updatedModule;
         }
       }
     } catch (error) {
       console.error('Error starting module:', error);
     }
+    return null;
   };
 
-  const handleModuleAction = (module: LearningModule) => {
+  const handleModuleAction = async (module: LearningModule) => {
     if (module.progress?.status === 'completed') {
       // Show review content
       setSelectedModule(module);
@@ -223,10 +243,17 @@ const Learning: React.FC = () => {
       initializeModuleChat(module);
     } else {
       // Start new module
-      startModule(module.id);
-      setSelectedModule(module);
-      setShowModuleContent(true);
-      initializeModuleChat(module);
+      const updatedModule = await startModule(module.id);
+      if (updatedModule) {
+        setSelectedModule(updatedModule);
+        setShowModuleContent(true);
+        initializeModuleChat(updatedModule);
+      } else {
+        // Fallback to original module if update failed
+        setSelectedModule(module);
+        setShowModuleContent(true);
+        initializeModuleChat(module);
+      }
     }
   };
 
@@ -234,7 +261,7 @@ const Learning: React.FC = () => {
     const initialMessages = [
       {
         role: 'assistant' as const,
-        content: `Welcome to ${module.title}! I'm here to help you learn and understand this topic. You can ask me questions, tell me what you've learned, or ask for hints. When you're ready, let me know and I can help you mark this module as completed.
+        content: `Welcome to ${module.title}! I'm here to help you learn and understand this topic. You can ask me questions, tell me what you've learned, or ask for hints. When you're ready to complete this module, let me know and I can help you mark it as completed.
 
 What would you like to focus on first?`,
         timestamp: new Date()
@@ -243,6 +270,8 @@ What would you like to focus on first?`,
     setChatMessages(initialMessages);
     setCurrentMessage('');
     setIsAiTyping(false);
+    setAwaitingCompletionConfirmation(false); // Reset completion confirmation when starting new chat
+    setShowFullAnswerButton(false); // Reset full answer button
   };
 
   const sendMessage = async () => {
@@ -409,15 +438,7 @@ What would you like to focus on first?`,
     }
   };
 
-  const declineCompletion = () => {
-    const continueMessage = {
-      role: 'assistant' as const,
-      content: 'No problem! Let\'s continue practicing. What would you like to focus on next?',
-      timestamp: new Date()
-    };
-    setChatMessages(prev => [...prev, continueMessage]);
-    setAwaitingCompletionConfirmation(false);
-  };
+
 
   const requestFullAnswer = async () => {
     if (!selectedModule) return;
@@ -453,24 +474,61 @@ What would you like to focus on first?`,
   };
 
   const submitAssignment = async () => {
-    if (!selectedAssignment || !assignmentSubmission.trim()) return;
+    if (!selectedAssignment) return;
+
+    // Check if submission is valid
+    let content = '';
+        if (selectedAssignment.type === 'quiz' || selectedAssignment.title.toLowerCase().includes('quiz')) {
+      // For quizzes, check if all questions are answered
+      if (quizAnswers.some(answer => answer === -1)) {
+        alert('Please answer all quiz questions before submitting.');
+        return;
+      }
+      // Format quiz answers as structured data
+      const answers: { [key: string]: number } = {};
+      quizQuestions.forEach((question, index) => {
+        answers[question.id] = quizAnswers[index];
+      });
+
+      content = JSON.stringify({
+        answers,
+        questions: quizQuestions
+      });
+    } else {
+      // For text assignments
+      if (!assignmentSubmission.trim()) {
+        alert('Please enter your assignment solution.');
+        return;
+      }
+      content = assignmentSubmission.trim();
+    }
 
     try {
       const response = await apiClient.submitAssignment({
         assignment_id: selectedAssignment.id,
-        content: assignmentSubmission.trim()
+        content: content
       });
 
       if (response.success) {
-        // Show success message
-        alert('Assignment submitted successfully!');
+    if (selectedAssignment.type === 'quiz' || selectedAssignment.title.toLowerCase().includes('quiz')) {
+          // Show quiz results
+          setQuizResults({
+            score: response.data.analysis.score,
+            feedback: response.data.analysis.feedback,
+            showResults: true,
+            canRetake: true
+          });
+        } else {
+          // Show success message for text assignments
+          alert('Assignment submitted successfully!');
 
-        // Reset form
-        setAssignmentSubmission('');
-        setSelectedAssignment(null);
-        setShowAssignmentSubmission(false);
+          // Reset form
+          setAssignmentSubmission('');
+          setSelectedAssignment(null);
+          setShowAssignmentSubmission(false);
+        }
 
-        // Refresh modules to show updated progress
+        // Refresh modules to show updated assignment status
         if (selectedSubject) {
           await loadModules(selectedSubject.id, currentModulesPage);
         }
@@ -483,10 +541,36 @@ What would you like to focus on first?`,
     }
   };
 
-  const openAssignmentSubmission = (assignment: Assignment) => {
+
+
+  const openAssignmentSubmission = async (assignment: Assignment) => {
     setSelectedAssignment(assignment);
     setShowAssignmentSubmission(true);
-    setAssignmentSubmission('');
+    setShowModuleContent(false); // Hide module content when showing assignment submission
+
+    // Get assignment details including quiz questions if this is a quiz assignment
+    if (assignment.type === 'quiz' || assignment.title.toLowerCase().includes('quiz')) {
+      try {
+        const response = await apiClient.getAssignment(assignment.id);
+        if (response.success && response.data.assignment.questions && response.data.assignment.questions.length > 0) {
+          setQuizQuestions(response.data.assignment.questions);
+          setQuizAnswers(new Array(response.data.assignment.questions.length).fill(-1));
+          setQuizResults(null);
+        } else {
+          console.warn('No quiz questions available, falling back to text input');
+          // Don't set quizQuestions, so it will show textarea
+          setQuizQuestions([]);
+          setQuizAnswers([]);
+          setQuizResults(null);
+        }
+      } catch (error) {
+        console.error('Error loading assignment:', error);
+        // Fall back to text input
+        setQuizQuestions([]);
+        setQuizAnswers([]);
+        setQuizResults(null);
+      }
+    }
   };
 
   const getDifficultyColor = (difficulty?: string) => {
@@ -572,12 +656,22 @@ What would you like to focus on first?`,
                       <div
                         key={subject.id}
                         className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition-all cursor-pointer"
-                        onClick={() => {
-                          setSelectedSubject(subject);
-                          setCurrentModulesPage(1);
-                          loadModules(subject.id, 1);
-                          loadKnowledgeSummary(subject.id);
-                        }}
+                         onClick={() => {
+                           // Normalize progress data for modules
+                           const normalizedSubject = {
+                             ...subject,
+                             modules: subject.modules?.map(module => ({
+                               ...module,
+                               progress: module.progress && Array.isArray(module.progress) && module.progress.length > 0
+                                 ? module.progress[0]
+                                 : module.progress
+                             }))
+                           };
+                           setSelectedSubject(normalizedSubject);
+                           setCurrentModulesPage(1);
+                           loadModules(subject.id, 1);
+                           loadKnowledgeSummary(subject.id);
+                         }}
                       >
                         <div className="flex items-start justify-between mb-4">
                           <div className="flex-1">
@@ -659,20 +753,12 @@ What would you like to focus on first?`,
                      </p>
                    </div>
                  </div>
-                 <div className="flex items-center gap-4">
-                   <div className="text-sm text-gray-600">
-                     Difficulty: {selectedModule.difficulty || 'Not specified'} |
-                     Estimated Time: {selectedModule.estimated_time || 0} minutes
-                   </div>
-                   {selectedModule.progress?.status !== 'completed' && (
-                     <button
-                       onClick={markModuleCompleted}
-                       className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 transition-all"
-                     >
-                       Mark as Completed
-                     </button>
-                   )}
-                 </div>
+                  <div className="flex items-center gap-4">
+                    <div className="text-sm text-gray-600">
+                      Difficulty: {selectedModule.difficulty || 'Not specified'} |
+                      Estimated Time: {selectedModule.estimated_time || 0} minutes
+                    </div>
+                  </div>
                </div>
 
                {/* Tabs */}
@@ -721,25 +807,86 @@ What would you like to focus on first?`,
                      <div>
                        <h4 className="text-lg font-medium text-gray-900 mb-4">Assignments</h4>
                        <div className="space-y-4">
-                         {selectedModule.assignments.map((assignment) => (
-                           <div key={assignment.id} className="border border-gray-200 rounded-lg p-4">
-                             <div className="flex items-start justify-between">
-                               <div className="flex-1">
-                                 <h5 className="font-medium text-gray-900">{assignment.title}</h5>
-                                 {assignment.description && (
-                                   <p className="text-gray-600 mt-1">{assignment.description}</p>
-                                 )}
-                                 <p className="text-sm text-gray-500 mt-2">Max Score: {assignment.max_score}</p>
-                               </div>
-                               <button
-                                 onClick={() => openAssignmentSubmission(assignment)}
-                                 className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-all ml-4"
-                               >
-                                 Submit Assignment
-                               </button>
-                             </div>
-                           </div>
-                         ))}
+                          {selectedModule.assignments.map((assignment) => {
+                            const latestSubmission = assignment.submissions?.[0];
+                            const isSubmitted = !!latestSubmission;
+                            const isCompleted = isSubmitted && latestSubmission.score >= 60; // Consider 60% as passing
+                            const score = latestSubmission?.score || 0;
+
+                            return (
+                              <div key={assignment.id} className="border border-gray-200 rounded-lg p-4">
+                                <div className="flex items-start justify-between">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <h5 className="font-medium text-gray-900">{assignment.title}</h5>
+                                      {isSubmitted && (
+                                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                          isCompleted ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                                        }`}>
+                                          {isCompleted ? 'Completed' : 'Submitted'}
+                                        </span>
+                                      )}
+                                    </div>
+                                    {assignment.description && (
+                                      <p className="text-gray-600 mt-1">{assignment.description}</p>
+                                    )}
+                                    <div className="flex items-center gap-4 mt-2">
+                                      <p className="text-sm text-gray-500">Max Score: {assignment.max_score}</p>
+                                      {isSubmitted && (
+                                        <p className="text-sm font-medium text-gray-900">Score: {score}%</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="flex flex-col gap-2 ml-4">
+                                    {latestSubmission && (
+                                      <div className="text-sm text-gray-600">
+                                        Previous Score: <span className={`font-medium ${
+                                          latestSubmission.score >= 80 ? 'text-green-600' :
+                                          latestSubmission.score >= 60 ? 'text-yellow-600' : 'text-red-600'
+                                        }`}>{latestSubmission.score}%</span>
+                                      </div>
+                                    )}
+                                    <button
+                                      onClick={async () => {
+                                        if (latestSubmission && (assignment.type === 'quiz' || assignment.title.toLowerCase().includes('quiz'))) {
+                                          // Retake quiz - reset and load fresh questions
+                                          setSelectedAssignment(assignment);
+                                          setShowAssignmentSubmission(true);
+                                          setAssignmentSubmission('');
+                                          setQuizResults(null);
+                                          setShowModuleContent(false);
+                                          setIsGeneratingQuiz(true);
+
+                                          try {
+                                            const response = await apiClient.getAssignment(assignment.id);
+                                            if (response.success && response.data.assignment.questions) {
+                                              setQuizQuestions(response.data.assignment.questions);
+                                              setQuizAnswers(new Array(response.data.assignment.questions.length).fill(-1));
+                                            } else {
+                                              setQuizQuestions([]);
+                                            }
+                                          } catch (error) {
+                                            console.error('Error loading quiz for retake:', error);
+                                            setQuizQuestions([]);
+                                          } finally {
+                                            setIsGeneratingQuiz(false);
+                                          }
+                                        } else {
+                                          // First time or non-quiz assignment
+                                          openAssignmentSubmission(assignment);
+                                        }
+                                      }}
+                                      className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-all"
+                                    >
+                                      {(assignment.type === 'quiz' || assignment.title.toLowerCase().includes('quiz'))
+                                        ? (latestSubmission ? 'Retake Quiz' : 'Take Quiz')
+                                        : 'Submit Assignment'}
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
                        </div>
                      </div>
                    )}
@@ -801,25 +948,18 @@ What would you like to focus on first?`,
                      )}
                    </div>
 
-                   {/* Chat Input */}
-                   <div className="border-t border-gray-200 p-4 mt-4">
-                     {awaitingCompletionConfirmation ? (
-                       <div className="flex gap-3 justify-center">
-                         <button
-                           onClick={markModuleCompleted}
-                           className="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-all flex items-center gap-2"
-                         >
-                           <CheckCircle className="w-4 h-4" />
-                           Yes, Mark as Completed
-                         </button>
-                         <button
-                           onClick={declineCompletion}
-                           className="px-6 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-all flex items-center gap-2"
-                         >
-                           <X className="w-4 h-4" />
-                           Continue Practicing
-                         </button>
-                       </div>
+                    {/* Chat Input */}
+                    <div className="border-t border-gray-200 p-4 mt-4">
+                      {awaitingCompletionConfirmation ? (
+                        <div className="flex gap-3 justify-center">
+                          <button
+                            onClick={markModuleCompleted}
+                            className="px-6 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-all flex items-center gap-2"
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                            Mark as Completed
+                          </button>
+                        </div>
                      ) : showFullAnswerButton ? (
                        <div className="flex gap-3 justify-center">
                          <button
@@ -892,17 +1032,20 @@ What would you like to focus on first?`,
              <div className="bg-white rounded-xl border border-gray-200 p-6">
                <div className="flex items-center justify-between mb-6">
                  <div className="flex items-center gap-4">
-                   <button
-                     onClick={() => {
-                       setShowAssignmentSubmission(false);
-                       setSelectedAssignment(null);
-                       setAssignmentSubmission('');
-                       setShowModuleContent(true); // Go back to module content
-                     }}
-                     className="text-gray-600 hover:text-gray-900 flex items-center gap-2"
-                   >
-                     ← Back to Module
-                   </button>
+                    <button
+                      onClick={() => {
+                        setShowAssignmentSubmission(false);
+                        setSelectedAssignment(null);
+                        setAssignmentSubmission('');
+                        setQuizQuestions([]);
+                        setQuizAnswers([]);
+                        setQuizResults(null);
+                        setShowModuleContent(true); // Go back to module content
+                      }}
+                      className="text-gray-600 hover:text-gray-900 flex items-center gap-2"
+                    >
+                      ← Back to Module
+                    </button>
                    <div>
                      <h3 className="text-xl font-semibold text-gray-900">Submit Assignment</h3>
                      <p className="text-sm text-gray-600 mt-1">{selectedAssignment.title}</p>
@@ -919,39 +1062,145 @@ What would you like to focus on first?`,
                    <p className="text-sm text-gray-600">Maximum Score: {selectedAssignment.max_score}</p>
                  </div>
 
-                 <div>
-                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                     Your Submission
-                   </label>
-                   <textarea
-                     value={assignmentSubmission}
-                     onChange={(e) => setAssignmentSubmission(e.target.value)}
-                     placeholder="Enter your assignment solution here..."
-                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 h-48 resize-none"
-                   />
-                 </div>
+                  <div>
+                    {selectedAssignment.type === 'quiz' ? (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-4">
+                          Quiz Questions
+                        </label>
+                        {isGeneratingQuiz ? (
+                          <div className="flex items-center justify-center py-8">
+                            <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
+                            <span className="ml-2 text-gray-600">Generating quiz questions...</span>
+                          </div>
+                        ) : quizQuestions.length > 0 ? (
+                          <div className="space-y-6">
+                            {quizQuestions.map((question, questionIndex) => (
+                              <div key={questionIndex} className="border border-gray-200 rounded-lg p-4">
+                                <h5 className="font-medium text-gray-900 mb-3">
+                                  Question {questionIndex + 1}: {question.question}
+                                </h5>
+                                <div className="space-y-2">
+                                  {question.options.map((option, optionIndex) => (
+                                    <label key={optionIndex} className="flex items-center space-x-3 cursor-pointer">
+                                      <input
+                                        type="radio"
+                                        name={`question-${questionIndex}`}
+                                        value={optionIndex}
+                                        checked={quizAnswers[questionIndex] === optionIndex}
+                                        onChange={() => {
+                                          const newAnswers = [...quizAnswers];
+                                          newAnswers[questionIndex] = optionIndex;
+                                          setQuizAnswers(newAnswers);
+                                        }}
+                                        className="text-purple-600 focus:ring-purple-500"
+                                      />
+                                      <span className="text-gray-700">{option}</span>
+                                    </label>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-center py-8 text-gray-600">
+                            Unable to generate quiz questions. Please submit as text instead.
+                            <textarea
+                              value={assignmentSubmission}
+                              onChange={(e) => setAssignmentSubmission(e.target.value)}
+                              placeholder="Enter your quiz answers here..."
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 h-32 resize-none mt-4"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Your Submission
+                        </label>
+                        <textarea
+                          value={assignmentSubmission}
+                          onChange={(e) => setAssignmentSubmission(e.target.value)}
+                          placeholder="Enter your assignment solution here..."
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 h-48 resize-none"
+                        />
+                      </div>
+                    )}
+                  </div>
 
-                 <div className="flex gap-3">
-                   <button
-                     onClick={submitAssignment}
-                     disabled={!assignmentSubmission.trim()}
-                     className="bg-green-500 text-white px-6 py-2 rounded-lg hover:bg-green-600 transition-all disabled:opacity-50 flex items-center gap-2"
-                   >
-                     <Send className="w-4 h-4" />
-                     Submit Assignment
-                   </button>
-                   <button
-                     onClick={() => {
-                       setShowAssignmentSubmission(false);
-                       setSelectedAssignment(null);
-                       setAssignmentSubmission('');
-                       setShowModuleContent(true); // Go back to module content
-                     }}
-                     className="px-6 py-2 text-gray-600 hover:text-gray-900"
-                   >
-                     Cancel
-                   </button>
-                 </div>
+                  {quizResults?.showResults ? (
+                    <div className="space-y-4">
+                      <div className={`p-4 rounded-lg ${quizResults.score >= 80 ? 'bg-green-50 border border-green-200' : quizResults.score >= 60 ? 'bg-yellow-50 border border-yellow-200' : 'bg-red-50 border border-red-200'}`}>
+                        <h4 className="font-medium text-gray-900 mb-2">Quiz Results</h4>
+                        <div className="text-2xl font-bold mb-2">{quizResults.score}%</div>
+                        <p className="text-gray-700">{quizResults.feedback}</p>
+                      </div>
+
+                      {quizResults.canRetake && (
+                        <div className="flex gap-3">
+                          <button
+                            onClick={() => {
+                              // Reset quiz for retake
+                              setQuizResults(null);
+                              setQuizAnswers(new Array(quizQuestions.length).fill(-1));
+                            }}
+                            className="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 transition-all flex items-center gap-2"
+                          >
+                            🔄 Retake Quiz
+                          </button>
+                          <button
+                            onClick={async () => {
+                              setShowAssignmentSubmission(false);
+                              setSelectedAssignment(null);
+                              setAssignmentSubmission('');
+                              setQuizQuestions([]);
+                              setQuizAnswers([]);
+                              setQuizResults(null);
+                              setShowModuleContent(true); // Go back to module content
+
+                              // Refresh modules to show updated assignment status
+                              if (selectedSubject) {
+                                await loadModules(selectedSubject.id, currentModulesPage);
+                              }
+                            }}
+                            className="px-6 py-2 text-gray-600 hover:text-gray-900"
+                          >
+                            Back to Module
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex gap-3">
+                      <button
+                        onClick={submitAssignment}
+                        disabled={
+                          selectedAssignment?.type === 'quiz'
+                            ? quizAnswers.some(answer => answer === -1) || quizQuestions.length === 0
+                            : !assignmentSubmission.trim()
+                        }
+                        className="bg-green-500 text-white px-6 py-2 rounded-lg hover:bg-green-600 transition-all disabled:opacity-50 flex items-center gap-2"
+                      >
+                        <Send className="w-4 h-4" />
+                        Submit Assignment
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowAssignmentSubmission(false);
+                          setSelectedAssignment(null);
+                          setAssignmentSubmission('');
+                          setQuizQuestions([]);
+                          setQuizAnswers([]);
+                          setQuizResults(null);
+                          setShowModuleContent(true); // Go back to module content
+                        }}
+                        className="px-6 py-2 text-gray-600 hover:text-gray-900"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
                </div>
              </div>
            </div>

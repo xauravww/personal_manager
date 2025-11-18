@@ -136,7 +136,15 @@ router.get('/subjects/:subjectId/modules', async (req, res) => {
           progress: {
             where: { user_id: userId }
           },
-          assignments: true
+          assignments: {
+            include: {
+              submissions: {
+                where: { user_id: userId },
+                orderBy: { submitted_at: 'desc' },
+                take: 1 // Get the latest submission
+              }
+            }
+          }
         },
         orderBy: { order_index: 'asc' },
         skip,
@@ -261,6 +269,143 @@ router.post('/progress', async (req, res) => {
   }
 });
 
+// Create assignment
+router.post('/assignments', async (req, res) => {
+  try {
+    const userId = (req as any).user.id;
+    const { module_id, title, description, type, content, max_score, time_limit, due_date, is_required } = req.body;
+
+    // Verify module belongs to user's subject
+    const module = await prisma.learningModule.findFirst({
+      where: {
+        id: module_id,
+        subject: {
+          user_id: userId
+        }
+      }
+    });
+
+    if (!module) {
+      return res.status(404).json({ error: 'Module not found' });
+    }
+
+    const assignment = await prisma.assignment.create({
+      data: {
+        module_id,
+        title,
+        description,
+        type: type || 'exercise',
+        content,
+        max_score: max_score || 100,
+        time_limit,
+        due_date: due_date ? new Date(due_date) : undefined,
+        is_required: is_required !== undefined ? is_required : true
+      }
+    });
+
+    res.status(201).json(assignment);
+  } catch (error) {
+    console.error('Error creating assignment:', error);
+    res.status(500).json({ error: 'Failed to create assignment' });
+  }
+});
+
+// Get assignment details (including quiz questions)
+router.get('/assignments/:id', async (req, res) => {
+  try {
+    const userId = (req as any).user.id;
+    const { id } = req.params;
+
+    // Get assignment with module and subject info
+    const assignment = await prisma.assignment.findFirst({
+      where: {
+        id,
+        module: {
+          subject: {
+            user_id: userId
+          }
+        }
+      },
+      include: {
+        module: {
+          include: {
+            subject: true
+          }
+        },
+        submissions: {
+          where: { user_id: userId },
+          orderBy: { submitted_at: 'desc' },
+          take: 1
+        }
+      }
+    });
+
+    if (!assignment) {
+      return res.status(404).json({ error: 'Assignment not found' });
+    }
+
+    let content = assignment.content;
+    let questions = null;
+
+    // Generate quiz questions if this is a quiz assignment
+    if (assignment.type === 'quiz') {
+      // Count previous attempts
+      const previousAttempts = await prisma.assignmentSubmission.count({
+        where: {
+          assignment_id: id,
+          user_id: userId
+        }
+      });
+
+      // Generate fresh questions
+      const quizData = await aiService.generateQuizQuestions(
+        {
+          title: assignment.title,
+          description: assignment.description || '',
+          moduleContent: assignment.module.content || '',
+          subjectName: assignment.module.subject.name
+        },
+        assignment.module.subject.current_level || 'intermediate',
+        previousAttempts
+      );
+
+      questions = quizData.questions;
+      content = JSON.stringify({
+        questions: quizData.questions,
+        difficulty: quizData.difficulty,
+        generatedAt: new Date().toISOString()
+      });
+    }
+
+    res.json({
+      assignment: {
+        id: assignment.id,
+        title: assignment.title,
+        description: assignment.description,
+        type: assignment.type,
+        content,
+        questions, // For quizzes, the parsed questions
+        max_score: assignment.max_score,
+        time_limit: assignment.time_limit,
+        due_date: assignment.due_date,
+        is_required: assignment.is_required,
+        module: {
+          id: assignment.module.id,
+          title: assignment.module.title
+        },
+        subject: {
+          id: assignment.module.subject.id,
+          name: assignment.module.subject.name
+        }
+      },
+      previousSubmission: assignment.submissions[0] || null
+    });
+  } catch (error) {
+    console.error('Error fetching assignment:', error);
+    res.status(500).json({ error: 'Failed to fetch assignment' });
+  }
+});
+
 // Assignment submission
 router.post('/assignments/submit', async (req, res) => {
   try {
@@ -290,40 +435,181 @@ router.post('/assignments/submit', async (req, res) => {
       return res.status(404).json({ error: 'Assignment not found' });
     }
 
-    // Analyze submission with AI
-    const analysis = await aiService.analyzeAssignmentSubmission(
-      {
-        title: assignment.title,
-        description: assignment.description || '',
-        solution: assignment.solution || undefined
-      },
-      content,
-      assignment.module.subject.name
-    );
+    let analysis;
+    let score: number;
+    let feedback: string;
+    let weakPoints: any[] = [];
 
-    // Create or update submission
-    const submission = await prisma.assignmentSubmission.upsert({
-      where: {
-        assignment_id_user_id: {
-          assignment_id,
-          user_id: userId
+    // Handle quiz submissions differently
+    if (assignment.type === 'quiz') {
+      // Parse structured quiz submission
+      let userAnswers: { [questionId: string]: number } = {};
+      let quizQuestions: any[] = [];
+
+      try {
+        // Try to parse as JSON first (new format)
+        const submissionData = JSON.parse(content);
+        userAnswers = submissionData.answers || {};
+        quizQuestions = submissionData.questions || [];
+      } catch {
+        // Fallback to old format parsing
+        const questionBlocks = content.split('\n\n');
+        for (const block of questionBlocks) {
+          if (block.trim() && block.includes('Answer:')) {
+            // This is legacy format, handle as before
+            // For now, we'll assume new format is used
+          }
         }
-      },
-      update: {
+      }
+
+      // If we have structured questions, use them
+      if (quizQuestions.length > 0) {
+        let correctAnswers = 0;
+        const quizWeakPoints: any[] = [];
+
+        for (const question of quizQuestions) {
+          const userAnswer = userAnswers[question.id];
+          if (userAnswer !== undefined) {
+            if (userAnswer === question.correctAnswer) {
+              correctAnswers++;
+            } else {
+              // Incorrect answer
+              quizWeakPoints.push({
+                topic: question.topic,
+                description: `Incorrect answer on: ${question.question.substring(0, 50)}...`,
+                severity: 'medium',
+                suggestions: [
+                  'Review the related learning material',
+                  `Study: ${question.topic}`,
+                  'Practice similar questions'
+                ]
+              });
+            }
+          }
+        }
+
+        const totalQuestions = quizQuestions.length;
+        score = totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0;
+
+        feedback = `Quiz Results: ${correctAnswers}/${totalQuestions} correct answers (${score}%). ` +
+          (score >= 80 ? 'Great job! You have a good understanding of this topic.' :
+           score >= 60 ? 'Good effort! Consider reviewing the areas you missed.' :
+           'You may need to review this material more thoroughly.');
+
+        if (quizWeakPoints.length > 0) {
+          feedback += ` Focus on improving: ${quizWeakPoints.map(wp => wp.topic).join(', ')}.`;
+        }
+
+        weakPoints = quizWeakPoints;
+
+        analysis = {
+          score,
+          feedback,
+          weakPoints: quizWeakPoints,
+          strengths: score >= 80 ? ['Good understanding of quiz topics'] : [],
+          improvementAreas: quizWeakPoints.map(wp => wp.suggestions[0])
+        };
+      } else {
+        // Fallback to old parsing logic
+        const questionBlocks = content.split('\n\n');
+        let correctAnswers = 0;
+        let totalQuestions = 0;
+        const quizWeakPoints: any[] = [];
+
+        for (const block of questionBlocks) {
+          if (block.trim() && block.includes('Answer:')) {
+            totalQuestions++;
+
+            const answerLine = block.split('\n').find(line => line.includes('Answer:'));
+            if (answerLine && answerLine.includes('(Correct)')) {
+              correctAnswers++;
+            } else if (answerLine && answerLine.includes('(Incorrect')) {
+              const questionLine = block.split('\n').find(line => line.startsWith('Q') && line.includes(':'));
+              if (questionLine) {
+                const questionText = questionLine.split(':')[1]?.trim().split('?')[0] || 'Quiz question';
+                quizWeakPoints.push({
+                  topic: questionText.substring(0, 50),
+                  description: 'Incorrect answer on quiz question',
+                  severity: 'medium',
+                  suggestions: ['Review the related learning material', 'Practice similar questions']
+                });
+              }
+            }
+          }
+        }
+
+        score = totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0;
+
+        feedback = `Quiz Results: ${correctAnswers}/${totalQuestions} correct answers (${score}%). ` +
+          (score >= 80 ? 'Great job! You have a good understanding of this topic.' :
+           score >= 60 ? 'Good effort! Consider reviewing the areas you missed.' :
+           'You may need to review this material more thoroughly.');
+
+        if (quizWeakPoints.length > 0) {
+          feedback += ` Focus on improving: ${quizWeakPoints.map(wp => wp.topic).join(', ')}.`;
+        }
+
+        weakPoints = quizWeakPoints;
+
+        analysis = {
+          score,
+          feedback,
+          weakPoints: quizWeakPoints,
+          strengths: score >= 80 ? ['Good understanding of quiz topics'] : [],
+          improvementAreas: quizWeakPoints.map(wp => wp.suggestions[0])
+        };
+      }
+    } else if (assignment.type === 'code_challenge') {
+      // Analyze code submissions with AI
+      analysis = await aiService.analyzeAssignmentSubmission(
+        {
+          title: assignment.title,
+          description: assignment.description || '',
+          solution: assignment.solution || undefined
+        },
         content,
-        score: analysis.score,
-        feedback: analysis.feedback,
-        weak_points: JSON.stringify(analysis.weakPoints),
-        submitted_at: new Date(),
-        graded_at: new Date()
-      },
-      create: {
+        assignment.module.subject.name
+      );
+      score = analysis.score;
+      feedback = analysis.feedback;
+      weakPoints = analysis.weakPoints;
+    } else if (assignment.type === 'file_upload') {
+      // For file uploads, provide basic feedback
+      analysis = {
+        score: 100, // Assume uploaded files are complete
+        feedback: 'File uploaded successfully. Manual review may be required.',
+        weakPoints: [],
+        strengths: ['File submitted on time'],
+        improvementAreas: []
+      };
+      score = analysis.score;
+      feedback = analysis.feedback;
+      weakPoints = analysis.weakPoints;
+    } else {
+      // Analyze text/code submissions with AI
+      analysis = await aiService.analyzeAssignmentSubmission(
+        {
+          title: assignment.title,
+          description: assignment.description || '',
+          solution: assignment.solution || undefined
+        },
+        content,
+        assignment.module.subject.name
+      );
+      score = analysis.score;
+      feedback = analysis.feedback;
+      weakPoints = analysis.weakPoints;
+    }
+
+    // Create new submission (allow multiple submissions for retakes)
+    const submission = await prisma.assignmentSubmission.create({
+      data: {
         assignment_id,
         user_id: userId,
         content,
-        score: analysis.score,
-        feedback: analysis.feedback,
-        weak_points: JSON.stringify(analysis.weakPoints)
+        score,
+        feedback,
+        weak_points: JSON.stringify(weakPoints)
       }
     });
 
@@ -366,6 +652,301 @@ router.post('/assignments/submit', async (req, res) => {
   } catch (error) {
     console.error('Error submitting assignment:', error);
     res.status(500).json({ error: 'Failed to submit assignment' });
+  }
+});
+
+// Get detailed learning analytics
+router.get('/progress/analytics', async (req, res) => {
+  try {
+    const userId = (req as any).user.id;
+    const { subject_id, days = 30 } = req.query;
+
+    const daysNum = parseInt(days as string, 10);
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - daysNum);
+
+    // Build where clause
+    const whereClause: any = {
+      user_id: userId,
+      created_at: { gte: startDate }
+    };
+    if (subject_id) {
+      whereClause.subject_id = subject_id;
+    }
+
+    // Get assignment submissions with details
+    const submissions = await prisma.assignmentSubmission.findMany({
+      where: whereClause,
+      include: {
+        assignment: {
+          include: {
+            module: {
+              include: {
+                subject: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: { submitted_at: 'desc' }
+    });
+
+    // Get progress records
+    const progressRecords = await prisma.learningProgress.findMany({
+      where: whereClause,
+      include: {
+        module: {
+          include: {
+            subject: true
+          }
+        }
+      },
+      orderBy: { updated_at: 'desc' }
+    });
+
+    // Get weak points
+    const weakPoints = await prisma.weakPoint.findMany({
+      where: {
+        user_id: userId,
+        ...(subject_id && { subject_id: subject_id as string })
+      },
+      orderBy: { last_identified: 'desc' },
+      include: {
+        subject: true
+      }
+    });
+
+    // Calculate analytics
+    const analytics: {
+      timeRange: { days: number; startDate: Date; endDate: Date };
+      assignmentPerformance: {
+        totalSubmissions: number;
+        averageScore: number;
+        submissionsBySubject: { [key: string]: number };
+        scoreTrend: { date: string; averageScore: number; submissionCount: number }[];
+        retakeRate: number;
+      };
+      progressMetrics: {
+        modulesStarted: number;
+        modulesCompleted: number;
+        totalTimeSpent: number;
+        averageTimePerModule: number;
+        completionRate: number;
+      };
+      weakPointsAnalysis: {
+        totalWeakPoints: number;
+        topWeakPoints: { topic: string; frequency: number; severity: string }[];
+        weakPointsBySubject: { [key: string]: number };
+      };
+      learningPatterns: {
+        mostActiveDays: { day: string; count: number }[];
+        peakLearningHours: { hour: number; count: number }[];
+        subjectDistribution: { [key: string]: number };
+      };
+    } = {
+      timeRange: {
+        days: daysNum,
+        startDate,
+        endDate: new Date()
+      },
+      assignmentPerformance: {
+        totalSubmissions: submissions.length,
+        averageScore: submissions.length > 0
+          ? submissions.reduce((sum, s) => sum + (s.score || 0), 0) / submissions.length
+          : 0,
+        submissionsBySubject: {},
+        scoreTrend: [],
+        retakeRate: 0
+      },
+      progressMetrics: {
+        modulesStarted: new Set(progressRecords.map(p => p.module_id)).size,
+        modulesCompleted: progressRecords.filter(p => p.status === 'completed').length,
+        totalTimeSpent: progressRecords.reduce((sum, p) => sum + p.time_spent, 0),
+        averageTimePerModule: 0,
+        completionRate: 0
+      },
+      weakPointsAnalysis: {
+        totalWeakPoints: weakPoints.length,
+        topWeakPoints: weakPoints.slice(0, 5).map(wp => ({
+          topic: wp.topic,
+          frequency: wp.frequency,
+          severity: wp.severity
+        })),
+        weakPointsBySubject: {}
+      },
+      learningPatterns: {
+        mostActiveDays: [],
+        peakLearningHours: [],
+        subjectDistribution: {}
+      }
+    };
+
+    // Calculate submissions by subject
+    submissions.forEach(sub => {
+      const subjectName = sub.assignment.module.subject.name;
+      if (!analytics.assignmentPerformance.submissionsBySubject[subjectName]) {
+        analytics.assignmentPerformance.submissionsBySubject[subjectName] = 0;
+      }
+      analytics.assignmentPerformance.submissionsBySubject[subjectName]++;
+    });
+
+    // Calculate score trend (daily averages)
+    const dailyScores: { [date: string]: number[] } = {};
+    submissions.forEach(sub => {
+      const date = sub.submitted_at.toISOString().split('T')[0];
+      if (!dailyScores[date]) dailyScores[date] = [];
+      if (sub.score) dailyScores[date].push(sub.score);
+    });
+
+    analytics.assignmentPerformance.scoreTrend = Object.entries(dailyScores)
+      .map(([date, scores]) => ({
+        date,
+        averageScore: scores.reduce((sum, s) => sum + s, 0) / scores.length,
+        submissionCount: scores.length
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    // Calculate retake rate
+    const assignmentIds = [...new Set(submissions.map(s => s.assignment_id))];
+    let totalRetakes = 0;
+    for (const assignmentId of assignmentIds) {
+      const assignmentSubs = submissions.filter(s => s.assignment_id === assignmentId);
+      if (assignmentSubs.length > 1) {
+        totalRetakes += assignmentSubs.length - 1;
+      }
+    }
+    analytics.assignmentPerformance.retakeRate = submissions.length > 0
+      ? (totalRetakes / submissions.length) * 100
+      : 0;
+
+    // Calculate progress metrics
+    const totalModules = progressRecords.length;
+    analytics.progressMetrics.averageTimePerModule = totalModules > 0
+      ? analytics.progressMetrics.totalTimeSpent / totalModules
+      : 0;
+    analytics.progressMetrics.completionRate = totalModules > 0
+      ? (analytics.progressMetrics.modulesCompleted / totalModules) * 100
+      : 0;
+
+    // Calculate weak points by subject
+    weakPoints.forEach((wp: any) => {
+      const subjectName = wp.subject?.name || 'General';
+      if (!analytics.weakPointsAnalysis.weakPointsBySubject[subjectName]) {
+        analytics.weakPointsAnalysis.weakPointsBySubject[subjectName] = 0;
+      }
+      analytics.weakPointsAnalysis.weakPointsBySubject[subjectName]++;
+    });
+
+    // Calculate learning patterns
+    const hourCounts: { [hour: number]: number } = {};
+    const dayCounts: { [day: number]: number } = {};
+    const subjectCounts: { [subject: string]: number } = {};
+
+    submissions.forEach(sub => {
+      const hour = sub.submitted_at.getHours();
+      const day = sub.submitted_at.getDay();
+      const subject = sub.assignment.module.subject.name;
+
+      hourCounts[hour] = (hourCounts[hour] || 0) + 1;
+      dayCounts[day] = (dayCounts[day] || 0) + 1;
+      subjectCounts[subject] = (subjectCounts[subject] || 0) + 1;
+    });
+
+    analytics.learningPatterns.peakLearningHours = Object.entries(hourCounts)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 3)
+      .map(([hour, count]) => ({ hour: parseInt(hour), count }));
+
+    analytics.learningPatterns.mostActiveDays = Object.entries(dayCounts)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 3)
+      .map(([day, count]) => ({
+        day: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][parseInt(day)],
+        count
+      }));
+
+    analytics.learningPatterns.subjectDistribution = subjectCounts;
+
+    res.json(analytics);
+  } catch (error) {
+    console.error('Error fetching analytics:', error);
+    res.status(500).json({ error: 'Failed to fetch analytics' });
+  }
+});
+
+// Get upcoming assignments and due dates
+router.get('/assignments/upcoming', async (req, res) => {
+  try {
+    const userId = (req as any).user.id;
+    const { days = 7 } = req.query;
+
+    const daysNum = parseInt(days as string, 10);
+    const futureDate = new Date();
+    futureDate.setDate(futureDate.getDate() + daysNum);
+
+    const assignments = await prisma.assignment.findMany({
+      where: {
+        module: {
+          subject: {
+            user_id: userId,
+            is_active: true
+          }
+        },
+        due_date: {
+          lte: futureDate,
+          gte: new Date()
+        }
+      },
+      include: {
+        module: {
+          include: {
+            subject: true,
+            progress: {
+              where: { user_id: userId }
+            }
+          }
+        },
+        submissions: {
+          where: { user_id: userId },
+          orderBy: { submitted_at: 'desc' },
+          take: 1
+        }
+      },
+      orderBy: { due_date: 'asc' }
+    });
+
+    const upcomingAssignments = assignments.map(assignment => ({
+      id: assignment.id,
+      title: assignment.title,
+      description: assignment.description,
+      type: assignment.type,
+      due_date: assignment.due_date,
+      time_limit: assignment.time_limit,
+      max_score: assignment.max_score,
+      is_required: assignment.is_required,
+      days_until_due: assignment.due_date
+        ? Math.ceil((assignment.due_date.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+        : null,
+      module: {
+        id: assignment.module.id,
+        title: assignment.module.title
+      },
+      subject: {
+        id: assignment.module.subject.id,
+        name: assignment.module.subject.name
+      },
+      status: assignment.submissions.length > 0 ? 'submitted' : 'pending',
+      latest_submission: assignment.submissions[0] || null
+    }));
+
+    res.json({
+      upcomingAssignments,
+      totalCount: upcomingAssignments.length,
+      urgentCount: upcomingAssignments.filter(a => a.days_until_due !== null && a.days_until_due <= 1).length
+    });
+  } catch (error) {
+    console.error('Error fetching upcoming assignments:', error);
+    res.status(500).json({ error: 'Failed to fetch upcoming assignments' });
   }
 });
 
@@ -555,11 +1136,17 @@ router.post('/generate-course', async (req, res) => {
 
       // Create assignments for this module
       for (const assignmentData of moduleData.assignments) {
+        // Determine assignment type - default to quiz if title contains 'quiz'
+        let assignmentType = assignmentData.type || 'exercise';
+        if (assignmentData.title.toLowerCase().includes('quiz') && !assignmentData.type) {
+          assignmentType = 'quiz';
+        }
+
         await prisma.assignment.create({
           data: {
             module_id: module.id,
             title: assignmentData.title,
-            type: assignmentData.type as any,
+            type: assignmentType as any,
             description: assignmentData.description
           }
         });
@@ -867,7 +1454,33 @@ router.post('/modules/chat', async (req, res) => {
       });
     }
 
-    // Build context for AI with completion authority
+    // Check if module has assignments and if they are all submitted
+    const hasAssignments = module.assignments && module.assignments.length > 0;
+    let allAssignmentsSubmitted = true;
+    let pendingAssignmentsCount = 0;
+
+    if (hasAssignments) {
+      const assignmentSubmissions = await prisma.assignmentSubmission.findMany({
+        where: {
+          user_id: userId,
+          assignment: {
+            module_id: module_id
+          }
+        }
+      });
+
+      const submittedAssignmentIds = assignmentSubmissions.map(sub => sub.assignment_id);
+      const allAssignmentIds = module.assignments.map(assignment => assignment.id);
+
+      pendingAssignmentsCount = allAssignmentIds.length - submittedAssignmentIds.length;
+      allAssignmentsSubmitted = pendingAssignmentsCount === 0;
+    }
+
+    // Build context for AI with completion suggestion authority
+    const assignmentsInfo = hasAssignments
+      ? `Assignments: ${module.assignments.length} total, ${pendingAssignmentsCount} pending submissions`
+      : 'Assignments: None';
+
     const context = `
 Module: ${module.title}
 Description: ${module.description || 'No description'}
@@ -875,9 +1488,13 @@ Content: ${module.content || 'No content'}
 Difficulty: ${module.difficulty || 'Not specified'}
 Subject: ${module.subject.name}
 Current Status: ${existingProgress?.status || 'not_started'}
+${assignmentsInfo}
 
-IMPORTANT: You have the authority to mark this module as completed when the user demonstrates sufficient understanding.
-If the user shows clear understanding of the key concepts, responds to questions appropriately, or indicates they've mastered the material, mark the module as completed.
+${hasAssignments && !allAssignmentsSubmitted
+  ? `CRITICAL: This module has ${pendingAssignmentsCount} unsubmitted assignment(s). The user MUST complete and submit ALL assignments before they can mark this module as completed. Do not suggest completion until all assignments are submitted.`
+  : 'All assignments have been submitted - user can potentially complete this module.'}
+
+IMPORTANT: You can ONLY suggest that the user mark this module as completed when they demonstrate sufficient understanding AND have completed ALL assignments for this module.
 
 Conversation History:
 ${conversation_history ? conversation_history.map((msg: any) => `${msg.role}: ${msg.content}`).join('\n') : 'No previous conversation'}
@@ -886,9 +1503,13 @@ User's current message: ${message}
 
 Instructions:
 - Assess the user's understanding based on their responses
-- If they demonstrate mastery, mark the module as completed
+- CHECK ASSIGNMENT STATUS: If there are unsubmitted assignments, remind the user to complete them before suggesting completion
+- Only suggest completion if: 1) User demonstrates mastery, AND 2) ALL assignments are submitted
+- If assignments are pending, tell the user they must complete and submit all assignments first
 - Be decisive - don't prolong conversations unnecessarily
-- When completing, give a congratulatory message and end the learning session
+- Give encouraging feedback and indicate when they're ready to complete (but only after assignments are done)
+- When suggesting completion, use phrases like "you can now mark this module as completed" or "ready to complete the module"
+- Do NOT suggest completion in the initial welcome message or generic responses
     `.trim();
 
     // Generate AI response with completion authority
@@ -903,43 +1524,45 @@ Instructions:
     let shouldMarkCompleted = false;
     let completionResponse = typeof aiResponse === 'string' ? aiResponse : 'I understand. Let me help you with that.';
 
-    // Check if AI response indicates completion - be very specific to avoid false positives
+    // Check if AI response suggests completion - be very specific and only if all assignments are submitted
     const lowerResponse = completionResponse.toLowerCase();
-    if ((lowerResponse.includes('module has been completed') ||
-         lowerResponse.includes('marking as complete') ||
-         lowerResponse.includes('automatically marked as completed') ||
-         lowerResponse.includes('module is now completed')) &&
-        (lowerResponse.includes('🎉') ||
-         lowerResponse.includes('congratulations') ||
-         lowerResponse.includes('well done'))) {
-      shouldMarkCompleted = true;
+    if (allAssignmentsSubmitted) {
+      // Look for explicit completion suggestions with positive indicators
+      // Be very strict - only trigger on specific completion suggestions
+      const hasCompletionSuggestion = (
+        lowerResponse.includes('ready to complete the module') ||
+        lowerResponse.includes('you can now mark this module as completed') ||
+        lowerResponse.includes('i suggest marking this module as completed') ||
+        lowerResponse.includes('you\'ve successfully completed this module')
+      );
+
+      const hasPositiveIndicator = (
+        lowerResponse.includes('🎯') ||
+        lowerResponse.includes('great job') ||
+        lowerResponse.includes('excellent work') ||
+        lowerResponse.includes('well done') ||
+        lowerResponse.includes('congratulations') ||
+        lowerResponse.includes('you\'ve demonstrated sufficient understanding')
+      );
+
+      // Additional check: response should be focused on completion, not just mentioning it
+      const isCompletionFocused = (
+        lowerResponse.includes('module as completed') ||
+        lowerResponse.includes('mark this module') ||
+        lowerResponse.includes('complete the module')
+      );
+
+      // Only suggest completion if we have clear suggestion, positive feedback, and completion focus
+      // Also ensure this isn't the first response or a generic response
+      const hasSubstantialConversation = conversation_history && conversation_history.length > 1;
+
+      if (hasCompletionSuggestion && hasPositiveIndicator && isCompletionFocused && hasSubstantialConversation) {
+        shouldMarkCompleted = true;
+      }
     }
 
-    // If AI decides to complete, update the database
-    if (shouldMarkCompleted) {
-      await prisma.learningProgress.upsert({
-        where: {
-          user_id_module_id: {
-            user_id: userId,
-            module_id: module_id
-          }
-        },
-        update: {
-          status: 'completed',
-          score: 100,
-          completed_at: new Date()
-        },
-        create: {
-          user_id: userId,
-          subject_id: module.subject_id,
-          module_id: module_id,
-          status: 'completed',
-          score: 100,
-          time_spent: existingProgress?.time_spent || 0,
-          completed_at: new Date()
-        }
-      });
-    }
+    // Note: We don't automatically complete the module here.
+    // The AI will indicate when the user can complete it, but the user must click the button to actually complete it.
 
     // Analyze learning progress from conversation
     const progressAnalysis = await aiService.analyzeAssignmentSubmission(
@@ -994,7 +1617,12 @@ Instructions:
         strengths: progressAnalysis.strengths,
         weakPoints: progressAnalysis.weakPoints
       },
-      completed: shouldMarkCompleted
+      completed: shouldMarkCompleted,
+      assignmentStatus: {
+        hasAssignments,
+        allSubmitted: allAssignmentsSubmitted,
+        pendingCount: pendingAssignmentsCount
+      }
     });
   } catch (error) {
     console.error('Error in module chat:', error);

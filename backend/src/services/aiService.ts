@@ -1637,6 +1637,110 @@ Be specific, encouraging, and accurate based on the data provided.`;
   }
 
   /**
+   * Generate quiz questions for an assignment
+   */
+  async generateQuizQuestions(
+    assignment: {
+      title: string;
+      description: string;
+      moduleContent?: string;
+      subjectName: string;
+    },
+    userLevel: string,
+    previousAttempts: number = 0
+  ): Promise<{
+    questions: Array<{
+      id: string;
+      question: string;
+      options: string[];
+      correctAnswer: number;
+      explanation: string;
+      topic: string;
+    }>;
+    difficulty: string;
+  }> {
+    try {
+      const contextPrompt = `
+Assignment: ${assignment.title}
+Description: ${assignment.description}
+Module Content: ${assignment.moduleContent || 'Not provided'}
+Subject: ${assignment.subjectName}
+User Level: ${userLevel}
+Previous Attempts: ${previousAttempts}
+
+Generate a quiz with 5-8 questions that test understanding of the key concepts.
+For retakes (previousAttempts > 0), create different questions covering similar but not identical topics.
+      `.trim();
+
+      const systemPrompt = `You are a quiz generation AI creating educational assessments.
+
+${contextPrompt}
+
+Create questions that:
+1. Test conceptual understanding, not just memorization
+2. Include a mix of difficulty levels appropriate for the user's level
+3. Have 4 multiple-choice options with one clearly correct answer
+4. Include explanations for why the answer is correct
+5. Cover different aspects of the topic
+6. For retakes, vary the questions while maintaining similar difficulty
+
+Return a JSON object with this structure:
+{
+  "questions": [
+    {
+      "id": "q1",
+      "question": "What is the main concept being tested?",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correctAnswer": 0,
+      "explanation": "Explanation of why this answer is correct and why others are wrong",
+      "topic": "specific topic or concept"
+    }
+  ],
+  "difficulty": "beginner|intermediate|advanced"
+}
+
+Ensure questions are clear, unambiguous, and educational.`;
+
+      const response = await this.createChatCompletion({
+        model: this.config.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Generate a quiz for: ${assignment.title}` }
+        ],
+        temperature: 0.7, // Higher temperature for variety in retakes
+      });
+
+      const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
+      if (content) {
+        try {
+          const quiz = JSON.parse(content);
+          return {
+            questions: quiz.questions || [],
+            difficulty: quiz.difficulty || 'intermediate'
+          };
+        } catch (error) {
+          console.warn('Error parsing quiz generation:', error);
+          return {
+            questions: [],
+            difficulty: 'intermediate'
+          };
+        }
+      }
+
+      return {
+        questions: [],
+        difficulty: 'intermediate'
+      };
+    } catch (error) {
+      console.warn('Error generating quiz questions:', error);
+      return {
+        questions: [],
+        difficulty: 'intermediate'
+      };
+    }
+  }
+
+  /**
    * Get learning recommendations based on user progress and weak points
    */
   async getLearningRecommendations(

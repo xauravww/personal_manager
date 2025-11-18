@@ -459,6 +459,10 @@ class ApiClient {
     });
   }
 
+  async getAssignment(id: string): Promise<ApiResponse<any>> {
+    return this.request(`/learning/assignments/${id}`);
+  }
+
   async submitAssignment(submission: {
     assignment_id: string;
     content: string;

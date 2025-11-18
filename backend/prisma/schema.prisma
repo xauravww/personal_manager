@@ -26,6 +26,7 @@ model User {
   assignmentSubmissions AssignmentSubmission[]
   weakPoints WeakPoint[]
   mindmaps MindMap[]
+  learningDNA UserLearningDNA?
 
   @@map("users")
 }
@@ -144,13 +145,16 @@ model Assignment {
   module_id   String
   title       String
   description String?
-  type        String    @default("exercise") // "quiz", "exercise", "project", "code_challenge", "file_upload"
+  type        String    @default("exercise") // "quiz", "exercise", "project", "code_challenge", "file_upload", "structured", "chat_guided", "hybrid"
   content     String?   // assignment content or questions
   solution    String?   // correct solution or rubric
   max_score   Float     @default(100)
   time_limit  Int?      // in minutes
   due_date    DateTime? // assignment due date
   is_required Boolean   @default(true)
+  steps       String?   // JSON array of assignment steps for structured assignments
+  ai_config   String?   // JSON AI configuration for adaptive assignments
+  modalities  String?   // JSON array of supported modalities ["text", "visual", "audio", "interactive"]
   created_at  DateTime  @default(now()) @map("created_at")
   updated_at  DateTime  @updatedAt @map("updated_at")
 
@@ -169,6 +173,7 @@ model AssignmentSubmission {
   score         Float?   // AI-assigned score
   feedback      String?  // AI-generated feedback
   weak_points   String?  // JSON array of identified weak points
+  steps_progress String? // JSON array of step-by-step progress for structured assignments
   submitted_at  DateTime @default(now())
   graded_at     DateTime?
 
@@ -216,4 +221,17 @@ model MindMap {
   subject LearningSubject? @relation(fields: [subject_id], references: [id], onDelete: Cascade)
 
   @@map("mindmaps")
+}
+
+model UserLearningDNA {
+  id                    String   @id @default(uuid())
+  user_id               String   @unique
+  learning_dna          String   // JSON learning profile
+  last_updated          DateTime @updatedAt
+  created_at            DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("user_learning_dna")
 }

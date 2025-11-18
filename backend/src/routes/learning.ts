@@ -1413,6 +1413,188 @@ router.post('/mindmaps/generate', async (req, res) => {
   }
 });
 
+// Generate adaptive assignment
+router.post('/assignments/generate-adaptive', async (req, res) => {
+  try {
+    const userId = (req as any).user.id;
+    const { subject_name, knowledge_gaps, preferred_modalities } = req.body;
+
+    // Get user's learning DNA
+    let learningDNA = {};
+    try {
+      const userDNA = await prisma.userLearningDNA.findUnique({
+        where: { user_id: userId }
+      });
+      if (userDNA) {
+        learningDNA = JSON.parse(userDNA.learning_dna);
+      }
+    } catch (error) {
+      console.warn('Error loading learning DNA:', error);
+    }
+
+    // Generate adaptive assignment
+    const result = await aiService.generateAdaptiveAssignmentFromDNA(
+      subject_name,
+      learningDNA,
+      knowledge_gaps || [],
+      preferred_modalities || ['text']
+    );
+
+    // Create assignment in database
+    const subject = await prisma.learningSubject.findFirst({
+      where: {
+        user_id: userId,
+        name: subject_name,
+        is_active: true
+      }
+    });
+
+    if (!subject) {
+      return res.status(404).json({ error: 'Subject not found' });
+    }
+
+    // Get first module or create one
+    let module = await prisma.learningModule.findFirst({
+      where: {
+        subject_id: subject.id,
+        order_index: 0
+      }
+    });
+
+    if (!module) {
+      module = await prisma.learningModule.create({
+        data: {
+          subject_id: subject.id,
+          title: 'Adaptive Learning Module',
+          description: 'AI-generated adaptive learning content',
+          order_index: 0
+        }
+      });
+    }
+
+    const assignment = await prisma.assignment.create({
+      data: {
+        module_id: module.id,
+        title: result.assignment.title,
+        description: result.assignment.description,
+        type: result.assignment.type,
+        steps: JSON.stringify(result.assignment.steps),
+        modalities: JSON.stringify(result.assignment.modalities),
+        max_score: 100,
+        time_limit: result.assignment.estimated_time
+      }
+    });
+
+    res.json({
+      assignment: {
+        ...assignment,
+        steps: result.assignment.steps,
+        modalities: result.assignment.modalities
+      },
+      reasoning: result.reasoning
+    });
+  } catch (error) {
+    console.error('Error generating adaptive assignment:', error);
+    res.status(500).json({ error: 'Failed to generate adaptive assignment' });
+  }
+});
+
+// Analyze step performance and update learning DNA
+router.post('/assignments/analyze-step', async (req, res) => {
+  try {
+    const userId = (req as any).user.id;
+    const { assignment_id, step, user_input, time_spent } = req.body;
+
+    // Get assignment details
+    const assignment = await prisma.assignment.findFirst({
+      where: {
+        id: assignment_id,
+        module: {
+          subject: {
+            user_id: userId
+          }
+        }
+      },
+      include: {
+        module: {
+          include: {
+            subject: true
+          }
+        }
+      }
+    });
+
+    if (!assignment) {
+      return res.status(404).json({ error: 'Assignment not found' });
+    }
+
+    // Get current learning DNA
+    let currentLearningDNA = {};
+    try {
+      const userDNA = await prisma.userLearningDNA.findUnique({
+        where: { user_id: userId }
+      });
+      if (userDNA) {
+        currentLearningDNA = JSON.parse(userDNA.learning_dna);
+      }
+    } catch (error) {
+      console.warn('Error loading learning DNA:', error);
+    }
+
+    // Analyze step performance
+    const analysis = await aiService.analyzeStepPerformance(
+      step,
+      user_input,
+      time_spent,
+      assignment.module.subject.name,
+      currentLearningDNA
+    );
+
+    // Update learning DNA in database
+    await prisma.userLearningDNA.upsert({
+      where: { user_id: userId },
+      update: {
+        learning_dna: JSON.stringify(analysis.updatedLearningDNA)
+      },
+      create: {
+        user_id: userId,
+        learning_dna: JSON.stringify(analysis.updatedLearningDNA)
+      }
+    });
+
+    res.json(analysis);
+  } catch (error) {
+    console.error('Error analyzing step performance:', error);
+    res.status(500).json({ error: 'Failed to analyze step performance' });
+  }
+});
+
+// Get user's learning DNA
+router.get('/learning-dna', async (req, res) => {
+  try {
+    const userId = (req as any).user.id;
+
+    const userDNA = await prisma.userLearningDNA.findUnique({
+      where: { user_id: userId }
+    });
+
+    if (!userDNA) {
+      return res.json({
+        learning_dna: {},
+        message: 'No learning DNA found - will be created as you complete assignments'
+      });
+    }
+
+    res.json({
+      learning_dna: JSON.parse(userDNA.learning_dna),
+      last_updated: userDNA.last_updated
+    });
+  } catch (error) {
+    console.error('Error fetching learning DNA:', error);
+    res.status(500).json({ error: 'Failed to fetch learning DNA' });
+  }
+});
+
 // AI Chat with Module
 router.post('/modules/chat', async (req, res) => {
   try {
@@ -1627,6 +1809,207 @@ Instructions:
   } catch (error) {
     console.error('Error in module chat:', error);
     res.status(500).json({ error: 'Failed to process chat message' });
+  }
+});
+
+// Vision and Image Analysis Routes
+router.post('/vision/analyze-image', async (req, res) => {
+  try {
+    const { image_url, context } = req.body;
+
+    if (!image_url) {
+      return res.status(400).json({ error: 'Image data is required' });
+    }
+
+    const analysis = await aiService.analyzeImage(image_url, context);
+
+    res.json({
+      success: true,
+      analysis
+    });
+  } catch (error) {
+    console.error('Error analyzing image:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to analyze image'
+    });
+  }
+});
+
+router.post('/vision/analyze-diagram', async (req, res) => {
+  try {
+    const { image_url, subject } = req.body;
+
+    if (!image_url) {
+      return res.status(400).json({ error: 'Image URL is required' });
+    }
+
+    const analysis = await aiService.analyzeDiagram(image_url, subject);
+
+    res.json({
+      success: true,
+      analysis
+    });
+  } catch (error) {
+    console.error('Error analyzing diagram:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to analyze diagram'
+    });
+  }
+});
+
+router.post('/vision/generate-description', async (req, res) => {
+  try {
+    const { image_url, learning_context } = req.body;
+
+    if (!image_url) {
+      return res.status(400).json({ error: 'Image URL is required' });
+    }
+
+    const description = await aiService.generateImageDescription(image_url, learning_context);
+
+    res.json({
+      success: true,
+      description
+    });
+  } catch (error) {
+    console.error('Error generating image description:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to generate description'
+    });
+  }
+});
+
+// Cross-domain learning analysis
+router.post('/cross-domain/analyze', async (req, res) => {
+  try {
+    const userId = (req as any).user.id;
+    const { current_subject, learning_history } = req.body;
+
+    if (!current_subject) {
+      return res.status(400).json({ error: 'Current subject is required' });
+    }
+
+    const analysis = await aiService.analyzeCrossDomainSkills(
+      userId,
+      current_subject,
+      learning_history || []
+    );
+
+    res.json({
+      success: true,
+      analysis
+    });
+  } catch (error) {
+    console.error('Error analyzing cross-domain skills:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to analyze cross-domain skills'
+    });
+  }
+});
+
+// Code execution endpoint
+router.post('/code/execute', async (req, res) => {
+  try {
+    const { code, language = 'javascript', timeout = 5000 } = req.body;
+
+    if (!code) {
+      return res.status(400).json({ error: 'Code is required' });
+    }
+
+    // For security, only allow JavaScript for now
+    if (language !== 'javascript') {
+      return res.status(400).json({ error: 'Only JavaScript execution is currently supported' });
+    }
+
+    // Basic security checks
+    const dangerousPatterns = [
+      /require\s*\(/,
+      /import\s+/,
+      /process\s*\./,
+      /fs\s*\./,
+      /child_process/,
+      /eval\s*\(/,
+      /Function\s*\(/,
+      /global\s*\./,
+      /__dirname/,
+      /__filename/,
+      /console\s*\./,
+      /setTimeout\s*\(/,
+      /setInterval\s*\(/,
+      /while\s*\(/,
+      /for\s*\([^;]*;[^;]*;[^)]*\)/
+    ];
+
+    for (const pattern of dangerousPatterns) {
+      if (pattern.test(code)) {
+        return res.status(400).json({
+          error: 'Code contains potentially unsafe operations',
+          output: '',
+          executionTime: 0
+        });
+      }
+    }
+
+    // Execute code in a sandboxed environment
+    const startTime = Date.now();
+
+    try {
+      // Use Function constructor for isolated execution (safer than eval)
+      const executeCode = new Function('code', `
+        const console = {
+          log: (...args) => output.push(args.join(' ')),
+          error: (...args) => output.push('Error: ' + args.join(' ')),
+          warn: (...args) => output.push('Warning: ' + args.join(' '))
+        };
+        let output = [];
+        try {
+          const result = (${code});
+          if (result !== undefined) {
+            output.push(String(result));
+          }
+        } catch (error) {
+          output.push('Error: ' + error.message);
+        }
+        return output.join('\\n');
+      `);
+
+      const result = executeCode(code);
+      const executionTime = Date.now() - startTime;
+
+      // Check execution time
+      if (executionTime > timeout) {
+        return res.status(400).json({
+          error: 'Code execution timed out',
+          output: '',
+          executionTime
+        });
+      }
+
+      res.json({
+        success: true,
+        output: result,
+        executionTime,
+        language
+      });
+    } catch (error) {
+      const executionTime = Date.now() - startTime;
+      res.status(400).json({
+        success: false,
+        error: 'Code execution failed: ' + (error as Error).message,
+        output: '',
+        executionTime
+      });
+    }
+  } catch (error) {
+    console.error('Error in code execution:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to execute code'
+    });
   }
 });
 

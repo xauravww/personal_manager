@@ -533,6 +533,125 @@ class ApiClient {
       body: JSON.stringify(params),
     });
   }
+
+  // Multimodal Learning Methods
+  async generateAdaptiveAssignment(params: {
+    subject_name: string;
+    knowledge_gaps?: string[];
+    preferred_modalities?: string[];
+  }): Promise<ApiResponse<any>> {
+    return this.request('/learning/assignments/generate-adaptive', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  }
+
+  async analyzeStepPerformance(params: {
+    assignment_id: string;
+    step: any;
+    user_input: string;
+    time_spent: number;
+  }): Promise<ApiResponse<any>> {
+    return this.request('/learning/assignments/analyze-step', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  }
+
+  async getLearningDNA(): Promise<ApiResponse<any>> {
+    return this.request('/learning/learning-dna');
+  }
+
+  // Vision methods
+  async analyzeImage(imageUrl: string, context?: string): Promise<ApiResponse<{
+    analysis: {
+      description: string;
+      objects: string[];
+      text_content?: string;
+      diagram_type?: string;
+      key_concepts?: string[];
+      confidence: number;
+    };
+  }>> {
+    return this.request('/learning/vision/analyze-image', {
+      method: 'POST',
+      body: JSON.stringify({ image_url: imageUrl, context }),
+    });
+  }
+
+  async analyzeDiagram(imageUrl: string, subject?: string): Promise<ApiResponse<{
+    analysis: {
+      diagramType: string;
+      description: string;
+      keyElements: string[];
+      relationships: string[];
+      educationalValue: string;
+    };
+  }>> {
+    return this.request('/learning/vision/analyze-diagram', {
+      method: 'POST',
+      body: JSON.stringify({ image_url: imageUrl, subject }),
+    });
+  }
+
+  async generateImageDescription(imageUrl: string, learningContext?: string): Promise<ApiResponse<{
+    description: string;
+  }>> {
+    return this.request('/learning/vision/generate-description', {
+      method: 'POST',
+      body: JSON.stringify({ image_url: imageUrl, learning_context: learningContext }),
+    });
+  }
+
+  // Cross-domain learning
+  async analyzeCrossDomainSkills(currentSubject: string, learningHistory?: Array<{
+    subject: string;
+    skills: string[];
+    performance: number;
+    timeSpent: number;
+  }>): Promise<ApiResponse<{
+    analysis: {
+      transferableSkills: Array<{
+        skill: string;
+        sourceSubject: string;
+        targetSubject: string;
+        confidence: number;
+        application: string;
+      }>;
+      recommendedPaths: Array<{
+        subject: string;
+        reason: string;
+        estimatedDifficulty: 'easy' | 'medium' | 'hard';
+        leverageSkills: string[];
+      }>;
+      learningAcceleration: number;
+    };
+  }>> {
+    return this.request('/learning/cross-domain/analyze', {
+      method: 'POST',
+      body: JSON.stringify({
+        current_subject: currentSubject,
+        learning_history: learningHistory
+      }),
+    });
+  }
+
+  // Code execution
+  async executeCode(params: {
+    code: string;
+    language?: string;
+    timeout?: number;
+  }): Promise<ApiResponse<{
+    success: boolean;
+    output: string;
+    executionTime: number;
+    language: string;
+  }>> {
+    return this.request('/learning/code/execute', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  }
 }
 
 // Create and export a singleton instance

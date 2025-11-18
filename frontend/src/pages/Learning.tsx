@@ -1,30 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import {
-  BookOpen,
-  Plus,
-  Search,
-  TrendingUp,
-  Brain,
-  Target,
-  Clock,
-  CheckCircle,
-  PlayCircle,
-  Award,
-  Map,
-  FileText,
-  BarChart3,
-  Lightbulb,
-  Zap,
-  MessageSquare,
-  X,
-  Send,
-  Bot,
-  User,
-  Sparkles
-} from 'lucide-react';
-import DashboardLayout from '../components/layout/DashboardLayout';
-import CoursePlanner from '../components/CoursePlanner';
+import { ChevronLeft, ChevronRight, Play, CheckCircle, Clock, BookOpen, MessageCircle, Send, Eye, Plus, Search, Filter, Calendar, Target, TrendingUp, Award, Zap, Brain, PlayCircle, MessageSquare, User, Bot, Sparkles, Lightbulb, BarChart3 } from 'lucide-react';
 import { apiClient } from '../api/client';
+import AssignmentJourney from '../components/AssignmentJourney';
+import VisionModal from '../components/VisionModal';
+import CookingAnimation from '../components/CookingAnimation';
+import CrossDomainInsights from '../components/CrossDomainInsights';
+import Toast from '../components/Toast';
+import DashboardLayout from '../components/layout/DashboardLayout';
 
 interface LearningSubject {
   id: string;
@@ -60,12 +42,21 @@ interface LearningProgress {
   notes?: string;
 }
 
+interface AssignmentStep {
+  id: string;
+  title: string;
+  type: 'chat' | 'questions' | 'editor' | 'review';
+  content: string;
+  ai_guidance: string;
+}
+
 interface Assignment {
   id: string;
   title: string;
   description?: string;
   type: string;
   max_score: number;
+  steps?: AssignmentStep[];
 }
 
 interface KnowledgeSummary {
@@ -106,12 +97,20 @@ const Learning: React.FC = () => {
   }>>([]);
   const [quizAnswers, setQuizAnswers] = useState<number[]>([]);
   const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
-  const [quizResults, setQuizResults] = useState<{
-    score: number;
-    feedback: string;
-    showResults: boolean;
-    canRetake: boolean;
-  } | null>(null);
+   const [showAssignmentJourney, setShowAssignmentJourney] = useState(false);
+   const [showVisionModal, setShowVisionModal] = useState(false);
+   const [generatingAssignments, setGeneratingAssignments] = useState<Set<string>>(new Set());
+   const [toast, setToast] = useState<{
+     message: string;
+     type: 'success' | 'error' | 'warning' | 'info';
+     show: boolean;
+   } | null>(null);
+   const [quizResults, setQuizResults] = useState<{
+     score: number;
+     feedback: string;
+     showResults: boolean;
+     canRetake: boolean;
+   } | null>(null);
   const [chatMessages, setChatMessages] = useState<Array<{role: 'user' | 'assistant', content: string, timestamp: Date}>>([]);
   const [currentMessage, setCurrentMessage] = useState('');
   const [isAiTyping, setIsAiTyping] = useState(false);
@@ -394,49 +393,94 @@ What would you like to focus on first?`,
     }
   };
 
-  const markModuleCompleted = async () => {
-    if (!selectedModule) return;
+   const markModuleCompleted = async () => {
+     if (!selectedModule) return;
 
-    try {
-      const response = await apiClient.updateProgress({
-        module_id: selectedModule.id,
-        status: 'completed',
-        score: 100,
-        time_spent: selectedModule.progress?.time_spent || 0
-      });
+     try {
+       const response = await apiClient.updateProgress({
+         module_id: selectedModule.id,
+         status: 'completed',
+         score: 100,
+         time_spent: selectedModule.progress?.time_spent || 0
+       });
 
-      if (response.success) {
-        // Update local state
-        if (selectedSubject) {
-          await loadModules(selectedSubject.id, currentModulesPage);
-        }
+       if (response.success) {
+         // Update local state
+         if (selectedSubject) {
+           await loadModules(selectedSubject.id, currentModulesPage);
+         }
 
-        // Update selectedModule state as well
-        setSelectedModule({
-          ...selectedModule,
-          progress: {
-            ...selectedModule.progress,
-            status: 'completed',
-            score: 100,
-            completed_at: new Date().toISOString()
-          }
-        });
+         // Update selectedModule state as well
+         setSelectedModule({
+           ...selectedModule,
+           progress: {
+             ...selectedModule.progress,
+             status: 'completed',
+             score: 100,
+             completed_at: new Date().toISOString()
+           }
+         });
 
-        // Add completion message
-        const completionMessage = {
-          role: 'assistant' as const,
-          content: '🎉 Congratulations! You\'ve successfully completed this module. Great work on your learning journey!',
-          timestamp: new Date()
-        };
-        setChatMessages(prev => [...prev, completionMessage]);
+         // Add completion message
+         const completionMessage = {
+           role: 'assistant' as const,
+           content: '🎉 Congratulations! You\'ve successfully completed this module. Great work on your learning journey!',
+           timestamp: new Date()
+         };
+         setChatMessages(prev => [...prev, completionMessage]);
 
-        // Reset confirmation state
-        setAwaitingCompletionConfirmation(false);
-      }
-    } catch (error) {
-      console.error('Error marking module as completed:', error);
-    }
-  };
+         // Reset confirmation state
+         setAwaitingCompletionConfirmation(false);
+       }
+     } catch (error) {
+       console.error('Error marking module as completed:', error);
+     }
+   };
+
+   const showToast = (message: string, type: 'success' | 'error' | 'warning' | 'info' = 'info') => {
+     setToast({ message, type, show: true });
+     setTimeout(() => setToast(null), 4000);
+   };
+
+   const generateAdaptiveAssignment = async (moduleId: string) => {
+     setGeneratingAssignments(prev => new Set(prev).add(moduleId));
+
+     try {
+       // Get module details first
+       const module = selectedSubject?.modules?.find(m => m.id === moduleId);
+       if (!module || !selectedSubject) {
+         showToast('Unable to find module details', 'error');
+         return;
+       }
+
+       const response = await apiClient.generateAdaptiveAssignment({
+         subject_name: selectedSubject.name,
+         module_title: module.title,
+         module_content: module.content || module.description || '',
+         learning_context: `Module: ${module.title} in ${selectedSubject.name}`,
+         user_level: selectedSubject.current_level || 'intermediate'
+       });
+
+       if (response.success) {
+         // Refresh modules to show the new assignment
+         await loadModules(selectedSubject.id, currentModulesPage);
+
+         // Show success feedback
+         showToast(`✨ Adaptive assignment created for "${module.title}"!`, 'success');
+       } else {
+         showToast('Failed to generate adaptive assignment. Please try again.', 'error');
+       }
+     } catch (error) {
+       console.error('Error generating adaptive assignment:', error);
+       showToast('Something went wrong. Please try again.', 'error');
+     } finally {
+       setGeneratingAssignments(prev => {
+         const newSet = new Set(prev);
+         newSet.delete(moduleId);
+         return newSet;
+       });
+     }
+   };
 
 
 
@@ -545,6 +589,15 @@ What would you like to focus on first?`,
 
   const openAssignmentSubmission = async (assignment: Assignment) => {
     setSelectedAssignment(assignment);
+
+    // Check if this is a structured assignment (has steps)
+    if (assignment.type === 'structured' || assignment.type === 'chat_guided' || assignment.type === 'hybrid') {
+      setShowAssignmentJourney(true);
+      setShowModuleContent(false);
+      return;
+    }
+
+    // Regular assignment flow
     setShowAssignmentSubmission(true);
     setShowModuleContent(false); // Hide module content when showing assignment submission
 
@@ -557,18 +610,11 @@ What would you like to focus on first?`,
           setQuizAnswers(new Array(response.data.assignment.questions.length).fill(-1));
           setQuizResults(null);
         } else {
-          console.warn('No quiz questions available, falling back to text input');
-          // Don't set quizQuestions, so it will show textarea
-          setQuizQuestions([]);
-          setQuizAnswers([]);
-          setQuizResults(null);
+          alert('Failed to load quiz questions. Please try again.');
         }
       } catch (error) {
         console.error('Error loading assignment:', error);
-        // Fall back to text input
-        setQuizQuestions([]);
-        setQuizAnswers([]);
-        setQuizResults(null);
+        alert('Failed to load assignment. Please try again.');
       }
     }
   };
@@ -622,13 +668,22 @@ What would you like to focus on first?`,
             <p className="text-gray-600">Your personalized learning journey</p>
           </div>
         </div>
-        <button
-          onClick={() => setShowCreateSubject(true)}
-          className="bg-gradient-to-r from-purple-500 to-blue-500 text-white px-4 py-2 rounded-lg hover:from-purple-600 hover:to-blue-600 transition-all flex items-center gap-2"
-        >
-          <Plus className="w-4 h-4" />
-          Start Learning
-        </button>
+         <div className="flex items-center gap-3">
+           <button
+             onClick={() => setShowVisionModal(true)}
+             className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white px-4 py-2 rounded-lg hover:from-blue-600 hover:to-indigo-600 transition-all flex items-center gap-2"
+           >
+             <Eye className="w-4 h-4" />
+             Analyze Image
+           </button>
+           <button
+             onClick={() => setShowCreateSubject(true)}
+             className="bg-gradient-to-r from-purple-500 to-blue-500 text-white px-4 py-2 rounded-lg hover:from-purple-600 hover:to-blue-600 transition-all flex items-center gap-2"
+           >
+             <Plus className="w-4 h-4" />
+             Start Learning
+           </button>
+         </div>
       </div>
         {!selectedSubject ? (
           // Subjects Overview
@@ -1026,7 +1081,39 @@ What would you like to focus on first?`,
                )}
              </div>
            </div>
-         ) : showAssignmentSubmission && selectedAssignment ? (
+          ) : showAssignmentJourney && selectedAssignment ? (
+            // Assignment Journey View
+            <AssignmentJourney
+              assignment={selectedAssignment}
+              onComplete={async (result) => {
+                // Handle journey completion
+                try {
+                  await apiClient.submitAssignment({
+                    assignment_id: selectedAssignment.id,
+                    content: JSON.stringify(result)
+                  });
+                  alert('Assignment completed successfully!');
+
+                  // Refresh modules
+                  if (selectedSubject) {
+                    await loadModules(selectedSubject.id, currentModulesPage);
+                  }
+
+                  setShowAssignmentJourney(false);
+                  setSelectedAssignment(null);
+                  setShowModuleContent(true);
+                } catch (error) {
+                  console.error('Error submitting assignment:', error);
+                  alert('Failed to submit assignment. Please try again.');
+                }
+              }}
+              onCancel={() => {
+                setShowAssignmentJourney(false);
+                setSelectedAssignment(null);
+                setShowModuleContent(true);
+              }}
+            />
+          ) : showAssignmentSubmission && selectedAssignment ? (
            // Assignment Submission View
            <div>
              <div className="bg-white rounded-xl border border-gray-200 p-6">
@@ -1226,9 +1313,9 @@ What would you like to focus on first?`,
                </div>
              </div>
 
-             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Progress Overview */}
-                <div className="lg:col-span-1">
+              <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                 {/* Progress Overview */}
+                 <div className="lg:col-span-1">
                   <div className="bg-white rounded-xl border border-gray-200 p-6">
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">Knowledge Summary</h3>
 
@@ -1329,8 +1416,16 @@ What would you like to focus on first?`,
                   </div>
                 </div>
 
-               {/* Modules List */}
-               <div className="lg:col-span-2">
+                {/* Cross-Domain Insights */}
+                <div className="lg:col-span-1">
+                  <CrossDomainInsights
+                    currentSubject={selectedSubject.name}
+                    learningHistory={[]} // TODO: Pass actual learning history
+                  />
+                </div>
+
+                {/* Modules List */}
+                <div className="lg:col-span-2">
                  <div className="bg-white rounded-xl border border-gray-200 p-6">
                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Learning Modules</h3>
 
@@ -1379,35 +1474,52 @@ What would you like to focus on first?`,
                                 </div>
                               </div>
 
-                              <div className="flex items-center justify-between text-sm text-gray-600">
-                                <div className="flex items-center gap-4">
-                                  {module.estimated_time && (
-                                    <span className="flex items-center gap-1">
-                                      <Clock className="w-4 h-4" />
-                                      {module.estimated_time} min
-                                    </span>
-                                  )}
-                                  {module.assignments && module.assignments.length > 0 && (
-                                    <span className="flex items-center gap-1">
-                                      <FileText className="w-4 h-4" />
-                                      {module.assignments.length} assignments
-                                    </span>
-                                  )}
-                                </div>
+                               <div className="flex items-center justify-between text-sm text-gray-600">
+                                 <div className="flex items-center gap-4">
+                                   <span>Est. {module.estimated_time || 15} min</span>
+                                   {module.assignments && module.assignments.length > 0 && (
+                                     <span className="text-purple-600 font-medium">
+                                       {module.assignments.length} assignment{module.assignments.length !== 1 ? 's' : ''}
+                                     </span>
+                                   )}
+                                 </div>
 
-                                 <button
-                                   onClick={(e) => {
-                                     e.stopPropagation();
-                                     handleModuleAction(module);
-                                   }}
-                                   className="text-purple-600 hover:text-purple-700 font-medium"
-                                 >
-                                   {module.progress?.status === 'completed'
-                                     ? 'Review'
-                                     : module.progress?.status === 'in_progress'
-                                     ? 'Continue'
-                                     : 'Start'}
-                                 </button>
+                                 <div className="flex items-center gap-2">
+                                   <button
+                                     onClick={(e) => {
+                                       e.stopPropagation();
+                                       generateAdaptiveAssignment(module.id);
+                                     }}
+                                     disabled={generatingAssignments.has(module.id)}
+                                     className="relative bg-gradient-to-r from-purple-500 to-blue-500 text-white px-3 py-1.5 rounded-lg hover:from-purple-600 hover:to-blue-600 transition-all text-xs font-medium disabled:opacity-50 flex items-center gap-1 overflow-hidden"
+                                   >
+                                     {generatingAssignments.has(module.id) ? (
+                                       <div className="flex items-center gap-1">
+                                         <CookingAnimation size="sm" message="" />
+                                         <span className="hidden sm:inline">Cooking...</span>
+                                       </div>
+                                     ) : (
+                                       <>
+                                         <Zap className="w-3 h-3" />
+                                         <span className="hidden sm:inline">Adapt</span>
+                                       </>
+                                     )}
+                                   </button>
+
+                                   <button
+                                     onClick={(e) => {
+                                       e.stopPropagation();
+                                       handleModuleAction(module);
+                                     }}
+                                     className="text-purple-600 hover:text-purple-700 font-medium"
+                                   >
+                                     {module.progress?.status === 'completed'
+                                       ? 'Review'
+                                       : module.progress?.status === 'in_progress'
+                                       ? 'Continue'
+                                       : 'Start'}
+                                   </button>
+                                 </div>
                                </div>
                              </div>
                            );
@@ -1511,19 +1623,41 @@ What would you like to focus on first?`,
         </div>
       )}
 
-      {/* Course Planner Modal */}
-      {showCoursePlanner && selectedSubjectForPlanning && (
-        <CoursePlanner
-          subjectName={selectedSubjectForPlanning.name}
-          onCourseGenerated={handleCourseGenerated}
-          onClose={() => {
-            setShowCoursePlanner(false);
-            setSelectedSubjectForPlanning(null);
-          }}
-        />
-      )}
-    </DashboardLayout>
-  );
-};
+       {/* Course Planner Modal */}
+       {showCoursePlanner && selectedSubjectForPlanning && (
+         <CoursePlanner
+           subjectName={selectedSubjectForPlanning.name}
+           onCourseGenerated={handleCourseGenerated}
+           onClose={() => {
+             setShowCoursePlanner(false);
+             setSelectedSubjectForPlanning(null);
+           }}
+         />
+       )}
+
+       {/* Vision Modal */}
+       <VisionModal
+         isOpen={showVisionModal}
+         onClose={() => setShowVisionModal(false)}
+         learningContext={selectedSubject?.name}
+         onAnalysisComplete={(result) => {
+           console.log('Vision analysis complete:', result);
+           // Could integrate results into learning content
+         }}
+       />
+
+       {/* Toast Notifications */}
+       {toast?.show && (
+         <div className="fixed bottom-4 right-4 z-50">
+           <Toast
+             message={toast.message}
+             type={toast.type}
+             onClose={() => setToast(null)}
+           />
+         </div>
+       )}
+     </DashboardLayout>
+   );
+ };
 
 export default Learning;

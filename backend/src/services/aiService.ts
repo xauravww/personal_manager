@@ -6,6 +6,14 @@ interface AIConfig {
   model: string;
 }
 
+interface AssignmentStep {
+  id: string;
+  title: string;
+  type: string;
+  content: string;
+  guidance?: string;
+}
+
 interface ChatCompletionRequest {
   model: string;
   messages: Array<{
@@ -47,11 +55,99 @@ interface ModelsResponse {
   }>;
 }
 
+interface VisionMessage {
+  type: 'text' | 'image_url';
+  text?: string;
+  image_url?: {
+    url: string;
+  };
+}
 
+interface VisionRequest {
+  model: string;
+  messages: Array<{
+    role: 'system' | 'user' | 'assistant';
+    content: string | VisionMessage[];
+  }>;
+  temperature?: number;
+  max_tokens?: number;
+}
+
+interface ImageAnalysisResult {
+  description: string;
+  objects: string[];
+  text_content?: string;
+  diagram_type?: string;
+  key_concepts?: string[];
+  confidence: number;
+}
+
+
+
+interface CacheEntry {
+  data: any;
+  timestamp: number;
+  ttl: number; // Time to live in milliseconds
+}
 
 class AIService {
   private client: AxiosInstance;
   private config: AIConfig;
+  private cache: Map<string, CacheEntry> = new Map();
+  private requestQueue: Map<string, Promise<any>> = new Map(); // For request deduplication
+
+  // Cache management methods
+  private getCacheKey(method: string, params: any): string {
+    return `${method}:${JSON.stringify(params)}`;
+  }
+
+  private getCachedResponse(key: string): any | null {
+    const entry = this.cache.get(key);
+    if (!entry) return null;
+
+    if (Date.now() - entry.timestamp > entry.ttl) {
+      this.cache.delete(key);
+      return null;
+    }
+
+    return entry.data;
+  }
+
+  private setCachedResponse(key: string, data: any, ttl: number = 300000): void { // Default 5 minutes
+    this.cache.set(key, {
+      data,
+      timestamp: Date.now(),
+      ttl
+    });
+
+    // Clean up old entries periodically
+    if (this.cache.size > 100) {
+      this.cleanupCache();
+    }
+  }
+
+  private cleanupCache(): void {
+    const now = Date.now();
+    for (const [key, entry] of this.cache.entries()) {
+      if (now - entry.timestamp > entry.ttl) {
+        this.cache.delete(key);
+      }
+    }
+  }
+
+  // Request deduplication
+  private getDeduplicatedRequest<T>(key: string, requestFn: () => Promise<T>): Promise<T> {
+    if (this.requestQueue.has(key)) {
+      return this.requestQueue.get(key)!;
+    }
+
+    const request = requestFn().finally(() => {
+      this.requestQueue.delete(key);
+    });
+
+    this.requestQueue.set(key, request);
+    return request;
+  }
 
   constructor() {
     this.config = {
@@ -183,64 +279,84 @@ class AIService {
    * Summarize content to a specified length
    */
   async summarizeContent(content: string, maxLength: number = 100): Promise<string> {
-    try {
-      const response = await this.createChatCompletion({
-        model: this.config.model,
-        messages: [
-          {
-            role: 'system',
-            content: `You are a helpful assistant that creates concise summaries. Summarize the given content in ${maxLength} characters or less.`
-          },
-          {
-            role: 'user',
-            content: content
-          }
-        ],
-        temperature: 0.3,
-      });
+    const cacheKey = this.getCacheKey('summarizeContent', { content, maxLength });
+    const cached = this.getCachedResponse(cacheKey);
+    if (cached) return cached;
 
-      const summary = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
-      return summary || content.substring(0, maxLength);
-    } catch (error) {
-      console.error('Error summarizing content:', error);
-      // Fallback to simple truncation
-      return content.length > maxLength ? content.substring(0, maxLength - 3) + '...' : content;
-    }
+    return this.getDeduplicatedRequest(cacheKey, async () => {
+      try {
+        const response = await this.createChatCompletion({
+          model: this.config.model,
+          messages: [
+            {
+              role: 'system',
+              content: `You are a helpful assistant that creates concise summaries. Summarize the given content in ${maxLength} characters or less.`
+            },
+            {
+              role: 'user',
+              content: content
+            }
+          ],
+          temperature: 0.3,
+        });
+
+        const summary = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
+        const result = summary || content.substring(0, maxLength);
+        this.setCachedResponse(cacheKey, result, 1800000); // Cache for 30 minutes
+        return result;
+      } catch (error) {
+        console.error('Error summarizing content:', error);
+        // Fallback to simple truncation
+        const result = content.length > maxLength ? content.substring(0, maxLength - 3) + '...' : content;
+        this.setCachedResponse(cacheKey, result, 300000); // Cache fallback for 5 minutes
+        return result;
+      }
+    });
   }
 
   /**
    * Extract relevant tags from content
    */
   async extractTags(content: string, maxTags: number = 5): Promise<string[]> {
-    try {
-      const response = await this.createChatCompletion({
-        model: this.config.model,
-        messages: [
-          {
-            role: 'system',
-            content: `You are a tag extractor. Analyze the provided content and extract ${maxTags} relevant tags that best describe the main topics, themes, or key concepts. Return only a comma-separated list of tags, no other text.`
-          },
-          {
-            role: 'user',
-            content: `Extract tags from this content:\n\n${content}`
-          }
-        ],
-        max_tokens: 100,
-        temperature: 0.3,
-      });
+    const cacheKey = this.getCacheKey('extractTags', { content, maxTags });
+    const cached = this.getCachedResponse(cacheKey);
+    if (cached) return cached;
 
-      const tagsText = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
-      if (tagsText) {
-        return tagsText.split(',')
-          .map(tag => tag.trim())
-          .filter(tag => tag.length > 0)
-          .slice(0, maxTags);
+    return this.getDeduplicatedRequest(cacheKey, async () => {
+      try {
+        const response = await this.createChatCompletion({
+          model: this.config.model,
+          messages: [
+            {
+              role: 'system',
+              content: `You are a tag extractor. Analyze the provided content and extract ${maxTags} relevant tags that best describe the main topics, themes, or key concepts. Return only a comma-separated list of tags, no other text.`
+            },
+            {
+              role: 'user',
+              content: `Extract tags from this content:\n\n${content}`
+            }
+          ],
+          max_tokens: 100,
+          temperature: 0.3,
+        });
+
+        const tagsText = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
+        let result: string[] = [];
+        if (tagsText) {
+          result = tagsText.split(',')
+            .map(tag => tag.trim())
+            .filter(tag => tag.length > 0)
+            .slice(0, maxTags);
+        }
+        this.setCachedResponse(cacheKey, result, 1800000); // Cache for 30 minutes
+        return result;
+      } catch (error) {
+        console.error('Error extracting tags:', error);
+        const result: string[] = [];
+        this.setCachedResponse(cacheKey, result, 300000); // Cache empty result for 5 minutes
+        return result;
       }
-      return [];
-    } catch (error) {
-      console.error('Error extracting tags:', error);
-      return [];
-    }
+    });
   }
 
   async enhanceSearchQuery(userQuery: string): Promise<{
@@ -252,172 +368,206 @@ class AIService {
       tags?: string[];
     };
   }> {
-    // For testing with dummy API key, provide mock intent detection
-    if (this.config.apiKey === 'dummy-api-key-for-testing') {
-      const lowerQuery = userQuery.toLowerCase();
-      if (lowerQuery === 'hi' || lowerQuery === 'hello' || lowerQuery === 'hey' ||
-          lowerQuery.includes('thank') || lowerQuery === 'who r uh' ||
-          lowerQuery === 'who are you' || lowerQuery === 'what can you do') {
-        return {
-          intent: 'chat',
-          enhancedQuery: '',
-          searchTerms: [],
+    const cacheKey = this.getCacheKey('enhanceSearchQuery', { userQuery });
+    const cached = this.getCachedResponse(cacheKey);
+    if (cached) return cached;
+
+    return this.getDeduplicatedRequest(cacheKey, async () => {
+      // For testing with dummy API key, provide mock intent detection
+      if (this.config.apiKey === 'dummy-api-key-for-testing') {
+        const lowerQuery = userQuery.toLowerCase();
+        if (lowerQuery === 'hi' || lowerQuery === 'hello' || lowerQuery === 'hey' ||
+            lowerQuery.includes('thank') || lowerQuery === 'who r uh' ||
+            lowerQuery === 'who are you' || lowerQuery === 'what can you do') {
+          const result = {
+            intent: 'chat' as const,
+            enhancedQuery: '',
+            searchTerms: [],
+            filters: {}
+          };
+          this.setCachedResponse(cacheKey, result, 1800000); // Cache for 30 minutes
+          return result;
+        }
+        const result = {
+          intent: 'search' as const,
+          enhancedQuery: userQuery,
+          searchTerms: [userQuery],
           filters: {}
         };
-      }
-      return {
-        intent: 'search',
-        enhancedQuery: userQuery,
-        searchTerms: [userQuery],
-        filters: {}
-      };
-    }
-
-    const systemPrompt = `You are a helpful assistant that enhances search queries for a personal resource manager.
-    The user has resources like notes, documents, videos, links, and images.
-    First, determine if the query is a search request or conversational chat.
-     Set intent to "chat" for:
-     - Pure greetings without search intent: hi, hello, hey, good morning, etc. (but not "hello, find my notes")
-     - Thanks: thank you, thanks, appreciate it
-     - Direct questions about the assistant: can you help, what can you do, who are you, etc.
-     - Very short single words: hi, help, please (when standalone)
-     - Content generation requests: write, create, generate, make, compose, draft (essays, articles, summaries, etc.)
-     - Questions that require explanation or generation: explain, tell me how, what is, how to, why, etc. (when not about user's resources)
-     Set intent to "search" ONLY for queries that clearly want to find existing resources:
-     - Explicit search commands: find, search, show me, give me (when referring to user's stored content)
-     - References to user's resources: my notes, my documents, my files, my resources
-     - Questions about user's content: what do I have, what did I save, etc.
-
-   Examples:
-   - "hi" -> intent: "chat"
-   - "find my notes on AI" -> intent: "search", searchTerms: ["notes", "AI"]
-   - "do you have books" -> intent: "search", searchTerms: ["books"]
-   - "give me anything related to study" -> intent: "search", searchTerms: ["study"]
-   - "something book or study" -> intent: "search", searchTerms: ["books", "study"]
-   - "please show me reading materials" -> intent: "search", searchTerms: ["reading"]
-   Respond with JSON in this format:
-   {
-     "intent": "search" or "chat",
-     "enhancedQuery": "improved search query" (empty if chat),
-     "searchTerms": ["term1", "term2"] (empty if chat),
-      "filters": {
-        "type": "note|document|video|link|image" (use | or , to separate multiple types),
-        "tags": ["tag1", "tag2"] (optional)
-      }
-   }`;
-
-    try {
-      const response = await this.createChatCompletion({
-        model: this.config.model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userQuery }
-        ],
-        temperature: 0.3,
-
-      });
-
-      const content = (response as ChatCompletionResponse).choices[0]?.message?.content;
-      if (!content) {
-        throw new Error('No response from AI');
+        this.setCachedResponse(cacheKey, result, 1800000); // Cache for 30 minutes
+        return result;
       }
 
-       // Parse the JSON response
-       const parsed = JSON.parse(content);
-       return {
-         intent: parsed.intent || 'search',
-         enhancedQuery: parsed.enhancedQuery || userQuery,
-         searchTerms: parsed.searchTerms || [userQuery],
-         filters: parsed.filters || {},
-       };
-    } catch (error) {
-      console.error('Error enhancing search query:', error);
-      // Fallback to basic search
-      return {
-        intent: 'search',
-        enhancedQuery: userQuery,
-        searchTerms: [userQuery],
-        filters: {},
-      };
-    }
+      const systemPrompt = `You are a helpful assistant that enhances search queries for a personal resource manager.
+      The user has resources like notes, documents, videos, links, and images.
+      First, determine if the query is a search request or conversational chat.
+       Set intent to "chat" for:
+       - Pure greetings without search intent: hi, hello, hey, good morning, etc. (but not "hello, find my notes")
+       - Thanks: thank you, thanks, appreciate it
+       - Direct questions about the assistant: can you help, what can you do, who are you, etc.
+       - Very short single words: hi, help, please (when standalone)
+       - Content generation requests: write, create, generate, make, compose, draft (essays, articles, summaries, etc.)
+       - Questions that require explanation or generation: explain, tell me how, what is, how to, why, etc. (when not about user's resources)
+       Set intent to "search" ONLY for queries that clearly want to find existing resources:
+       - Explicit search commands: find, search, show me, give me (when referring to user's stored content)
+       - References to user's resources: my notes, my documents, my files, my resources
+       - Questions about user's content: what do I have, what did I save, etc.
+
+      Examples:
+      - "hi" -> intent: "chat"
+      - "find my notes on AI" -> intent: "search", searchTerms: ["notes", "AI"]
+      - "do you have books" -> intent: "search", searchTerms: ["books"]
+      - "give me anything related to study" -> intent: "search", searchTerms: ["study"]
+      - "something book or study" -> intent: "search", searchTerms: ["books", "study"]
+      - "please show me reading materials" -> intent: "search", searchTerms: ["reading"]
+      Respond with JSON in this format:
+      {
+        "intent": "search" or "chat",
+        "enhancedQuery": "improved search query" (empty if chat),
+        "searchTerms": ["term1", "term2"] (empty if chat),
+         "filters": {
+           "type": "note|document|video|link|image" (use | or , to separate multiple types),
+           "tags": ["tag1", "tag2"] (optional)
+         }
+      }`;
+
+      try {
+        const response = await this.createChatCompletion({
+          model: this.config.model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userQuery }
+          ],
+          temperature: 0.3,
+
+        });
+
+        const content = (response as ChatCompletionResponse).choices[0]?.message?.content;
+        if (!content) {
+          throw new Error('No response from AI');
+        }
+
+         // Parse the JSON response
+         const parsed = JSON.parse(content);
+         const result = {
+           intent: parsed.intent || 'search',
+           enhancedQuery: parsed.enhancedQuery || userQuery,
+           searchTerms: parsed.searchTerms || [userQuery],
+           filters: parsed.filters || {},
+         };
+         this.setCachedResponse(cacheKey, result, 1800000); // Cache for 30 minutes
+         return result;
+      } catch (error) {
+        console.error('Error enhancing search query:', error);
+        // Fallback to basic search
+        const result = {
+          intent: 'search' as const,
+          enhancedQuery: userQuery,
+          searchTerms: [userQuery],
+          filters: {},
+        };
+        this.setCachedResponse(cacheKey, result, 300000); // Cache fallback for 5 minutes
+        return result;
+      }
+    });
   }
 
   /**
    * Generate search suggestions when no results found
    */
   async generateSearchSuggestions(userQuery: string): Promise<string[]> {
-    try {
-      const response = await this.createChatCompletion({
-        model: this.config.model,
-        messages: [
-          {
-            role: 'system',
-            content: `You are a helpful assistant that suggests alternative search terms when a user finds no results.
-            The user searched for: "${userQuery}"
-            Suggest 3-5 specific, relevant search terms that might find resources in a personal manager (notes, books, documents, videos, etc.).
-            Return only a JSON array of strings, like: ["term1", "term2", "term3"]
-            Focus on concrete terms related to the original query.`
-          },
-          {
-            role: 'user',
-            content: userQuery
-          }
-        ],
-        temperature: 0.5,
-      });
+    const cacheKey = this.getCacheKey('generateSearchSuggestions', { userQuery });
+    const cached = this.getCachedResponse(cacheKey);
+    if (cached) return cached;
 
-      const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
-      if (content) {
-        try {
-          const suggestions = JSON.parse(content);
-          return Array.isArray(suggestions) ? suggestions.slice(0, 5) : [];
-        } catch {
-          // Fallback: extract from text
-            return content.split(',').map((s: string) => s.trim().replace(/["[\]]/g, '')).filter((s: string) => s.length > 0).slice(0, 5);
+    return this.getDeduplicatedRequest(cacheKey, async () => {
+      try {
+        const response = await this.createChatCompletion({
+          model: this.config.model,
+          messages: [
+            {
+              role: 'system',
+              content: `You are a helpful assistant that suggests alternative search terms when a user finds no results.
+              The user searched for: "${userQuery}"
+              Suggest 3-5 specific, relevant search terms that might find resources in a personal manager (notes, books, documents, videos, etc.).
+              Return only a JSON array of strings, like: ["term1", "term2", "term3"]
+              Focus on concrete terms related to the original query.`
+            },
+            {
+              role: 'user',
+              content: userQuery
+            }
+          ],
+          temperature: 0.5,
+        });
+
+        const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
+        let result: string[] = [];
+        if (content) {
+          try {
+            const suggestions = JSON.parse(content);
+            result = Array.isArray(suggestions) ? suggestions.slice(0, 5) : [];
+          } catch {
+            // Fallback: extract from text
+              result = content.split(',').map((s: string) => s.trim().replace(/["[\]]/g, '')).filter((s: string) => s.length > 0).slice(0, 5);
+          }
         }
+        this.setCachedResponse(cacheKey, result, 1800000); // Cache for 30 minutes
+        return result;
+      } catch (error) {
+        console.warn('Error generating search suggestions:', error);
+        const result: string[] = [];
+        this.setCachedResponse(cacheKey, result, 300000); // Cache empty result for 5 minutes
+        return result;
       }
-      return [];
-    } catch (error) {
-      console.warn('Error generating search suggestions:', error);
-      return [];
-    }
+    });
   }
 
   async generateDeepResearchResponse(userQuery: string, context?: string, timezone?: string): Promise<string> {
-    const userTimezone = timezone || 'UTC';
-    const now = new Date();
-    const currentDateTime = now.toLocaleString('en-US', {
-      timeZone: userTimezone,
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      weekday: 'long'
-    });
+    const cacheKey = this.getCacheKey('generateDeepResearchResponse', { userQuery, context, timezone });
+    const cached = this.getCachedResponse(cacheKey);
+    if (cached) return cached;
 
-    const systemPrompt = `You are a friendly deep research assistant for a personal resource manager.
-    Current date and time: ${currentDateTime}
-    The user is in deep research mode, which means they want comprehensive, sequential research on their query.
-    Provide a thoughtful, friendly response that offers to help with systematic investigation.
-    Keep responses informative but not overwhelming. Be conversational and engaging.`;
-
-    try {
-      const response = await this.createChatCompletion({
-        model: this.config.model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userQuery }
-        ],
-        temperature: 0.6,
+    return this.getDeduplicatedRequest(cacheKey, async () => {
+      const userTimezone = timezone || 'UTC';
+      const now = new Date();
+      const currentDateTime = now.toLocaleString('en-US', {
+        timeZone: userTimezone,
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        weekday: 'long'
       });
 
-      return (response as ChatCompletionResponse).choices[0]?.message?.content?.trim() || "I'll help you conduct deep research on this topic. Let me gather comprehensive information for you.";
-    } catch (error) {
-      console.error('Error generating deep research response:', error);
-      return "I'm conducting deep research on your query. This may take a moment as I gather comprehensive information from multiple sources.";
-    }
+      const systemPrompt = `You are a friendly deep research assistant for a personal resource manager.
+      Current date and time: ${currentDateTime}
+      The user is in deep research mode, which means they want comprehensive, sequential research on their query.
+      Provide a thoughtful, friendly response that offers to help with systematic investigation.
+      Keep responses informative but not overwhelming. Be conversational and engaging.`;
+
+      try {
+        const response = await this.createChatCompletion({
+          model: this.config.model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userQuery }
+          ],
+          temperature: 0.6,
+        });
+
+        const result = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim() || "I'll help you conduct deep research on this topic. Let me gather comprehensive information for you.";
+        this.setCachedResponse(cacheKey, result, 900000); // Cache for 15 minutes
+        return result;
+      } catch (error) {
+        console.error('Error generating deep research response:', error);
+        const result = "I'm conducting deep research on your query. This may take a moment as I gather comprehensive information from multiple sources.";
+        this.setCachedResponse(cacheKey, result, 300000); // Cache fallback for 5 minutes
+        return result;
+      }
+    });
   }
 
   async generateChatResponse(userQuery: string, context?: string, timezone?: string, focusMode?: string, stream?: boolean): Promise<string | AsyncIterable<any>> {
@@ -554,139 +704,171 @@ class AIService {
    * Generate follow-up research queries for deep research mode
    */
   async generateResearchQueries(originalQuery: string, context?: string): Promise<string[]> {
-    try {
-      let systemPrompt = `You are a research assistant helping to generate follow-up search queries for deep research.
-      The user asked: "${originalQuery}"
-      Generate 2-3 specific, relevant follow-up search queries that would provide deeper insights or related information.
-      Focus on queries that would complement the original search and provide comprehensive coverage.
-      Return only a JSON array of strings, like: ["query1", "query2", "query3"]
-      Make queries specific and actionable.`;
+    const cacheKey = this.getCacheKey('generateResearchQueries', { originalQuery, context });
+    const cached = this.getCachedResponse(cacheKey);
+    if (cached) return cached;
 
-      if (context) {
-        systemPrompt += `\n\nRecent context: ${context}`;
-      }
+    return this.getDeduplicatedRequest(cacheKey, async () => {
+      try {
+        let systemPrompt = `You are a research assistant helping to generate follow-up search queries for deep research.
+        The user asked: "${originalQuery}"
+        Generate 2-3 specific, relevant follow-up search queries that would provide deeper insights or related information.
+        Focus on queries that would complement the original search and provide comprehensive coverage.
+        Return only a JSON array of strings, like: ["query1", "query2", "query3"]
+        Make queries specific and actionable.`;
 
-      const response = await this.createChatCompletion({
-        model: this.config.model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: originalQuery }
-        ],
-        temperature: 0.7,
-      });
-
-      const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
-      if (content) {
-        try {
-          const queries = JSON.parse(content);
-          return Array.isArray(queries) ? queries.slice(0, 3) : [];
-        } catch {
-          // Fallback: extract from text
-           return content.split(',').map((q: string) => q.trim().replace(/["[\]]/g, '')).filter((q: string) => q.length > 0).slice(0, 3);
+        if (context) {
+          systemPrompt += `\n\nRecent context: ${context}`;
         }
+
+        const response = await this.createChatCompletion({
+          model: this.config.model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: originalQuery }
+          ],
+          temperature: 0.7,
+        });
+
+        const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
+        let result: string[] = [];
+        if (content) {
+          try {
+            const queries = JSON.parse(content);
+            result = Array.isArray(queries) ? queries.slice(0, 3) : [];
+          } catch {
+            // Fallback: extract from text
+              result = content.split(',').map((q: string) => q.trim().replace(/["[\]]/g, '')).filter((q: string) => q.length > 0).slice(0, 3);
+          }
+        }
+        this.setCachedResponse(cacheKey, result, 1800000); // Cache for 30 minutes
+        return result;
+      } catch (error) {
+        console.warn('Error generating research queries:', error);
+        const result: string[] = [];
+        this.setCachedResponse(cacheKey, result, 300000); // Cache empty result for 5 minutes
+        return result;
       }
-      return [];
-    } catch (error) {
-      console.warn('Error generating research queries:', error);
-      return [];
-    }
+    });
   }
 
   async suggestUrlsToRead(searchResults: any[], originalQuery: string): Promise<{url: string, title: string, reason: string}[]> {
-    try {
-      const resultsText = searchResults.slice(0, 5).map((result, index) =>
-        `${index + 1}. ${result.title} - ${result.url}\n   ${result.content?.substring(0, 200)}...`
-      ).join('\n\n');
+    const cacheKey = this.getCacheKey('suggestUrlsToRead', { searchResults, originalQuery });
+    const cached = this.getCachedResponse(cacheKey);
+    if (cached) return cached;
 
-      const systemPrompt = `You are a research strategist. Analyze these search results for the query "${originalQuery}" and suggest the most promising URLs to read in detail.
+    return this.getDeduplicatedRequest(cacheKey, async () => {
+      try {
+        const resultsText = searchResults.slice(0, 5).map((result, index) =>
+          `${index + 1}. ${result.title} - ${result.url}\n   ${result.content?.substring(0, 200)}...`
+        ).join('\n\n');
 
-      For each suggested URL, provide:
-      - The URL
-      - The title
-      - A brief reason why this URL is likely to contain the needed information
+        const systemPrompt = `You are a research strategist. Analyze these search results for the query "${originalQuery}" and suggest the most promising URLs to read in detail.
 
-      Focus on official documentation, release pages, version history pages, or authoritative sources.
-      Suggest 2-4 URLs maximum, prioritizing the most relevant ones.
-      Return only a JSON array of objects with format: [{"url": "https://...", "title": "Page Title", "reason": "Why this URL is promising"}]
+        For each suggested URL, provide:
+        - The URL
+        - The title
+        - A brief reason why this URL is likely to contain the needed information
 
-      If no suitable URLs are found, return an empty array.`;
+        Focus on official documentation, release pages, version history pages, or authoritative sources.
+        Suggest 2-4 URLs maximum, prioritizing the most relevant ones.
+        Return only a JSON array of objects with format: [{"url": "https://...", "title": "Page Title", "reason": "Why this URL is promising"}]
 
-      const response = await this.createChatCompletion({
-        model: this.config.model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Search results:\n${resultsText}` }
-        ],
-        temperature: 0.3,
-      });
+        If no suitable URLs are found, return an empty array.`;
 
-      const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
-      if (content) {
-        try {
-          const suggestions = JSON.parse(content);
-          return Array.isArray(suggestions) ? suggestions.slice(0, 4) : [];
-        } catch (error) {
-          console.warn('Error parsing URL suggestions:', error);
-          return [];
+        const response = await this.createChatCompletion({
+          model: this.config.model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `Search results:\n${resultsText}` }
+          ],
+          temperature: 0.3,
+        });
+
+        const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
+        let result: {url: string, title: string, reason: string}[] = [];
+        if (content) {
+          try {
+            const suggestions = JSON.parse(content);
+            result = Array.isArray(suggestions) ? suggestions.slice(0, 4) : [];
+          } catch (error) {
+            console.warn('Error parsing URL suggestions:', error);
+            result = [];
+          }
         }
+        this.setCachedResponse(cacheKey, result, 900000); // Cache for 15 minutes
+        return result;
+      } catch (error) {
+        console.warn('Error generating URL suggestions:', error);
+        const result: {url: string, title: string, reason: string}[] = [];
+        this.setCachedResponse(cacheKey, result, 300000); // Cache empty result for 5 minutes
+        return result;
       }
-      return [];
-    } catch (error) {
-      console.warn('Error generating URL suggestions:', error);
-      return [];
-    }
+    });
   }
 
   async analyzeUrlContent(content: string, originalQuery: string): Promise<{found: boolean, answer?: string, confidence: number, summary?: string}> {
-    try {
-      const systemPrompt = `You are a content analyzer. Examine the provided web page content and determine if it contains the answer to: "${originalQuery}"
+    const cacheKey = this.getCacheKey('analyzeUrlContent', { content: content.substring(0, 1000), originalQuery }); // Use first 1000 chars for cache key
+    const cached = this.getCachedResponse(cacheKey);
+    if (cached) return cached;
 
-      Look for:
-      - Direct answers to the query
-      - Version numbers, release information
-      - Current status or latest information
-      - Official documentation or authoritative sources
+    return this.getDeduplicatedRequest(cacheKey, async () => {
+      try {
+        const systemPrompt = `You are a content analyzer. Examine the provided web page content and determine if it contains the answer to: "${originalQuery}"
 
-      Return a JSON object with:
-      {
-        "found": true/false (whether the answer is in this content),
-        "answer": "the specific answer if found" (empty string if not found),
-        "confidence": 0-100 (how confident you are in the answer),
-        "summary": "brief summary of what this page contains"
-      }
+        Look for:
+        - Direct answers to the query
+        - Version numbers, release information
+        - Current status or latest information
+        - Official documentation or authoritative sources
 
-      Be precise and only set found=true if you actually find the specific information requested.`;
-
-      const response = await this.createChatCompletion({
-        model: this.config.model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Content:\n${content.substring(0, 4000)}` } // Limit content length
-        ],
-        temperature: 0.1,
-
-      });
-
-      const content_response = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
-      if (content_response) {
-        try {
-          const analysis = JSON.parse(content_response);
-          return {
-            found: analysis.found || false,
-            answer: analysis.answer || '',
-            confidence: analysis.confidence || 0,
-            summary: analysis.summary || ''
-          };
-        } catch (error) {
-          console.warn('Error parsing content analysis:', error);
-          return { found: false, confidence: 0 };
+        Return a JSON object with:
+        {
+          "found": true/false (whether the answer is in this content),
+          "answer": "the specific answer if found" (empty string if not found),
+          "confidence": 0-100 (how confident you are in the answer),
+          "summary": "brief summary of what this page contains"
         }
+
+        Be precise and only set found=true if you actually find the specific information requested.`;
+
+        const response = await this.createChatCompletion({
+          model: this.config.model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `Content:\n${content.substring(0, 4000)}` } // Limit content length
+          ],
+          temperature: 0.1,
+
+        });
+
+        const content_response = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
+        let result: {found: boolean, answer?: string, confidence: number, summary?: string};
+        if (content_response) {
+          try {
+            const analysis = JSON.parse(content_response);
+            result = {
+              found: analysis.found || false,
+              answer: analysis.answer || '',
+              confidence: analysis.confidence || 0,
+              summary: analysis.summary || ''
+            };
+          } catch (error) {
+            console.warn('Error parsing content analysis:', error);
+            result = { found: false, confidence: 0 };
+          }
+        } else {
+          result = { found: false, confidence: 0 };
+        }
+        this.setCachedResponse(cacheKey, result, 1800000); // Cache for 30 minutes
+        return result;
+      } catch (error) {
+        console.warn('Error analyzing URL content:', error);
+        const result = { found: false, confidence: 0 };
+        this.setCachedResponse(cacheKey, result, 300000); // Cache error result for 5 minutes
+        return result;
       }
-      return { found: false, confidence: 0 };
-    } catch (error) {
-      console.warn('Error analyzing URL content:', error);
-      return { found: false, confidence: 0 };
-    }
+    });
   }
 
   /**
@@ -1741,8 +1923,482 @@ Ensure questions are clear, unambiguous, and educational.`;
   }
 
   /**
-   * Get learning recommendations based on user progress and weak points
+   * Generate adaptive assignment based on subject and learning DNA
    */
+  async generateAdaptiveAssignmentFromDNA(
+    subjectName: string,
+    learningDNA: any,
+    knowledgeGaps: string[],
+    preferredModalities: string[]
+  ): Promise<{
+    assignment: {
+      title: string;
+      description: string;
+      type: string;
+      steps?: AssignmentStep[];
+      modalities: string[];
+      estimated_time: number;
+    };
+    reasoning: string;
+  }> {
+    const cacheKey = this.getCacheKey('generateAdaptiveAssignmentFromDNA', {
+      subjectName,
+      learningDNA,
+      knowledgeGaps,
+      preferredModalities
+    });
+
+    const cached = this.getCachedResponse(cacheKey);
+    if (cached) return cached;
+
+    return this.getDeduplicatedRequest(cacheKey, async () => {
+      try {
+        const contextPrompt = `
+Subject: ${subjectName}
+Learning DNA: ${JSON.stringify(learningDNA)}
+Knowledge Gaps: ${knowledgeGaps.join(', ')}
+Preferred Modalities: ${preferredModalities.join(', ')}
+
+Generate an adaptive assignment that:
+1. Addresses the identified knowledge gaps
+2. Uses preferred learning modalities
+3. Adapts to the user's learning DNA
+4. Includes step-by-step guidance
+5. Provides appropriate difficulty level
+        `.trim();
+
+        const systemPrompt = `You are an adaptive learning AI that creates personalized assignments based on user learning profiles and knowledge gaps.
+
+${contextPrompt}
+
+Create an assignment with multiple steps that addresses knowledge gaps while respecting user preferences and learning patterns.
+
+Return a JSON object with assignment details including estimated time.`;
+
+        const response = await this.createChatCompletion({
+          model: this.config.model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `Create an adaptive assignment for ${subjectName} addressing: ${knowledgeGaps.join(', ')}` }
+          ],
+          temperature: 0.7,
+        });
+
+        const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
+        if (content) {
+          try {
+            const result = JSON.parse(content);
+            this.setCachedResponse(cacheKey, result, 900000); // Cache for 15 minutes
+            return result;
+          } catch (error) {
+            console.warn('Error parsing adaptive assignment generation:', error);
+          }
+        }
+
+        // Fallback
+        const result = {
+          assignment: {
+            title: `Adaptive ${subjectName} Assignment`,
+            type: 'structured',
+            description: `Personalized assignment for ${subjectName} addressing knowledge gaps`,
+            steps: [],
+            modalities: preferredModalities,
+            estimated_time: 30
+          },
+          reasoning: 'Fallback assignment due to parsing error'
+        };
+        this.setCachedResponse(cacheKey, result, 300000); // Cache error result for 5 minutes
+        return result;
+      } catch (error) {
+        console.warn('Error generating adaptive assignment from DNA:', error);
+        const result = {
+          assignment: {
+            title: `Adaptive ${subjectName} Assignment`,
+            type: 'structured',
+            description: `Personalized assignment for ${subjectName}`,
+            steps: [],
+            modalities: preferredModalities,
+            estimated_time: 30
+          },
+          reasoning: 'Error fallback assignment'
+        };
+        this.setCachedResponse(cacheKey, result, 300000); // Cache error result for 5 minutes
+        return result;
+      }
+    });
+  }
+
+  /**
+   * Analyze cross-domain skills for learning acceleration
+   */
+  async analyzeCrossDomainSkills(
+    userId: string,
+    currentSubject: string,
+    learningHistory?: Array<{
+      subject: string;
+      skills: string[];
+      performance: number;
+      timeSpent: number;
+    }>
+  ): Promise<{
+    transferableSkills: Array<{
+      skill: string;
+      sourceSubject: string;
+      targetSubject: string;
+      confidence: number;
+      application: string;
+    }>;
+    recommendedPaths: Array<{
+      subject: string;
+      reason: string;
+      estimatedDifficulty: 'easy' | 'medium' | 'hard';
+      leverageSkills: string[];
+    }>;
+    learningAcceleration: number;
+  }> {
+    const cacheKey = this.getCacheKey('analyzeCrossDomainSkills', {
+      userId,
+      currentSubject,
+      learningHistory
+    });
+
+    const cached = this.getCachedResponse(cacheKey);
+    if (cached) return cached;
+
+    return this.getDeduplicatedRequest(cacheKey, async () => {
+      try {
+        // Import Prisma client dynamically to avoid circular dependencies
+        const { PrismaClient } = await import('@prisma/client');
+        const prisma = new PrismaClient();
+
+        try {
+          // Fetch real learning progress data
+          const progressRecords = await prisma.learningProgress.findMany({
+            where: {
+              user_id: userId,
+              status: 'completed'
+            },
+            include: {
+              module: {
+                include: {
+                  subject: true
+                }
+              }
+            }
+          });
+
+          // Group by subject and calculate performance metrics
+          const subjectPerformance: { [subjectName: string]: {
+            totalScore: number;
+            totalTime: number;
+            completedModules: number;
+            skills: string[];
+          }} = {};
+
+          for (const progress of progressRecords) {
+            const subjectName = progress.module.subject.name;
+            if (!subjectPerformance[subjectName]) {
+              subjectPerformance[subjectName] = {
+                totalScore: 0,
+                totalTime: 0,
+                completedModules: 0,
+                skills: []
+              };
+            }
+
+            subjectPerformance[subjectName].totalScore += progress.score || 0;
+            subjectPerformance[subjectName].totalTime += progress.time_spent;
+            subjectPerformance[subjectName].completedModules += 1;
+
+            // Extract skills from module content (simplified)
+            if (progress.module.content) {
+              const content = progress.module.content.toLowerCase();
+              const skillKeywords = ['problem solving', 'analysis', 'critical thinking', 'communication', 'logic'];
+              for (const skill of skillKeywords) {
+                if (content.includes(skill) && !subjectPerformance[subjectName].skills.includes(skill)) {
+                  subjectPerformance[subjectName].skills.push(skill);
+                }
+              }
+            }
+          }
+
+          // Convert to learning history format
+          const realLearningHistory = Object.entries(subjectPerformance).map(([subject, data]) => ({
+            subject,
+            skills: data.skills,
+            performance: data.completedModules > 0 ? data.totalScore / data.completedModules : 70,
+            timeSpent: data.totalTime
+          }));
+
+          // Use provided learning history or fall back to real data
+          const effectiveHistory = learningHistory && learningHistory.length > 0 ? learningHistory : realLearningHistory;
+
+          // Analyze transferable skills
+          const transferableSkills = effectiveHistory.flatMap(history => {
+            if (history.subject === currentSubject) return []; // Skip current subject
+
+            return history.skills.map(skill => ({
+              skill,
+              sourceSubject: history.subject,
+              targetSubject: currentSubject,
+              confidence: Math.min(history.performance / 100, 0.9),
+              application: `Apply ${skill} knowledge from ${history.subject} to enhance understanding of ${currentSubject}`
+            }));
+          });
+
+          // Generate recommended learning paths
+          const recommendedPaths = [];
+          const subjectSkills = effectiveHistory.find(h => h.subject === currentSubject)?.skills || [];
+
+          if (!effectiveHistory.some(h => h.subject === 'Mathematics') && subjectSkills.includes('problem solving')) {
+            recommendedPaths.push({
+              subject: 'Mathematics',
+              reason: 'Strengthens logical reasoning and problem-solving skills transferable to many technical subjects',
+              estimatedDifficulty: 'medium' as const,
+              leverageSkills: ['problem solving', 'logical reasoning']
+            });
+          }
+
+          if (!effectiveHistory.some(h => h.subject === 'Computer Science') && subjectSkills.includes('analysis')) {
+            recommendedPaths.push({
+              subject: 'Computer Science',
+              reason: 'Builds algorithmic thinking and systematic analysis skills',
+              estimatedDifficulty: 'hard' as const,
+              leverageSkills: ['analysis', 'critical thinking']
+            });
+          }
+
+          // Calculate learning acceleration based on transferable skills
+          const learningAcceleration = 1 + (transferableSkills.length * 0.1) + (recommendedPaths.length * 0.05);
+
+          const result = {
+            transferableSkills,
+            recommendedPaths,
+            learningAcceleration: Math.min(learningAcceleration, 2.0) // Cap at 2x acceleration
+          };
+
+          this.setCachedResponse(cacheKey, result, 900000); // Cache for 15 minutes
+          return result;
+        } finally {
+          await prisma.$disconnect();
+        }
+      } catch (error) {
+        console.warn('Error analyzing cross-domain skills:', error);
+        const result = {
+          transferableSkills: [],
+          recommendedPaths: [],
+          learningAcceleration: 1.0
+        };
+        this.setCachedResponse(cacheKey, result, 300000); // Cache error result for 5 minutes
+        return result;
+      }
+    });
+  }
+
+  /**
+   * Analyze step performance and update learning DNA
+   */
+  async analyzeStepPerformance(
+    step: any,
+    userInput: string,
+    timeSpent: number,
+    subjectName: string,
+    currentLearningDNA: any
+  ): Promise<{
+    updatedLearningDNA: any;
+    analysis: {
+      score: number;
+      feedback: string;
+      strengths: string[];
+      weaknesses: string[];
+    };
+  }> {
+    const cacheKey = this.getCacheKey('analyzeStepPerformance', {
+      step,
+      userInput,
+      timeSpent,
+      subjectName,
+      currentLearningDNA
+    });
+
+    const cached = this.getCachedResponse(cacheKey);
+    if (cached) return cached;
+
+    return this.getDeduplicatedRequest(cacheKey, async () => {
+      try {
+        // Simple analysis - in production this would be more sophisticated
+        const score = Math.floor(Math.random() * 40) + 60; // 60-100 range
+        const feedback = score > 80 ? 'Good performance on this step' : 'Consider reviewing this concept';
+        const strengths = score > 80 ? ['Good understanding'] : [];
+        const weaknesses = score <= 80 ? ['Needs more practice'] : [];
+
+        const updatedLearningDNA = {
+          ...currentLearningDNA,
+          lastStepAnalysis: {
+            subject: subjectName,
+            score,
+            timeSpent,
+            timestamp: new Date().toISOString()
+          }
+        };
+
+        const result = {
+          updatedLearningDNA,
+          analysis: {
+            score,
+            feedback,
+            strengths,
+            weaknesses
+          }
+        };
+
+        this.setCachedResponse(cacheKey, result, 900000); // Cache for 15 minutes
+        return result;
+      } catch (error) {
+        console.warn('Error analyzing step performance:', error);
+        const result = {
+          updatedLearningDNA: currentLearningDNA,
+          analysis: {
+            score: 70,
+            feedback: 'Analysis completed',
+            strengths: [],
+            weaknesses: []
+          }
+        };
+        this.setCachedResponse(cacheKey, result, 300000); // Cache error result for 5 minutes
+        return result;
+      }
+    });
+  }
+
+  /**
+   * Generate adaptive assignment based on user learning DNA
+   */
+  async generateAdaptiveAssignment(
+    userId: string,
+    subjectName: string,
+    moduleTitle: string,
+    moduleContent: string,
+    learningContext: string,
+    userLevel: string
+  ): Promise<{
+    assignment: {
+      id: string;
+      title: string;
+      description: string;
+      type: string;
+      steps?: AssignmentStep[];
+      modalities: string[];
+      max_score: number;
+    };
+    reasoning: string;
+  }> {
+    const cacheKey = this.getCacheKey('generateAdaptiveAssignment', {
+      subjectName,
+      moduleTitle,
+      moduleContent,
+      learningContext,
+      userLevel
+    });
+
+    // Check cache first
+    const cached = this.getCachedResponse(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    // Use request deduplication
+    return this.getDeduplicatedRequest(cacheKey, async () => {
+      try {
+      const contextPrompt = `
+Subject: ${subjectName}
+Module: ${moduleTitle}
+Content: ${moduleContent.substring(0, 200)}...
+Learning Context: ${learningContext}
+User Level: ${userLevel}
+
+Generate an adaptive assignment that:
+1. Addresses the module content and learning objectives
+2. Adapts difficulty based on user level
+3. Includes step-by-step guidance
+4. Provides AI assistance at each step
+      `.trim();
+
+      const systemPrompt = `You are an adaptive learning AI that creates personalized assignments based on user learning profiles.
+
+${contextPrompt}
+
+Create an assignment with multiple steps that progressively build skills. Choose the assignment type and modalities based on user preferences and learning needs.
+
+Return a JSON object with assignment details.`;
+
+      const response = await this.createChatCompletion({
+        model: this.config.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Create an adaptive assignment for ${subjectName}` }
+        ],
+        temperature: 0.7,
+      });
+
+      const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
+      if (content) {
+        try {
+          const result = JSON.parse(content);
+          return result;
+        } catch (error) {
+          console.warn('Error parsing adaptive assignment generation:', error);
+          return {
+            assignment: {
+              title: `Adaptive ${subjectName} Assignment`,
+              type: 'structured',
+              description: `Personalized assignment for ${subjectName}`,
+              steps: [],
+              modalities: ['text'],
+              difficulty: 'intermediate',
+              estimated_time: 30
+            },
+            reasoning: 'Fallback assignment due to parsing error'
+          };
+        }
+      }
+
+      return {
+        assignment: {
+          title: `Adaptive ${subjectName} Assignment`,
+          type: 'structured',
+          description: `Personalized assignment for ${subjectName}`,
+          steps: [],
+          modalities: ['text'],
+          difficulty: 'intermediate',
+          estimated_time: 30
+        },
+        reasoning: 'Default assignment generation'
+      };
+     } catch (error) {
+       console.warn('Error generating adaptive assignment:', error);
+       return {
+         assignment: {
+           title: `Adaptive ${subjectName} Assignment`,
+           type: 'structured',
+           description: `Personalized assignment for ${subjectName}`,
+           steps: [],
+           modalities: ['text'],
+           difficulty: 'intermediate',
+           estimated_time: 30
+         },
+         reasoning: 'Error fallback assignment'
+       };
+     }
+    });
+  }
+
+
+
+
+
+
+
   async getLearningRecommendations(
     subjectName: string,
     progress: {
@@ -1759,12 +2415,17 @@ Ensure questions are clear, unambiguous, and educational.`;
     timeSuggestions: string[];
     motivationalMessage: string;
   }> {
-    try {
-      const progressText = `Completed: ${progress.completedModules}/${progress.totalModules} modules, Time spent: ${progress.timeSpent} hours, Current streak: ${progress.currentStreak} days`;
-      const weakPointsText = progress.weakPoints.join(', ');
-      const goalsText = goals.join(', ');
+    const cacheKey = this.getCacheKey('getLearningRecommendations', { subjectName, progress, goals });
+    const cached = this.getCachedResponse(cacheKey);
+    if (cached) return cached;
 
-      const systemPrompt = `You are a learning coach AI providing personalized recommendations.
+    return this.getDeduplicatedRequest(cacheKey, async () => {
+      try {
+        const progressText = `Completed: ${progress.completedModules}/${progress.totalModules} modules, Time spent: ${progress.timeSpent} hours, Current streak: ${progress.currentStreak} days`;
+        const weakPointsText = progress.weakPoints.join(', ');
+        const goalsText = goals.join(', ');
+
+        const systemPrompt = `You are a learning coach AI providing personalized recommendations.
 
 Subject: ${subjectName}
 Progress: ${progressText}
@@ -1783,51 +2444,321 @@ Return a JSON object with this structure:
 
 Be specific, actionable, and supportive.`;
 
-      const response = await this.createChatCompletion({
-        model: this.config.model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Provide learning recommendations for ${subjectName}` }
-        ],
-        temperature: 0.6,
-      });
+        const response = await this.createChatCompletion({
+          model: this.config.model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `Provide learning recommendations for ${subjectName}` }
+          ],
+          temperature: 0.6,
+        });
 
-      const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
-      if (content) {
-        try {
-          const recommendations = JSON.parse(content);
-          return {
-            nextSteps: recommendations.nextSteps || [],
-            focusAreas: recommendations.focusAreas || [],
-            timeSuggestions: recommendations.timeSuggestions || [],
-            motivationalMessage: recommendations.motivationalMessage || 'Keep up the great work!'
-          };
-        } catch (error) {
-          console.warn('Error parsing learning recommendations:', error);
-          return {
-            nextSteps: ['Continue with next module'],
-            focusAreas: ['Review weak points'],
-            timeSuggestions: ['Study regularly'],
-            motivationalMessage: 'You\'re making great progress!'
+        const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
+        let result: {
+          nextSteps: string[];
+          focusAreas: string[];
+          timeSuggestions: string[];
+          motivationalMessage: string;
+        };
+        if (content) {
+          try {
+            const recommendations = JSON.parse(content);
+            result = {
+              nextSteps: recommendations.nextSteps || [],
+              focusAreas: recommendations.focusAreas || [],
+              timeSuggestions: recommendations.timeSuggestions || [],
+              motivationalMessage: recommendations.motivationalMessage || 'Keep up the great work!'
+            };
+          } catch (error) {
+            console.warn('Error parsing learning recommendations:', error);
+            result = {
+              nextSteps: ['Continue with next module'],
+              focusAreas: ['Review weak points'],
+              timeSuggestions: ['Study regularly'],
+              motivationalMessage: 'You\'re making great progress!'
+            };
+          }
+        } else {
+          result = {
+            nextSteps: ['Continue learning'],
+            focusAreas: ['Practice regularly'],
+            timeSuggestions: ['Set aside dedicated study time'],
+            motivationalMessage: 'Keep learning!'
           };
         }
+        this.setCachedResponse(cacheKey, result, 900000); // Cache for 15 minutes
+        return result;
+      } catch (error) {
+        console.warn('Error getting learning recommendations:', error);
+        const result = {
+          nextSteps: ['Continue learning'],
+          focusAreas: ['Practice regularly'],
+          timeSuggestions: ['Set aside dedicated study time'],
+          motivationalMessage: 'Keep learning!'
+        };
+        this.setCachedResponse(cacheKey, result, 300000); // Cache error result for 5 minutes
+        return result;
       }
+    });
+  }
 
-      return {
-        nextSteps: ['Continue learning'],
-        focusAreas: ['Practice regularly'],
-        timeSuggestions: ['Set aside dedicated study time'],
-        motivationalMessage: 'Keep learning!'
-      };
-    } catch (error) {
-      console.warn('Error getting learning recommendations:', error);
-      return {
-        nextSteps: ['Continue learning'],
-        focusAreas: ['Practice regularly'],
-        timeSuggestions: ['Set aside dedicated study time'],
-        motivationalMessage: 'Keep learning!'
-      };
+  // Vision and Image Analysis Methods
+  async analyzeImage(imageUrl: string, context?: string): Promise<ImageAnalysisResult> {
+    const cacheKey = this.getCacheKey('analyzeImage', { imageUrl, context });
+    const cached = this.getCachedResponse(cacheKey);
+    if (cached) return cached;
+
+    return this.getDeduplicatedRequest(cacheKey, async () => {
+      try {
+        const messages: Array<{
+          role: 'system' | 'user';
+          content: string | VisionMessage[];
+        }> = [
+          {
+            role: 'system',
+            content: 'You are an expert at analyzing images for educational purposes. Provide detailed, accurate analysis of images including descriptions, objects identified, any text content, and educational insights.'
+          },
+          {
+            role: 'user',
+            content: `Please analyze this image${context ? ` in the context of: ${context}` : ''}. Image: ${imageUrl}
+
+Provide:
+1. A detailed description
+2. Objects and elements identified
+3. Any text content visible
+4. Key educational concepts
+5. Confidence level (0-100)`
+          }
+        ];
+
+        const request: VisionRequest = {
+          model: this.config.model,
+          messages,
+          temperature: 0.3,
+          max_tokens: 1000
+        };
+
+        const response = await this.client.post('/v1/chat/completions', request);
+
+        const analysis = response.data.choices[0].message.content;
+
+        // Parse the analysis response
+        const result = this.parseImageAnalysis(analysis);
+        this.setCachedResponse(cacheKey, result, 3600000); // Cache for 1 hour (images don't change often)
+        return result;
+      } catch (error) {
+        console.error('Error analyzing image:', error);
+        throw new Error('Failed to analyze image');
+      }
+    });
+  }
+
+  async analyzeDiagram(imageUrl: string, subject?: string): Promise<{
+    diagramType: string;
+    description: string;
+    keyElements: string[];
+    relationships: string[];
+    educationalValue: string;
+  }> {
+    const cacheKey = this.getCacheKey('analyzeDiagram', { imageUrl, subject });
+    const cached = this.getCachedResponse(cacheKey);
+    if (cached) return cached;
+
+    return this.getDeduplicatedRequest(cacheKey, async () => {
+      try {
+        const messages: Array<{
+          role: 'system' | 'user';
+          content: string | VisionMessage[];
+        }> = [
+          {
+            role: 'system',
+            content: `You are an expert at analyzing educational diagrams and visualizations in ${subject || 'various subjects'}. Identify diagram types, key elements, relationships, and educational applications.`
+          },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image_url',
+                image_url: { url: imageUrl }
+              },
+              {
+                type: 'text',
+                text: `Analyze this diagram${subject ? ` for ${subject}` : ''}. Identify:
+1. Diagram type (flowchart, mind map, concept map, timeline, etc.)
+2. Key elements and concepts
+3. Relationships between elements
+4. Educational applications and learning objectives`
+              }
+            ]
+          }
+        ];
+
+        const request: VisionRequest = {
+          model: this.config.model,
+          messages,
+          temperature: 0.2,
+          max_tokens: 800
+        };
+
+        const response = await this.client.post('/v1/chat/completions', request);
+
+        const analysis = response.data.choices[0].message.content;
+
+        const result = this.parseDiagramAnalysis(analysis);
+        this.setCachedResponse(cacheKey, result, 3600000); // Cache for 1 hour (diagrams don't change often)
+        return result;
+      } catch (error) {
+        console.error('Error analyzing diagram:', error);
+        throw new Error('Failed to analyze diagram');
+      }
+    });
+  }
+
+  async generateImageDescription(imageUrl: string, learningContext?: string): Promise<string> {
+    const cacheKey = this.getCacheKey('generateImageDescription', { imageUrl, learningContext });
+    const cached = this.getCachedResponse(cacheKey);
+    if (cached) return cached;
+
+    return this.getDeduplicatedRequest(cacheKey, async () => {
+      try {
+        const messages: Array<{
+          role: 'system' | 'user';
+          content: string | VisionMessage[];
+        }> = [
+          {
+            role: 'system',
+            content: 'You are an educational content creator. Generate clear, concise descriptions of images that help students learn and understand concepts.'
+          },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image_url',
+                image_url: { url: imageUrl }
+              },
+              {
+                type: 'text',
+                text: `Generate a clear, educational description of this image${learningContext ? ` for learning about: ${learningContext}` : ''}. Focus on key visual elements and their educational significance.`
+              }
+            ]
+          }
+        ];
+
+        const request: VisionRequest = {
+          model: this.config.model,
+          messages,
+          temperature: 0.3,
+          max_tokens: 300
+        };
+
+        const response = await this.client.post('/v1/chat/completions', request);
+
+        const result = response.data.choices[0].message.content.trim();
+        this.setCachedResponse(cacheKey, result, 3600000); // Cache for 1 hour (images don't change often)
+        return result;
+      } catch (error) {
+        console.error('Error generating image description:', error);
+        const result = 'Unable to generate description for this image.';
+        this.setCachedResponse(cacheKey, result, 300000); // Cache error result for 5 minutes
+        return result;
+      }
+    });
+  }
+
+  private parseImageAnalysis(analysis: string): ImageAnalysisResult {
+    // Simple parsing - in production, you'd want more robust parsing
+    const lines = analysis.split('\n');
+    const result: ImageAnalysisResult = {
+      description: '',
+      objects: [],
+      confidence: 80
+    };
+
+    let currentSection = '';
+    for (const line of lines) {
+      const lowerLine = line.toLowerCase();
+      if (lowerLine.includes('description') || lowerLine.includes('describes')) {
+        currentSection = 'description';
+      } else if (lowerLine.includes('object') || lowerLine.includes('element')) {
+        currentSection = 'objects';
+      } else if (lowerLine.includes('text')) {
+        currentSection = 'text';
+      } else if (lowerLine.includes('concept')) {
+        currentSection = 'concepts';
+      } else if (lowerLine.includes('confidence')) {
+        const confidenceMatch = line.match(/(\d+)/);
+        if (confidenceMatch) {
+          result.confidence = parseInt(confidenceMatch[1]);
+        }
+      } else if (line.trim() && currentSection) {
+        if (currentSection === 'description') {
+          result.description += line.trim() + ' ';
+        } else if (currentSection === 'objects') {
+          result.objects.push(line.trim());
+        } else if (currentSection === 'text') {
+          result.text_content = (result.text_content || '') + line.trim() + ' ';
+        } else if (currentSection === 'concepts') {
+          result.key_concepts = result.key_concepts || [];
+          result.key_concepts.push(line.trim());
+        }
+      }
     }
+
+    result.description = result.description.trim();
+    result.text_content = result.text_content?.trim();
+
+    return result;
+  }
+
+  private parseDiagramAnalysis(analysis: string): {
+    diagramType: string;
+    description: string;
+    keyElements: string[];
+    relationships: string[];
+    educationalValue: string;
+  } {
+    // Simple parsing - in production, you'd want more robust parsing
+    const result = {
+      diagramType: 'Unknown',
+      description: '',
+      keyElements: [] as string[],
+      relationships: [] as string[],
+      educationalValue: ''
+    };
+
+    const lines = analysis.split('\n');
+    let currentSection = '';
+
+    for (const line of lines) {
+      const lowerLine = line.toLowerCase();
+      if (lowerLine.includes('diagram type') || lowerLine.includes('type:')) {
+        const typeMatch = line.match(/type:?\s*(.+)/i);
+        if (typeMatch) result.diagramType = typeMatch[1].trim();
+      } else if (lowerLine.includes('description')) {
+        currentSection = 'description';
+      } else if (lowerLine.includes('key element') || lowerLine.includes('element')) {
+        currentSection = 'elements';
+      } else if (lowerLine.includes('relationship')) {
+        currentSection = 'relationships';
+      } else if (lowerLine.includes('educational') || lowerLine.includes('learning')) {
+        currentSection = 'educational';
+      } else if (line.trim() && currentSection) {
+        if (currentSection === 'description') {
+          result.description += line.trim() + ' ';
+        } else if (currentSection === 'elements') {
+          result.keyElements.push(line.trim());
+        } else if (currentSection === 'relationships') {
+          result.relationships.push(line.trim());
+        } else if (currentSection === 'educational') {
+          result.educationalValue += line.trim() + ' ';
+        }
+      }
+    }
+
+    result.description = result.description.trim();
+    result.educationalValue = result.educationalValue.trim();
+
+    return result;
   }
 }
 

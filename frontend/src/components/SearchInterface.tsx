@@ -9,7 +9,6 @@ import {
   ChevronDown,
   ExternalLink,
   FileText,
-  Image,
   StickyNote,
   Tag,
   Loader2,
@@ -29,7 +28,7 @@ import { apiClient, API_BASE_URL } from '../api/client';
 interface SearchResult {
   id: string;
   title: string;
-  type: 'document' | 'image' | 'note' | 'task';
+  type: 'document' | 'note' | 'task';
   content: string;
   tags: string[];
   createdAt: string;
@@ -83,9 +82,11 @@ const SearchInterface: React.FC = () => {
   const [focusMode, setFocusMode] = useState<FocusMode>('general');
   const [enabledModes, setEnabledModes] = useState<FocusMode[]>(['general', 'quick-search', 'academic']);
   const [searchMode, setSearchMode] = useState<SearchMode>('normal');
-  const [aiEnhancedSearch, setAiEnhancedSearch] = useState<boolean>(true);
-  const [includeWebSearch, setIncludeWebSearch] = useState<boolean>(false);
-  const [userTimezone, setUserTimezone] = useState<string>('UTC');
+   const [aiEnhancedSearch, setAiEnhancedSearch] = useState<boolean>(true);
+   const [includeWebSearch, setIncludeWebSearch] = useState<boolean>(false);
+    const [useSequentialThinking, setUseSequentialThinking] = useState<boolean>(false);
+    const [sequentialThinkingErrors, setSequentialThinkingErrors] = useState<boolean>(false);
+   const [userTimezone, setUserTimezone] = useState<string>('UTC');
 
   const [query, setQuery] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -117,6 +118,63 @@ const SearchInterface: React.FC = () => {
       timestamp: new Date()
     }
   ]);
+
+  // Load conversation from localStorage on component mount
+  useEffect(() => {
+    try {
+      const savedConversation = localStorage.getItem('searchConversation');
+      if (savedConversation) {
+        const parsedConversation = JSON.parse(savedConversation);
+        // Validate that it's an array and has the expected structure
+        if (Array.isArray(parsedConversation) && parsedConversation.length > 0) {
+          const validatedConversation = parsedConversation
+            .filter((msg: any) =>
+              msg &&
+              typeof msg === 'object' &&
+              (msg.type === 'user' || msg.type === 'ai') &&
+              typeof msg.content === 'string' &&
+              msg.timestamp
+            )
+            .map((msg: any) => ({
+              ...msg,
+              timestamp: new Date(msg.timestamp),
+            }))
+            .slice(-20); // Limit to last 20 messages to prevent excessive storage
+
+          if (validatedConversation.length > 0) {
+            setConversation(validatedConversation);
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load conversation from localStorage:', error);
+      // Clear corrupted data
+      try {
+        localStorage.removeItem('searchConversation');
+      } catch (clearError) {
+        console.warn('Failed to clear corrupted conversation data:', clearError);
+      }
+    }
+  }, []);
+
+  // Save conversation to localStorage whenever it changes
+  useEffect(() => {
+    try {
+      // Limit conversation size before saving (keep last 20 messages)
+      const conversationToSave = conversation.slice(-20);
+      localStorage.setItem('searchConversation', JSON.stringify(conversationToSave));
+    } catch (error) {
+      console.warn('Failed to save conversation to localStorage:', error);
+      // If localStorage is full, try to clear old data and retry
+      try {
+        localStorage.removeItem('searchConversation');
+        const conversationToSave = conversation.slice(-10); // Save fewer messages on retry
+        localStorage.setItem('searchConversation', JSON.stringify(conversationToSave));
+      } catch (retryError) {
+        console.warn('Failed to save conversation even after clearing:', retryError);
+      }
+    }
+  }, [conversation]);
 
   const clearChat = () => {
     setConversation([
@@ -161,12 +219,20 @@ const SearchInterface: React.FC = () => {
 
   // Load search history from localStorage on component mount
   useEffect(() => {
-    const savedHistory = localStorage.getItem('searchHistory');
-    if (savedHistory) {
+    try {
+      const savedHistory = localStorage.getItem('searchHistory');
+      if (savedHistory) {
+        const parsedHistory = JSON.parse(savedHistory);
+        if (Array.isArray(parsedHistory)) {
+          setSearchHistory(parsedHistory.slice(0, 10)); // Limit to 10 items
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to parse search history from localStorage:', error);
       try {
-        setSearchHistory(JSON.parse(savedHistory));
-      } catch (error) {
-        console.warn('Failed to parse search history from localStorage:', error);
+        localStorage.removeItem('searchHistory');
+      } catch (clearError) {
+        console.warn('Failed to clear corrupted search history:', clearError);
       }
     }
   }, []);
@@ -181,6 +247,7 @@ const SearchInterface: React.FC = () => {
     // Clear previous research result
     setCurrentResearchResult(null);
     setResearchAnalysisExpanded(false);
+    setSequentialThinkingErrors(false);
 
     if (!apiClient.isAuthenticated()) {
       console.error('❌ Not authenticated - cannot make search request');
@@ -199,7 +266,11 @@ const SearchInterface: React.FC = () => {
     // Add to history
     const newHistory = [searchQuery, ...searchHistory.filter(h => h !== searchQuery)].slice(0, 10);
     setSearchHistory(newHistory);
-    localStorage.setItem('searchHistory', JSON.stringify(newHistory));
+    try {
+      localStorage.setItem('searchHistory', JSON.stringify(newHistory));
+    } catch (error) {
+      console.warn('Failed to save search history to localStorage:', error);
+    }
 
     // Add user message
     const userMessage: ConversationMessage = {
@@ -462,6 +533,13 @@ const SearchInterface: React.FC = () => {
           forceWebSearch: options.forceWebSearch || includeWebSearch
         });
 
+        // Prepare conversation context (exclude current message and initial greeting)
+        const conversationContext = conversation
+          .filter(msg => msg.id !== '1') // Exclude initial greeting
+          .slice(0, -1) // Exclude the last message (current user input)
+          .slice(-5) // Keep only last 5 messages for context
+          .map(msg => ({ type: msg.type, content: msg.content }));
+
         // Use AI-enhanced search that determines intent and combines sources
         console.log('🚀 Making API call now...');
         const response = await apiClient.searchResources({
@@ -469,6 +547,8 @@ const SearchInterface: React.FC = () => {
           timezone: userTimezone,
           focusMode: focusMode,
           forceWebSearch: options.forceWebSearch || includeWebSearch,
+          useMCP: useSequentialThinking,
+          conversation: conversationContext,
         });
         console.log('✅ API call completed, response:', response);
 
@@ -520,20 +600,30 @@ const SearchInterface: React.FC = () => {
             // Fallback to basic combination if no AI summary
             const hasLocalResults = results.length > 0;
             const hasWebResults = webResults.length > 0;
+            const hasSequentialResults = response.ai?.mcpResults && response.ai.mcpResults.length > 0;
 
-            if (hasLocalResults && hasWebResults) {
-              aiContent = `I found both local resources and web information for "${searchQuery}":\n\n**From your resources:**\n${results.slice(0, 3).map((r, i) => `${i + 1}. ${r.title} (${r.type})`).join('\n')}\n\n**From the web:**\n${webResults.slice(0, 3).map((r, i) => `${i + 1}. ${r.title}`).join('\n')}\n\nWould you like me to show more details from any of these sources?`;
+            if (hasLocalResults && hasWebResults && hasSequentialResults) {
+              aiContent = `I found information from multiple sources for "${searchQuery}":\n\n**From your resources:**\n${results.slice(0, 3).map((r, i) => `${i + 1}. ${r.title} (${r.type})`).join('\n')}\n\n**From the web:**\n${webResults.slice(0, 3).map((r, i) => `${i + 1}. ${r.title}`).join('\n')}\n\n**Sequential analysis:**\n${response.ai.mcpResults.slice(0, 1).map((r, i) => r.success ? `Step-by-step reasoning applied` : `Analysis failed: ${r.error}`).join('\n')}\n\nWould you like me to show more details from any of these sources?`;
+            } else if (hasLocalResults && hasSequentialResults) {
+              aiContent = `I found information from your resources and used sequential thinking for "${searchQuery}":\n\n**From your resources:**\n${results.slice(0, 3).map((r, i) => `${i + 1}. ${r.title} (${r.type})`).join('\n')}\n\n**Sequential analysis:**\n${response.ai.mcpResults.slice(0, 1).map((r, i) => r.success ? `Step-by-step reasoning applied` : `Analysis failed: ${r.error}`).join('\n')}\n\nWould you like me to show more details from any of these sources?`;
+            } else if (hasWebResults && hasSequentialResults) {
+              aiContent = `I found information from the web and used sequential thinking for "${searchQuery}":\n\n**From the web:**\n${webResults.slice(0, 3).map((r, i) => `${i + 1}. ${r.title}`).join('\n')}\n\n**Sequential analysis:**\n${response.ai.mcpResults.slice(0, 1).map((r, i) => r.success ? `Step-by-step reasoning applied` : `Analysis failed: ${r.error}`).join('\n')}\n\nWould you like me to show more details from any of these sources?`;
             } else if (hasLocalResults) {
               aiContent = `I found ${results.length} relevant resources in your collection for "${searchQuery}". Here are the most relevant:`;
             } else if (hasWebResults) {
               aiContent = `I didn't find local resources for "${searchQuery}", but here's what I found on the web (${webResults.length} results):`;
+            } else if (hasSequentialResults) {
+              aiContent = `I used sequential thinking to analyze "${searchQuery}". ${response.ai.mcpResults[0].success ? 'Here\'s the step-by-step analysis:' : `Analysis failed: ${response.ai.mcpResults[0].error}`}`;
             } else {
-              aiContent = `I couldn't find relevant information for "${searchQuery}" in your resources or on the web. Try rephrasing your query or check your search terms.`;
+              const searchSources = ['your resources'];
+              if (includeWebSearch) searchSources.push('on the web');
+              if (useSequentialThinking) searchSources.push('through sequential analysis');
+              aiContent = `I couldn't find relevant information for "${searchQuery}" in ${searchSources.join(', ')}. Try rephrasing your query or check your search terms.`;
             }
           }
         }
 
-        // Generate citations from both sources
+        // Generate citations from all sources (local, web, MCP)
         citations = [
           ...results.map((result, index) => ({
             id: `local-${index + 1}`,
@@ -546,8 +636,21 @@ const SearchInterface: React.FC = () => {
             title: result.title,
             url: result.url,
             snippet: result.content.substring(0, 200) + '...'
+          })),
+          // Add sequential thinking results as citations
+          ...(response.ai?.mcpResults || []).map((mcpResult, index) => ({
+            id: `sequential-${index + 1}`,
+            title: `Sequential Thinking Analysis${!mcpResult.success ? ' (failed)' : ''}`,
+            url: '#',
+            snippet: mcpResult.success
+              ? (mcpResult.result?.thinking ? mcpResult.result.thinking.substring(0, 200) + '...' : 'Step-by-step analysis completed')
+              : `Error: ${mcpResult.error || 'Analysis failed'}`
           }))
         ];
+
+        // Update sequential thinking error state
+        const hasSequentialErrors = response.ai?.mcpResults ? response.ai.mcpResults.some(r => !r.success) : false;
+        setSequentialThinkingErrors(hasSequentialErrors);
 
         const aiMessage: ConversationMessage = {
           id: (Date.now() + 1).toString(),
@@ -589,15 +692,18 @@ const SearchInterface: React.FC = () => {
   const removeHistoryItem = (item: string) => {
     const newHistory = searchHistory.filter(h => h !== item);
     setSearchHistory(newHistory);
-    localStorage.setItem('searchHistory', JSON.stringify(newHistory));
+    try {
+      localStorage.setItem('searchHistory', JSON.stringify(newHistory));
+    } catch (error) {
+      console.warn('Failed to save search history to localStorage:', error);
+    }
   };
 
   const getTypeIcon = (type: SearchResult['type']) => {
     switch (type) {
       case 'document':
         return <FileText className="w-5 h-5 text-blue-500" strokeWidth={1.5} />;
-      case 'image':
-        return <Image className="w-5 h-5 text-green-500" strokeWidth={1.5} />;
+
       case 'note':
         return <StickyNote className="w-5 h-5 text-yellow-500" strokeWidth={1.5} />;
       default:
@@ -701,36 +807,41 @@ const SearchInterface: React.FC = () => {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && !isLoading && handleSearch(query)}
-                  placeholder={
-                    searchMode === 'deep-research'
-                      ? "Enter a research topic for comprehensive AI-powered analysis..."
-                      : aiEnhancedSearch
-                      ? "Ask me anything about your resources, paste a URL to read its content, or search the web..."
-                      : "Ask me anything about your resources..."
-                  }
+                   placeholder={
+                     searchMode === 'deep-research'
+                       ? "Enter a research topic for comprehensive AI-powered analysis..."
+                       : aiEnhancedSearch
+                        ? `Ask me anything about your resources${useSequentialThinking ? ' (with sequential thinking)' : ''}, paste a URL to read its content, or search the web...`
+                       : "Ask me anything about your resources..."
+                   }
                  disabled={isLoading}
                   className="w-full px-6 py-4 rounded-full focus:outline-none focus:ring-2 text-lg shadow-sm disabled:opacity-50 disabled:cursor-not-allowed bg-gray-50 border border-gray-300 focus:ring-blue-500 focus:border-transparent"
               />
-              <div className="absolute right-4 top-1/2 transform -translate-y-1/2 flex gap-2">
-                {(query.trim() || conversation.length > 1) && (
-                  <button
-                    onClick={clearChat}
-                    disabled={isLoading}
-                    className="text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Clear chat"
-                  >
-                    <X className="w-6 h-6" strokeWidth={1.5} />
-                  </button>
-                )}
-                <button
-                  onClick={() => handleSearch(query)}
-                  disabled={isLoading || !query.trim()}
-                  className="text-gray-400 hover:text-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Search"
-                >
-                  <Search className="w-6 h-6" strokeWidth={1.5} />
-                </button>
-              </div>
+               <div className="absolute right-4 top-1/2 transform -translate-y-1/2 flex gap-2">
+                  {useSequentialThinking && (
+                    <div className="flex items-center text-green-600" title="Sequential thinking enabled">
+                      <Brain className="w-4 h-4" strokeWidth={1.5} />
+                    </div>
+                  )}
+                 {(query.trim() || conversation.length > 1) && (
+                   <button
+                     onClick={clearChat}
+                     disabled={isLoading}
+                     className="text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                     title="Clear chat"
+                   >
+                     <X className="w-6 h-6" strokeWidth={1.5} />
+                   </button>
+                 )}
+                 <button
+                   onClick={() => handleSearch(query)}
+                   disabled={isLoading || !query.trim()}
+                   className="text-gray-400 hover:text-blue-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                   title="Search"
+                 >
+                   <Search className="w-6 h-6" strokeWidth={1.5} />
+                 </button>
+               </div>
             </div>
              <div className="flex items-center justify-between mt-4">
                 <div className="flex items-center gap-2">
@@ -776,21 +887,43 @@ const SearchInterface: React.FC = () => {
                       </button>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-500">Web Search</span>
-                      <button
-                        onClick={() => setIncludeWebSearch(!includeWebSearch)}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                          includeWebSearch ? 'bg-orange-500' : 'bg-gray-300'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                            includeWebSearch ? 'translate-x-6' : 'translate-x-1'
+                     <div className="flex items-center gap-2">
+                       <span className="text-sm text-gray-500">Web Search</span>
+                       <button
+                         onClick={() => setIncludeWebSearch(!includeWebSearch)}
+                         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                           includeWebSearch ? 'bg-orange-500' : 'bg-gray-300'
+                         }`}
+                       >
+                         <span
+                           className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                             includeWebSearch ? 'translate-x-6' : 'translate-x-1'
+                           }`}
+                         />
+                       </button>
+                     </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-500 flex items-center gap-1">
+                          <Brain className="w-4 h-4" strokeWidth={1.5} />
+                          Sequential Thinking
+                          {useSequentialThinking && sequentialThinkingErrors && (
+                            <span className="text-xs text-red-500" title="Sequential thinking failed">(!)</span>
+                          )}
+                        </span>
+                        <button
+                          onClick={() => setUseSequentialThinking(!useSequentialThinking)}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                            useSequentialThinking ? 'bg-green-500' : 'bg-gray-300'
                           }`}
-                        />
-                      </button>
-                    </div>
+                        >
+                          <span
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                              useSequentialThinking ? 'translate-x-6' : 'translate-x-1'
+                            }`}
+                          />
+                       </button>
+                     </div>
 
                   </div>
              </div>
@@ -849,10 +982,24 @@ const SearchInterface: React.FC = () => {
                   <span className="font-medium">Current mode:</span> {focusModes.find(m => m.id === focusMode)?.description}
                 </p>
               </div>
-             )}
-             </div>
-           </div>
-         </div>
+              )}
+              </div>
+
+               {/* Sequential Thinking Configuration */}
+               {useSequentialThinking && (
+                 <div className="border-t border-gray-100 pt-6 mt-6">
+                   <div className="flex items-center gap-2 mb-2">
+                     <Brain className="w-4 h-4 text-green-600" strokeWidth={1.5} />
+                     <span className="text-sm font-medium text-gray-900">Sequential Thinking</span>
+                   </div>
+                    <p className="text-xs text-gray-600">
+                      When enabled, complex queries will use step-by-step reasoning to provide more thorough analysis.
+                      This is particularly useful for questions requiring logical analysis, problem-solving, or multi-step explanations.
+                    </p>
+                  </div>
+               )}
+            </div>
+          </div>
 
 
 
@@ -869,11 +1016,18 @@ const SearchInterface: React.FC = () => {
                   <div key={message.id} className={`flex mb-4 px-4 ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
                     <div className="max-w-[80%]">
                     <div className={`flex gap-3 ${message.type === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                        message.type === 'user' ? 'bg-blue-500 text-white' : 'bg-green-500 text-white'
-                      }`}>
-                        {message.type === 'user' ? <User className="w-4 h-4" strokeWidth={1.5} /> : <Bot className="w-4 h-4" strokeWidth={1.5} />}
-                      </div>
+                       <div className="relative">
+                         <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                           message.type === 'user' ? 'bg-blue-500 text-white' : 'bg-green-500 text-white'
+                         }`}>
+                           {message.type === 'user' ? <User className="w-4 h-4" strokeWidth={1.5} /> : <Bot className="w-4 h-4" strokeWidth={1.5} />}
+                         </div>
+                         {message.type === 'ai' && conversation.length > 1 && (
+                           <div className="absolute -top-1 -right-1 w-3 h-3 bg-purple-500 rounded-full flex items-center justify-center" title="Using conversation context">
+                             <MessageSquare className="w-2 h-2 text-white" strokeWidth={2} />
+                           </div>
+                         )}
+                       </div>
                      <div className={`rounded-2xl px-4 py-3 ${
                          message.type === 'user' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-800'
                        }`}>
@@ -888,10 +1042,19 @@ const SearchInterface: React.FC = () => {
                                </div>
                            )}
                          </div>
-                       </div>
-                    </div>
+                        </div>
+                     </div>
 
-                    {message.results && message.type === 'ai' && (
+                     {message.type === 'ai' && conversation.length > 1 && (
+                       <div className="ml-11 mt-1">
+                         <span className="text-xs text-gray-500 flex items-center gap-1">
+                           <MessageSquare className="w-3 h-3" strokeWidth={1.5} />
+                           Using conversation context
+                         </span>
+                       </div>
+                     )}
+
+                     {message.results && message.type === 'ai' && (
                       <div className="mt-4 ml-11">
                         <p>Found {message.results.length} results</p>
                       </div>

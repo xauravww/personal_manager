@@ -428,7 +428,22 @@ export class DeepResearchService {
           ? `"action": "search|read_url|analyze|extract_links"`
           : `"action": "search_local|analyze|extract_links"`;
 
+        // Get current date and time in user's timezone
+        const timezone = userTimezone || 'UTC';
+        const now = new Date();
+        const currentDateTime = now.toLocaleString('en-US', {
+          timeZone: timezone,
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          weekday: 'long'
+        });
+
         const systemPrompt = `You are conducting deep research on: "${query}"
+Current date and time: ${currentDateTime}
 
 Current progress: ${currentThought}/${totalThoughts} thoughts completed
 Sources found: ${this.sources.length}
@@ -545,7 +560,7 @@ Return JSON:
        // If no high-confidence answer was found, try to synthesize one
        if (!finalAnswer || confidence <= 70) {
          console.log('\n🔄 Synthesizing final answer from research...');
-         const synthesis = await this.synthesizeFinalAnswer(query);
+          const synthesis = await this.synthesizeFinalAnswer(query, userTimezone);
          if (synthesis.confidence > confidence) {
            finalAnswer = synthesis.answer;
            confidence = synthesis.confidence;
@@ -640,8 +655,22 @@ Return JSON:
     return filtered;
   }
 
-  private async synthesizeFinalAnswer(query: string): Promise<{answer: string, confidence: number}> {
+  private async synthesizeFinalAnswer(query: string, userTimezone?: string): Promise<{answer: string, confidence: number}> {
     try {
+      // Get current date and time in user's timezone
+      const timezone = userTimezone || 'UTC';
+      const now = new Date();
+      const currentDateTime = now.toLocaleString('en-US', {
+        timeZone: timezone,
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        weekday: 'long'
+      });
+
       // Use thoughtProcess (excluding final thought) to avoid confusion in synthesis
       const thoughtProcess = this.thoughtHistory.slice(0, -1);
       const thoughtsText = thoughtProcess.map(t =>
@@ -653,6 +682,7 @@ Return JSON:
       ).join('\n\n');
 
         const systemPrompt = `You are a research synthesizer. Your ONLY task is to provide a final answer to: "${query}"
+Current date and time: ${currentDateTime}
 
 Based on the research that was conducted, provide a comprehensive and accurate answer.
 

@@ -154,7 +154,7 @@ model Assignment {
   is_required Boolean   @default(true)
   steps       String?   // JSON array of assignment steps for structured assignments
   ai_config   String?   // JSON AI configuration for adaptive assignments
-  modalities  String?   // JSON array of supported modalities ["text", "visual", "audio", "interactive"]
+  modalities  String?   // JSON array of supported modalities ["text", "interactive"]
   created_at  DateTime  @default(now()) @map("created_at")
   updated_at  DateTime  @updatedAt @map("updated_at")
 

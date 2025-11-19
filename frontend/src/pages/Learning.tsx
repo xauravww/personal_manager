@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Play, CheckCircle, Clock, BookOpen, MessageCircle, Send, Eye, Plus, Search, Filter, Calendar, Target, TrendingUp, Award, Zap, Brain, PlayCircle, MessageSquare, User, Bot, Sparkles, Lightbulb, BarChart3 } from 'lucide-react';
 import { apiClient } from '../api/client';
 import AssignmentJourney from '../components/AssignmentJourney';
-import VisionModal from '../components/VisionModal';
 import CookingAnimation from '../components/CookingAnimation';
 import CrossDomainInsights from '../components/CrossDomainInsights';
 import Toast from '../components/Toast';
@@ -90,6 +89,7 @@ const Learning: React.FC = () => {
   const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
   const [showAssignmentSubmission, setShowAssignmentSubmission] = useState(false);
   const [assignmentSubmission, setAssignmentSubmission] = useState('');
+  const [isViewingSubmission, setIsViewingSubmission] = useState(false);
   const [quizQuestions, setQuizQuestions] = useState<Array<{
     question: string;
     options: string[];
@@ -97,9 +97,8 @@ const Learning: React.FC = () => {
   }>>([]);
   const [quizAnswers, setQuizAnswers] = useState<number[]>([]);
   const [isGeneratingQuiz, setIsGeneratingQuiz] = useState(false);
-   const [showAssignmentJourney, setShowAssignmentJourney] = useState(false);
-   const [showVisionModal, setShowVisionModal] = useState(false);
-   const [generatingAssignments, setGeneratingAssignments] = useState<Set<string>>(new Set());
+    const [showAssignmentJourney, setShowAssignmentJourney] = useState(false);
+    const [generatingAssignments, setGeneratingAssignments] = useState<Set<string>>(new Set());
    const [toast, setToast] = useState<{
      message: string;
      type: 'success' | 'error' | 'warning' | 'info';
@@ -461,12 +460,18 @@ What would you like to focus on first?`,
          user_level: selectedSubject.current_level || 'intermediate'
        });
 
-       if (response.success) {
-         // Refresh modules to show the new assignment
-         await loadModules(selectedSubject.id, currentModulesPage);
+        if (response.success) {
+          // Refresh modules to show the new assignment
+          const updatedModules = await loadModules(selectedSubject.id, currentModulesPage);
 
-         // Show success feedback
-         showToast(`✨ Adaptive assignment created for "${module.title}"!`, 'success');
+          // Update selectedModule with the refreshed data
+          const updatedModule = updatedModules.find(m => m.id === selectedModule?.id);
+          if (updatedModule) {
+            setSelectedModule(JSON.parse(JSON.stringify(updatedModule))); // Deep copy to trigger re-render
+          }
+
+          // Show success feedback
+          showToast(`✨ Adaptive assignment created for "${module.title}"!`, 'success');
        } else {
          showToast('Failed to generate adaptive assignment. Please try again.', 'error');
        }
@@ -574,7 +579,13 @@ What would you like to focus on first?`,
 
         // Refresh modules to show updated assignment status
         if (selectedSubject) {
-          await loadModules(selectedSubject.id, currentModulesPage);
+          const updatedModules = await loadModules(selectedSubject.id, currentModulesPage);
+
+          // Update selectedModule with the refreshed data
+          const updatedModule = updatedModules.find(m => m.id === selectedModule?.id);
+          if (updatedModule) {
+            setSelectedModule(JSON.parse(JSON.stringify(updatedModule))); // Deep copy to trigger re-render
+          }
         }
       } else {
         alert('Failed to submit assignment. Please try again.');
@@ -587,8 +598,9 @@ What would you like to focus on first?`,
 
 
 
-  const openAssignmentSubmission = async (assignment: Assignment) => {
+  const openAssignmentSubmission = async (assignment: Assignment, viewPrevious: boolean = false) => {
     setSelectedAssignment(assignment);
+    setIsViewingSubmission(viewPrevious);
 
     // Check if this is a structured assignment (has steps)
     if (assignment.type === 'structured' || assignment.type === 'chat_guided' || assignment.type === 'hybrid') {
@@ -609,6 +621,24 @@ What would you like to focus on first?`,
           setQuizQuestions(response.data.assignment.questions);
           setQuizAnswers(new Array(response.data.assignment.questions.length).fill(-1));
           setQuizResults(null);
+
+          // If viewing previous submission, load the saved answers
+          if (viewPrevious && response.data.assignment.submissions && response.data.assignment.submissions.length > 0) {
+            const latestSubmission = response.data.assignment.submissions[0];
+            try {
+              const parsedContent = JSON.parse(latestSubmission.content);
+              if (parsedContent.answers) {
+                setQuizAnswers(parsedContent.answers);
+                setQuizResults({
+                  score: latestSubmission.score,
+                  feedback: latestSubmission.feedback || '',
+                  showResults: true
+                });
+              }
+            } catch (error) {
+              console.warn('Could not parse previous quiz submission:', error);
+            }
+          }
         } else {
           alert('Failed to load quiz questions. Please try again.');
         }
@@ -616,6 +646,36 @@ What would you like to focus on first?`,
         console.error('Error loading assignment:', error);
         alert('Failed to load assignment. Please try again.');
       }
+    } else if (viewPrevious) {
+      // For non-quiz assignments, load the previous submission content
+      try {
+        const response = await apiClient.getAssignment(assignment.id);
+        if (response.success && response.data.assignment.submissions && response.data.assignment.submissions.length > 0) {
+          const latestSubmission = response.data.assignment.submissions[0];
+          // Try to parse as AssignmentJourney result first
+          try {
+            const parsedContent = JSON.parse(latestSubmission.content);
+            if (parsedContent.assignment_id && parsedContent.steps_progress) {
+              // This is an AssignmentJourney completion - show a summary instead of editable form
+              setAssignmentSubmission(`Assignment completed through guided journey.\n\nFinal Score: ${parsedContent.final_score}%\n\nSteps completed: ${parsedContent.steps_progress.length}\n\nFeedback: ${latestSubmission.feedback || 'No feedback available'}`);
+            } else {
+              // Regular text submission
+              setAssignmentSubmission(latestSubmission.content);
+            }
+          } catch (error) {
+            // Plain text submission
+            setAssignmentSubmission(latestSubmission.content);
+          }
+        } else {
+          setAssignmentSubmission('No previous submission found.');
+        }
+      } catch (error) {
+        console.error('Error loading previous submission:', error);
+        setAssignmentSubmission('Error loading previous submission.');
+      }
+    } else {
+      // Clear the form for new submission
+      setAssignmentSubmission('');
     }
   };
 
@@ -668,15 +728,8 @@ What would you like to focus on first?`,
             <p className="text-gray-600">Your personalized learning journey</p>
           </div>
         </div>
-         <div className="flex items-center gap-3">
-           <button
-             onClick={() => setShowVisionModal(true)}
-             className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white px-4 py-2 rounded-lg hover:from-blue-600 hover:to-indigo-600 transition-all flex items-center gap-2"
-           >
-             <Eye className="w-4 h-4" />
-             Analyze Image
-           </button>
-           <button
+          <div className="flex items-center gap-3">
+            <button
              onClick={() => setShowCreateSubject(true)}
              className="bg-gradient-to-r from-purple-500 to-blue-500 text-white px-4 py-2 rounded-lg hover:from-purple-600 hover:to-blue-600 transition-all flex items-center gap-2"
            >
@@ -863,24 +916,29 @@ What would you like to focus on first?`,
                        <h4 className="text-lg font-medium text-gray-900 mb-4">Assignments</h4>
                        <div className="space-y-4">
                           {selectedModule.assignments.map((assignment) => {
-                            const latestSubmission = assignment.submissions?.[0];
-                            const isSubmitted = !!latestSubmission;
-                            const isCompleted = isSubmitted && latestSubmission.score >= 60; // Consider 60% as passing
+                             const latestSubmission = assignment.submissions?.[0];
+                             const isSubmitted = !!latestSubmission;
+                             const isCompleted = isSubmitted; // All submitted assignments are considered completed
+                             const isQuizPassed = isSubmitted && (assignment.type === 'quiz' || assignment.title.toLowerCase().includes('quiz')) && latestSubmission.score >= 60;
                             const score = latestSubmission?.score || 0;
 
-                            return (
-                              <div key={assignment.id} className="border border-gray-200 rounded-lg p-4">
+                             return (
+                               <div key={`${assignment.id}-${latestSubmission?.id || 'no-submission'}`} className="border border-gray-200 rounded-lg p-4">
                                 <div className="flex items-start justify-between">
                                   <div className="flex-1">
                                     <div className="flex items-center gap-2 mb-2">
                                       <h5 className="font-medium text-gray-900">{assignment.title}</h5>
-                                      {isSubmitted && (
-                                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                          isCompleted ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                                        }`}>
-                                          {isCompleted ? 'Completed' : 'Submitted'}
-                                        </span>
-                                      )}
+                                       {isSubmitted && (
+                                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                           (assignment.type === 'quiz' || assignment.title.toLowerCase().includes('quiz'))
+                                             ? (isQuizPassed ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800')
+                                             : 'bg-green-100 text-green-800'
+                                         }`}>
+                                           {(assignment.type === 'quiz' || assignment.title.toLowerCase().includes('quiz'))
+                                             ? (isQuizPassed ? 'Passed' : 'Needs Review')
+                                             : 'Completed'}
+                                         </span>
+                                       )}
                                     </div>
                                     {assignment.description && (
                                       <p className="text-gray-600 mt-1">{assignment.description}</p>
@@ -901,42 +959,64 @@ What would you like to focus on first?`,
                                         }`}>{latestSubmission.score}%</span>
                                       </div>
                                     )}
-                                    <button
-                                      onClick={async () => {
-                                        if (latestSubmission && (assignment.type === 'quiz' || assignment.title.toLowerCase().includes('quiz'))) {
-                                          // Retake quiz - reset and load fresh questions
-                                          setSelectedAssignment(assignment);
-                                          setShowAssignmentSubmission(true);
-                                          setAssignmentSubmission('');
-                                          setQuizResults(null);
-                                          setShowModuleContent(false);
-                                          setIsGeneratingQuiz(true);
+                                     <div className="flex flex-col gap-2">
+                                       {/* Primary Action Button */}
+                                       <button
+                                         onClick={async () => {
+                                           if (latestSubmission && (assignment.type === 'quiz' || assignment.title.toLowerCase().includes('quiz'))) {
+                                             // Retake quiz - reset and load fresh questions
+                                             setSelectedAssignment(assignment);
+                                             setShowAssignmentSubmission(true);
+                                             setAssignmentSubmission('');
+                                             setQuizResults(null);
+                                             setShowModuleContent(false);
+                                             setIsGeneratingQuiz(true);
 
-                                          try {
-                                            const response = await apiClient.getAssignment(assignment.id);
-                                            if (response.success && response.data.assignment.questions) {
-                                              setQuizQuestions(response.data.assignment.questions);
-                                              setQuizAnswers(new Array(response.data.assignment.questions.length).fill(-1));
-                                            } else {
-                                              setQuizQuestions([]);
-                                            }
-                                          } catch (error) {
-                                            console.error('Error loading quiz for retake:', error);
-                                            setQuizQuestions([]);
-                                          } finally {
-                                            setIsGeneratingQuiz(false);
-                                          }
-                                        } else {
-                                          // First time or non-quiz assignment
-                                          openAssignmentSubmission(assignment);
-                                        }
-                                      }}
-                                      className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 transition-all"
-                                    >
-                                      {(assignment.type === 'quiz' || assignment.title.toLowerCase().includes('quiz'))
-                                        ? (latestSubmission ? 'Retake Quiz' : 'Take Quiz')
-                                        : 'Submit Assignment'}
-                                    </button>
+                                             try {
+                                               const response = await apiClient.getAssignment(assignment.id);
+                                               if (response.success && response.data.assignment.questions) {
+                                                 setQuizQuestions(response.data.assignment.questions);
+                                                 setQuizAnswers(new Array(response.data.assignment.questions.length).fill(-1));
+                                               } else {
+                                                 setQuizQuestions([]);
+                                               }
+                                             } catch (error) {
+                                               console.error('Error loading quiz for retake:', error);
+                                               setQuizQuestions([]);
+                                             } finally {
+                                               setIsGeneratingQuiz(false);
+                                             }
+                                           } else {
+                                             // First time or non-quiz assignment
+                                             openAssignmentSubmission(assignment, false);
+                                           }
+                                         }}
+                                         className={`text-white px-6 py-2.5 rounded-lg transition-all font-medium ${
+                                           latestSubmission
+                                             ? (latestSubmission.score >= 80 ? 'bg-green-500 hover:bg-green-600 shadow-md' :
+                                                latestSubmission.score >= 60 ? 'bg-yellow-500 hover:bg-yellow-600 shadow-md' :
+                                                'bg-red-500 hover:bg-red-600 shadow-md')
+                                             : 'bg-blue-500 hover:bg-blue-600 shadow-md'
+                                         }`}
+                                       >
+                                         {(assignment.type === 'quiz' || assignment.title.toLowerCase().includes('quiz'))
+                                           ? (latestSubmission ? 'Retake Quiz' : 'Take Quiz')
+                                           : (latestSubmission ? 'Resubmit Assignment' : 'Submit Assignment')}
+                                       </button>
+
+                                       {/* Secondary Action Button */}
+                                       {latestSubmission && (
+                                         <button
+                                           onClick={() => {
+                                             // View existing submission
+                                             openAssignmentSubmission(assignment, true);
+                                           }}
+                                           className="bg-white text-gray-600 px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 hover:border-gray-400 transition-all text-sm font-medium"
+                                         >
+                                           View Previous Submission
+                                         </button>
+                                       )}
+                                     </div>
                                   </div>
                                 </div>
                               </div>
@@ -1096,7 +1176,13 @@ What would you like to focus on first?`,
 
                   // Refresh modules
                   if (selectedSubject) {
-                    await loadModules(selectedSubject.id, currentModulesPage);
+                    const updatedModules = await loadModules(selectedSubject.id, currentModulesPage);
+
+          // Update selectedModule with the refreshed data
+          const updatedModule = updatedModules.find(m => m.id === selectedModule?.id);
+          if (updatedModule) {
+            setSelectedModule(JSON.parse(JSON.stringify(updatedModule))); // Deep copy to trigger re-render
+          }
                   }
 
                   setShowAssignmentJourney(false);
@@ -1192,12 +1278,17 @@ What would you like to focus on first?`,
                         ) : (
                           <div className="text-center py-8 text-gray-600">
                             Unable to generate quiz questions. Please submit as text instead.
-                            <textarea
-                              value={assignmentSubmission}
-                              onChange={(e) => setAssignmentSubmission(e.target.value)}
-                              placeholder="Enter your quiz answers here..."
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 h-32 resize-none mt-4"
-                            />
+                             <textarea
+                               value={assignmentSubmission}
+                               onChange={(e) => !isViewingSubmission && setAssignmentSubmission(e.target.value)}
+                               placeholder={isViewingSubmission ? "Previous submission content..." : "Enter your quiz answers here..."}
+                               readOnly={isViewingSubmission}
+                               className={`w-full px-3 py-2 border rounded-lg h-32 resize-none mt-4 ${
+                                 isViewingSubmission
+                                   ? 'border-gray-200 bg-gray-50 text-gray-700 cursor-not-allowed'
+                                   : 'border-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-500'
+                               }`}
+                             />
                           </div>
                         )}
                       </div>
@@ -1206,12 +1297,17 @@ What would you like to focus on first?`,
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Your Submission
                         </label>
-                        <textarea
-                          value={assignmentSubmission}
-                          onChange={(e) => setAssignmentSubmission(e.target.value)}
-                          placeholder="Enter your assignment solution here..."
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 h-48 resize-none"
-                        />
+                         <textarea
+                           value={assignmentSubmission}
+                           onChange={(e) => !isViewingSubmission && setAssignmentSubmission(e.target.value)}
+                           placeholder={isViewingSubmission ? "Previous submission content..." : "Enter your assignment solution here..."}
+                           readOnly={isViewingSubmission}
+                           className={`w-full px-3 py-2 border rounded-lg h-48 resize-none ${
+                             isViewingSubmission
+                               ? 'border-gray-200 bg-gray-50 text-gray-700 cursor-not-allowed'
+                               : 'border-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-500'
+                           }`}
+                         />
                       </div>
                     )}
                   </div>
@@ -1248,7 +1344,13 @@ What would you like to focus on first?`,
 
                               // Refresh modules to show updated assignment status
                               if (selectedSubject) {
-                                await loadModules(selectedSubject.id, currentModulesPage);
+                                const updatedModules = await loadModules(selectedSubject.id, currentModulesPage);
+
+                    // Update selectedModule with the refreshed data
+                    const updatedModule = updatedModules.find(m => m.id === selectedModule?.id);
+                    if (updatedModule) {
+                      setSelectedModule(JSON.parse(JSON.stringify(updatedModule))); // Deep copy to trigger re-render
+                    }
                               }
                             }}
                             className="px-6 py-2 text-gray-600 hover:text-gray-900"
@@ -1635,18 +1737,7 @@ What would you like to focus on first?`,
          />
        )}
 
-       {/* Vision Modal */}
-       <VisionModal
-         isOpen={showVisionModal}
-         onClose={() => setShowVisionModal(false)}
-         learningContext={selectedSubject?.name}
-         onAnalysisComplete={(result) => {
-           console.log('Vision analysis complete:', result);
-           // Could integrate results into learning content
-         }}
-       />
-
-       {/* Toast Notifications */}
+        {/* Toast Notifications */}
        {toast?.show && (
          <div className="fixed bottom-4 right-4 z-50">
            <Toast

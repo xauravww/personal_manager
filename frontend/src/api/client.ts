@@ -48,7 +48,7 @@ interface Resource {
   title: string;
   description?: string;
   url?: string;
-  type: 'note' | 'video' | 'link' | 'document' | 'image';
+  type: 'note' | 'video' | 'link' | 'document';
   content?: string;
   file_path?: string;
   metadata?: Record<string, any>;
@@ -57,18 +57,36 @@ interface Resource {
   updated_at: string;
 }
 
+interface MCPToolResult {
+  serverUrl: string;
+  toolName: string;
+  result: any;
+  success: boolean;
+  error?: string;
+}
+
 interface SearchResponse {
   resources: Resource[];
   total: number;
   has_more: boolean;
   webResults?: WebSearchResult[];
+  ai?: {
+    enhancedQuery: string;
+    searchTerms: string[];
+    appliedFilters: {
+      type: string | null;
+      tags: string[] | null;
+    };
+    mcpResults?: MCPToolResult[];
+    mcpSummary?: string;
+  };
 }
 
 interface CreateResourceRequest {
   title: string;
   description?: string;
   url?: string;
-  type: 'note' | 'video' | 'link' | 'document' | 'image';
+  type: 'note' | 'video' | 'link' | 'document';
   content?: string;
   file_path?: string;
   metadata?: Record<string, any>;
@@ -275,6 +293,9 @@ class ApiClient {
     focusMode?: string;
     stream?: boolean;
     forceWebSearch?: boolean;
+    useMCP?: boolean;
+    mcpCredentials?: Record<string, string>;
+    conversation?: Array<{type: string, content: string}>;
   }): Promise<{ success: boolean; data: SearchResponse; ai?: any; error?: string }> {
     const searchParams = new URLSearchParams();
 
@@ -287,6 +308,13 @@ class ApiClient {
     if (params.focusMode) searchParams.set('focusMode', params.focusMode);
     if (params.stream) searchParams.set('stream', '1');
     if (params.forceWebSearch) searchParams.set('forceWebSearch', 'true');
+    if (params.useMCP) searchParams.set('useMCP', 'true');
+    if (params.mcpCredentials && Object.keys(params.mcpCredentials).length > 0) {
+      searchParams.set('mcpCredentials', JSON.stringify(params.mcpCredentials));
+    }
+    if (params.conversation && params.conversation.length > 0) {
+      searchParams.set('conversation', JSON.stringify(params.conversation));
+    }
 
     const url = `${API_BASE_URL}/search?${searchParams.toString()}`;
 
@@ -560,47 +588,6 @@ class ApiClient {
 
   async getLearningDNA(): Promise<ApiResponse<any>> {
     return this.request('/learning/learning-dna');
-  }
-
-  // Vision methods
-  async analyzeImage(imageUrl: string, context?: string): Promise<ApiResponse<{
-    analysis: {
-      description: string;
-      objects: string[];
-      text_content?: string;
-      diagram_type?: string;
-      key_concepts?: string[];
-      confidence: number;
-    };
-  }>> {
-    return this.request('/learning/vision/analyze-image', {
-      method: 'POST',
-      body: JSON.stringify({ image_url: imageUrl, context }),
-    });
-  }
-
-  async analyzeDiagram(imageUrl: string, subject?: string): Promise<ApiResponse<{
-    analysis: {
-      diagramType: string;
-      description: string;
-      keyElements: string[];
-      relationships: string[];
-      educationalValue: string;
-    };
-  }>> {
-    return this.request('/learning/vision/analyze-diagram', {
-      method: 'POST',
-      body: JSON.stringify({ image_url: imageUrl, subject }),
-    });
-  }
-
-  async generateImageDescription(imageUrl: string, learningContext?: string): Promise<ApiResponse<{
-    description: string;
-  }>> {
-    return this.request('/learning/vision/generate-description', {
-      method: 'POST',
-      body: JSON.stringify({ image_url: imageUrl, learning_context: learningContext }),
-    });
   }
 
   // Cross-domain learning

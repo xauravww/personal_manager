@@ -74,6 +74,14 @@ export interface SearchRequest {
   offset?: number;
 }
 
+export interface MCPToolResult {
+  serverUrl: string;
+  toolName: string;
+  result: any;
+  success: boolean;
+  error?: string;
+}
+
 export interface SearchResponse {
   resources: (Resource & { tags: Pick<Tag, 'id' | 'name'>[] })[];
   total: number;
@@ -86,6 +94,8 @@ export interface SearchResponse {
       type: string | null;
       tags: string[] | null;
     };
+    mcpResults?: MCPToolResult[];
+    mcpSummary?: string;
   };
 }
 
@@ -151,4 +161,21 @@ export interface MindMapResponse {
   content: any; // JSON structure
   type: string;
   generated_at: Date;
+}
+
+// MCP (Model Context Protocol) Types
+export interface MCPServerConfig {
+  url: string;
+  transport: 'sse' | 'websocket';
+  requiredCredentials?: string[]; // List of credential keys needed
+}
+
+export interface MCPConfig {
+  enabled: boolean;
+  servers: MCPServerConfig[];
+  enabledTools: string[];
+}
+
+export interface MCPCredentials {
+  [key: string]: string; // Key-value pairs for user-provided credentials
 }

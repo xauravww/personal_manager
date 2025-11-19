@@ -28,7 +28,15 @@ router.get('/subjects', async (req, res) => {
             progress: {
               where: { user_id: userId }
             },
-            assignments: true
+            assignments: {
+              include: {
+                submissions: {
+                  where: { user_id: userId },
+                  orderBy: { submitted_at: 'desc' },
+                  take: 1
+                }
+              }
+            }
           }
         },
         progress: {
@@ -586,19 +594,51 @@ router.post('/assignments/submit', async (req, res) => {
       feedback = analysis.feedback;
       weakPoints = analysis.weakPoints;
     } else {
-      // Analyze text/code submissions with AI
-      analysis = await aiService.analyzeAssignmentSubmission(
-        {
-          title: assignment.title,
-          description: assignment.description || '',
-          solution: assignment.solution || undefined
-        },
-        content,
-        assignment.module.subject.name
-      );
-      score = analysis.score;
-      feedback = analysis.feedback;
-      weakPoints = analysis.weakPoints;
+      // Check if this is a structured assignment completion from AssignmentJourney
+      try {
+        const parsedContent = JSON.parse(content);
+        if (parsedContent.assignment_id && parsedContent.steps_progress && typeof parsedContent.final_score === 'number') {
+          // This is an AssignmentJourney completion
+          score = parsedContent.final_score;
+          feedback = `Assignment completed successfully! Final score: ${score.toFixed(1)}%`;
+          weakPoints = [];
+
+          // Add feedback based on performance
+          if (score >= 90) {
+            feedback += ' Excellent work!';
+          } else if (score >= 80) {
+            feedback += ' Good job!';
+          } else if (score >= 70) {
+            feedback += ' Satisfactory work.';
+          } else {
+            feedback += ' Consider reviewing the material and trying again.';
+          }
+
+          analysis = {
+            score,
+            feedback,
+            weakPoints,
+            strengths: score >= 80 ? ['Completed all assignment steps'] : [],
+            improvementAreas: score < 70 ? ['Review assignment requirements'] : []
+          };
+        } else {
+          throw new Error('Not AssignmentJourney format');
+        }
+      } catch {
+        // Analyze text/code submissions with AI
+        analysis = await aiService.analyzeAssignmentSubmission(
+          {
+            title: assignment.title,
+            description: assignment.description || '',
+            solution: assignment.solution || undefined
+          },
+          content,
+          assignment.module.subject.name
+        );
+        score = analysis.score;
+        feedback = analysis.feedback;
+        weakPoints = analysis.weakPoints;
+      }
     }
 
     // Create new submission (allow multiple submissions for retakes)
@@ -1809,76 +1849,6 @@ Instructions:
   } catch (error) {
     console.error('Error in module chat:', error);
     res.status(500).json({ error: 'Failed to process chat message' });
-  }
-});
-
-// Vision and Image Analysis Routes
-router.post('/vision/analyze-image', async (req, res) => {
-  try {
-    const { image_url, context } = req.body;
-
-    if (!image_url) {
-      return res.status(400).json({ error: 'Image data is required' });
-    }
-
-    const analysis = await aiService.analyzeImage(image_url, context);
-
-    res.json({
-      success: true,
-      analysis
-    });
-  } catch (error) {
-    console.error('Error analyzing image:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to analyze image'
-    });
-  }
-});
-
-router.post('/vision/analyze-diagram', async (req, res) => {
-  try {
-    const { image_url, subject } = req.body;
-
-    if (!image_url) {
-      return res.status(400).json({ error: 'Image URL is required' });
-    }
-
-    const analysis = await aiService.analyzeDiagram(image_url, subject);
-
-    res.json({
-      success: true,
-      analysis
-    });
-  } catch (error) {
-    console.error('Error analyzing diagram:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to analyze diagram'
-    });
-  }
-});
-
-router.post('/vision/generate-description', async (req, res) => {
-  try {
-    const { image_url, learning_context } = req.body;
-
-    if (!image_url) {
-      return res.status(400).json({ error: 'Image URL is required' });
-    }
-
-    const description = await aiService.generateImageDescription(image_url, learning_context);
-
-    res.json({
-      success: true,
-      description
-    });
-  } catch (error) {
-    console.error('Error generating image description:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to generate description'
-    });
   }
 });
 

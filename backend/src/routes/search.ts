@@ -80,7 +80,10 @@ router.get('/', [
   query('tags').optional().trim().isLength({ max: 200 }),
   query('limit').optional().isInt({ min: 1, max: 50 }),
   query('offset').optional().isInt({ min: 0 }),
-  query('forceWebSearch').optional().isBoolean(),
+   query('forceWebSearch').optional().isBoolean(),
+   query('useMCP').optional().isBoolean(),
+   query('mcpCredentials').optional().isObject(),
+    query('conversation').optional(),
 ], async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
     const errors = validationResult(req);
@@ -98,6 +101,17 @@ router.get('/', [
     const focusMode = req.query.focusMode as string || 'general';
     const aiEnhancedSearch = req.query.aiEnhanced !== 'false'; // Default to true
     const forceWebSearch = req.query.forceWebSearch === 'true'; // Default to false
+    const useMCP = req.query.useMCP === 'true'; // Default to false
+    const mcpCredentials = req.query.mcpCredentials as Record<string, string> || {};
+    let conversation: Array<{type: string, content: string}> = [];
+    if (req.query.conversation) {
+      try {
+        conversation = JSON.parse(req.query.conversation as string);
+      } catch (error) {
+        console.warn('Failed to parse conversation parameter:', error);
+        conversation = [];
+      }
+    }
 
     // Build where clause for Prisma
     const where: any = {
@@ -109,6 +123,8 @@ router.get('/', [
     let aiFilters: { type?: string; tags?: string[] } = {};
     let queryEmbedding: number[] | null = null;
     let isChat = false;
+    let mcpResults: any[] = [];
+    let mcpSummary: string | undefined;
 
     if (searchQuery) {
       // Simple intent detection for common cases
@@ -125,8 +141,10 @@ router.get('/', [
         console.log('Conversational or date/time query detected, intent is chat');
       } else {
         try {
-          // Use AI to enhance the search query
-          const aiResult = await aiService.enhanceSearchQuery(searchQuery);
+          // Use AI to enhance the search query (with MCP if enabled)
+          const aiResult = useMCP
+            ? await aiService.enhanceSearchQueryWithMCP(searchQuery, mcpCredentials, conversation, timezone)
+            : await aiService.enhanceSearchQuery(searchQuery, conversation, timezone);
           console.log('AI result:', aiResult);
           if (aiResult.intent === 'chat') {
             searchTerms = [];
@@ -136,6 +154,9 @@ router.get('/', [
             enhancedQuery = aiResult.enhancedQuery;
             searchTerms = aiResult.searchTerms;
             aiFilters = aiResult.filters;
+            // Store MCP results if available
+            mcpResults = aiResult.mcpResults || [];
+            mcpSummary = aiResult.mcpSummary;
             console.log('AI enhanced query:', enhancedQuery, 'terms:', searchTerms);
 
             // Generate embedding for vector search (skip for very short queries)
@@ -252,7 +273,7 @@ router.get('/', [
             const currentDateTime = aiService.getCurrentDateTime(timezone);
             chatResponse = `Today is ${currentDateTime.day}, ${currentDateTime.date}. The current time is ${currentDateTime.time}. Is there anything I can help you with in your personal resources?`;
           } else {
-            chatResponse = await aiService.generateChatResponse(searchQuery, context, timezone, focusMode, false) as string;
+            chatResponse = await aiService.generateChatResponseWithMCP(searchQuery, context, timezone, focusMode, false, useMCP, mcpCredentials, conversation) as string;
             console.log('Generated chat response:', chatResponse);
           }
         } catch (error) {
@@ -455,7 +476,7 @@ router.get('/', [
 
     // Generate AI summary for search results
     let aiSummary: string | null = null;
-    if (!isChat && searchQuery && (resources.length > 0 || webResults.length > 0)) {
+    if (!isChat && searchQuery && (resources.length > 0 || webResults.length > 0 || forceWebSearch)) {
       try {
         // Limit context to prevent token overflow
         const maxLocalResults = 2;
@@ -514,6 +535,9 @@ router.get('/', [
       ...(isChat && chatResponse && { chatResponse }),
       ...(!isChat && aiSummary && { summary: aiSummary }),
       ...(suggestions.length > 0 && { suggestions }),
+      // Include MCP results if available
+      ...(useMCP && mcpResults.length > 0 && { mcpResults }),
+      ...(useMCP && mcpSummary && { mcpSummary }),
     } : null;
 
     res.json({

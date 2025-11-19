@@ -93,7 +93,6 @@ const Resources: React.FC = () => {
                     <option value="note">📝 Notes</option>
                     <option value="document">📄 Documents</option>
                     <option value="link">🔗 Links</option>
-                    <option value="image">🖼️ Images</option>
                     <option value="video">🎥 Videos</option>
                   </select>
                   <div className="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">

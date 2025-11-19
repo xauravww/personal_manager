@@ -12,7 +12,6 @@ import {
   Link as LinkIcon,
   FileText,
   Video,
-  Image,
   ExternalLink,
   AlertTriangle,
   Loader2,
@@ -23,7 +22,7 @@ import {
 interface Resource {
   id: string;
   title: string;
-  type: 'note' | 'video' | 'link' | 'document' | 'image';
+  type: 'note' | 'video' | 'link' | 'document';
   content: string;
   description?: string;
   tags: string[];
@@ -159,8 +158,6 @@ const ResourceDetailModal: React.FC<ResourceDetailModalProps> = ({
         return <LinkIcon className="w-6 h-6 text-blue-500" strokeWidth={1.5} />;
       case 'document':
         return <FileText className="w-6 h-6 text-green-500" strokeWidth={1.5} />;
-      case 'image':
-        return <Image className="w-6 h-6 text-purple-500" strokeWidth={1.5} />;
       case 'note':
       default:
         return <FileText className="w-6 h-6 text-gray-500" strokeWidth={1.5} />;
@@ -171,16 +168,6 @@ const ResourceDetailModal: React.FC<ResourceDetailModalProps> = ({
     if (!resource) return null;
 
     switch (resource.type) {
-      case 'image':
-        return resource.fileUrl ? (
-          <img
-            src={resource.fileUrl}
-            alt={resource.title}
-            className="max-w-full max-h-96 object-contain rounded-lg"
-          />
-        ) : (
-          <div className="text-gray-500 text-center py-8">Image not available</div>
-        );
       case 'video':
         return resource.fileUrl ? (
           <video

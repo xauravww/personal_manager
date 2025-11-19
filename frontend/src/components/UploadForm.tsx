@@ -65,7 +65,7 @@ const UploadForm: React.FC = () => {
         setError(`File ${file.name} exceeds 10MB limit`);
         return false;
       }
-      const allowedTypes = ['image/', 'video/', 'audio/', 'application/pdf', 'text/'];
+      const allowedTypes = ['video/', 'audio/', 'application/pdf', 'text/'];
       if (!allowedTypes.some(type => file.type.startsWith(type))) {
         setError(`File type ${file.type} not allowed for ${file.name}`);
         return false;
@@ -147,9 +147,7 @@ const UploadForm: React.FC = () => {
   };
 
   const renderFilePreview = (file: File) => {
-    if (file.type.startsWith('image/')) {
-      return <img src={URL.createObjectURL(file)} alt={file.name} className="max-w-full max-h-32 object-cover rounded" />;
-    } else if (file.type.startsWith('video/')) {
+    if (file.type.startsWith('video/')) {
       return <video src={URL.createObjectURL(file)} controls className="max-w-full max-h-32 rounded" />;
     }
     return <div className="text-gray-500 text-sm">Preview not available</div>;
@@ -259,7 +257,7 @@ const UploadForm: React.FC = () => {
             >
               <UploadCloud className="w-12 h-12 mx-auto mb-4 text-gray-400" strokeWidth={1.5} />
               <p className="text-gray-600 mb-2">Drag and drop files here or click to select</p>
-              <p className="text-sm text-gray-500">Supports images, videos, documents (max 10MB each)</p>
+              <p className="text-sm text-gray-500">Supports videos, documents (max 10MB each)</p>
               <input
                 ref={fileInputRef}
                 type="file"

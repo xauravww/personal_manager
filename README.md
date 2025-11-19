@@ -27,6 +27,7 @@ This application allows users to store, organize, and retrieve resources (notes,
   - JWT authentication
   - Resource CRUD API with type-safe database operations
   - AI-powered search with full-text capabilities
+  - Model Context Protocol (MCP) integration for external tools
   - Comprehensive error handling and logging
   - Swagger API documentation
   - Rate limiting and security middleware
@@ -97,6 +98,67 @@ The application uses Server-Sent Events (SSE) for smooth, real-time streaming re
 - Word-by-word streaming with 50ms delays for natural typing effect
 - No buffering - responses appear character-by-character
 - Automatic handling of stream completion and errors
+
+## 🔗 Model Context Protocol (MCP) Integration
+
+The application includes experimental support for the Model Context Protocol (MCP), allowing integration with external tools and services to enhance search capabilities.
+
+### MCP Configuration
+
+**Environment Variables:**
+```bash
+# Backend .env
+MCP_ENABLED=true                                    # Enable/disable MCP integration
+MCP_SERVER_URLS=http://mcp-server-1.com,http://mcp-server-2.com  # Comma-separated MCP server URLs
+MCP_SERVER_API_KEYS=key1,key2                        # Optional API keys for servers
+MCP_ENABLED_TOOLS=web_search,github_search           # Tools to enable across servers
+MCP_REQUEST_TIMEOUT=30000                            # Request timeout in milliseconds
+MCP_CACHE_ENABLED=true                               # Enable result caching
+MCP_CACHE_TTL=300000                                 # Cache TTL in milliseconds
+```
+
+### Supported MCP Tools
+
+- **web_search**: Search the web for information
+- **github_search**: Search GitHub repositories and code
+- **file_system**: Access and manipulate files (when available)
+- **database_query**: Query databases (when available)
+
+### Using MCP in Search
+
+When MCP is enabled, users can enhance their searches with external tools:
+
+1. **Enable MCP**: Set `useMCP=true` in search requests
+2. **Provide Credentials**: Pass user-specific credentials via `mcpCredentials` parameter
+3. **Automatic Tool Selection**: The system automatically selects relevant tools based on query analysis
+4. **Enhanced Results**: Search results include data from external tools with summaries
+
+**Example API Request:**
+```bash
+curl -X GET "http://localhost:3001/api/search?q=react%20hooks&useMCP=true&mcpCredentials[github_token]=your-token" \
+  -H "Authorization: Bearer your-jwt-token"
+```
+
+**Response includes:**
+- `mcpResults`: Array of tool execution results
+- `mcpSummary`: Summary of external tool contributions
+- Enhanced query with context from external tools
+
+### MCP Security
+
+- User credentials are never stored permanently
+- Credentials are only used for the duration of the request
+- MCP results are sanitized before being returned to users
+- Failed tool executions don't break the search functionality
+
+### Current Status
+
+The MCP integration is currently in **mock mode** for development and testing. Real MCP servers can be connected by:
+1. Setting up MCP-compatible servers
+2. Configuring server URLs and credentials
+3. Replacing mock implementations with actual MCP SDK calls
+
+For production use, ensure MCP servers are properly secured and credentials are managed appropriately.
 
 ## 🔧 Proxy Configuration
 
@@ -212,11 +274,12 @@ personal_manager/
 - ✅ Responsive web interface
 - ✅ File upload support
 
-### AI Features (Planned)
-- 🤖 Natural language search queries
-- 📝 Content extraction from documents
-- 🏷️ Automatic tagging suggestions
-- 📊 Usage analytics and insights
+### AI Features
+- ✅ Natural language search queries with AI enhancement
+- ✅ Model Context Protocol (MCP) integration for external tools
+- 📝 Content extraction from documents (planned)
+- 🏷️ Automatic tagging suggestions (planned)
+- 📊 Usage analytics and insights (planned)
 
 ## 🛠️ Technology Stack
 

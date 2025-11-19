@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronRight, CheckCircle, Circle, MessageCircle, FileText, Eye, Brain, Mic, MicOff, Volume2, VolumeX } from 'lucide-react';
+import { ChevronRight, CheckCircle, Circle, MessageCircle, FileText, Eye, Brain } from 'lucide-react';
 import CodeEditor from './CodeEditor';
 import { apiClient } from '../api/client';
-import { createModel, Model, Recognizer } from 'vosk-browser';
 
 interface AssignmentStep {
   id: string;
@@ -75,277 +74,14 @@ const AssignmentJourney: React.FC<AssignmentJourneyProps> = ({
       }))
   );
   const [currentInput, setCurrentInput] = useState('');
-  const [aiResponse, setAiResponse] = useState('');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+   const [aiResponse, setAiResponse] = useState('');
+   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  // Audio states
-  const [isListening, setIsListening] = useState(false);
-  const [voskModel, setVoskModel] = useState<Model | null>(null);
-  const [voskRecognizer, setVoskRecognizer] = useState<Recognizer | null>(null);
-  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [speechSynthesis, setSpeechSynthesis] = useState<SpeechSynthesis | null>(null);
-  const [startTime, setStartTime] = useState(Date.now());
-  const [voskSupported, setVoskSupported] = useState(true);
-  const [lastNetworkError, setLastNetworkError] = useState<number>(0);
-  const [debugMode, setDebugMode] = useState(false);
+   const [startTime, setStartTime] = useState(Date.now());
 
-  // Check if we're in cooldown period
-  const isInCooldown = () => {
-    const now = Date.now();
-    return lastNetworkError && (now - lastNetworkError) < 5000;
-  };
 
-  // Debug function to test speech recognition service
-  const testVoskRecognition = async () => {
-    setAiResponse(prev => prev ? `${prev}\n\n🔍 Testing speech recognition service...` : '🔍 Testing speech recognition service...');
 
-    // Comprehensive diagnostics
-    const diagnostics = [];
 
-    // Check basic requirements
-    diagnostics.push(`Browser Support: ${voskSupported ? '✅' : '❌'}`);
-    diagnostics.push(`Online Status: ${navigator.onLine ? '✅' : '❌'}`);
-    diagnostics.push(`HTTPS: ${window.location.protocol === 'https:' ? '✅' : '❌'}`);
-    diagnostics.push(`User Agent: ${navigator.userAgent.split(' ').pop()}`);
-
-    // Check microphone permissions
-    const checkMicrophonePermission = async () => {
-      try {
-        const result = await navigator.permissions.query({ name: 'microphone' as PermissionName });
-        diagnostics.push(`Microphone Permission: ${result.state === 'granted' ? '✅' : result.state === 'denied' ? '❌' : '⚠️'} (${result.state})`);
-      } catch (error) {
-        diagnostics.push(`Microphone Permission: ❓ (Cannot check: ${error.message})`);
-      }
-    };
-
-    // Check basic internet connectivity
-    const checkBasicConnectivity = () => {
-      const img = new Image();
-      const timeout = setTimeout(() => {
-        diagnostics.push(`Basic Connectivity: ❌ (Timeout)`);
-      }, 3000);
-
-      img.onload = () => {
-        clearTimeout(timeout);
-        diagnostics.push(`Basic Connectivity: ✅`);
-      };
-
-      img.onerror = () => {
-        clearTimeout(timeout);
-        diagnostics.push(`Basic Connectivity: ❌`);
-      };
-
-      img.src = `https://www.google.com/favicon.ico?v=${Date.now()}`;
-    };
-
-    // Check for common blocking issues
-    const checkCORS = async () => {
-      try {
-        // Try to fetch from a known Google service endpoint (this might be blocked)
-        const response = await fetch('https://www.google.com/favicon.ico', {
-          method: 'HEAD',
-          mode: 'no-cors'
-        });
-        diagnostics.push(`Google Connectivity: ✅ (Status: ${response.status || 'unknown'})`);
-      } catch (error) {
-        diagnostics.push(`Google Connectivity: ❌ (${error.message})`);
-      }
-    };
-
-    // Check speech recognition service endpoints specifically
-    const checkSpeechEndpoints = async () => {
-      const endpoints = [
-        'https://speech.googleapis.com/',
-        'https://www.google.com/speech-api/',
-        'https://speech.platform.bing.com/'
-      ];
-
-      const checks = endpoints.map(async (endpoint) => {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 3000);
-
-          const response = await fetch(endpoint, {
-            method: 'HEAD',
-            mode: 'no-cors',
-            signal: controller.signal
-          });
-
-          clearTimeout(timeoutId);
-          diagnostics.push(`Speech Endpoint (${endpoint}): ✅`);
-        } catch (error) {
-          if (error.name === 'AbortError') {
-            diagnostics.push(`Speech Endpoint (${endpoint}): ❌ (Timeout)`);
-          } else {
-            diagnostics.push(`Speech Endpoint (${endpoint}): ❌ (${error.message})`);
-          }
-        }
-      });
-
-      await Promise.all(checks);
-    };
-
-    // Run basic connectivity check
-    checkBasicConnectivity();
-
-    // Run permission check
-    checkMicrophonePermission();
-
-    // Run diagnostics
-    checkCORS().then(() => {
-      return checkSpeechEndpoints();
-    }).then(async () => {
-      // Now test actual speech recognition
-      if (!voskSupported) {
-        diagnostics.push(`Speech Recognition: ❌ Not supported`);
-        setAiResponse(prev => `${prev}\n\n📊 Diagnostics:\n${diagnostics.join('\n')}`);
-        return;
-      }
-
-      if (!navigator.onLine) {
-        diagnostics.push(`Speech Recognition: ❌ Offline`);
-        setAiResponse(prev => `${prev}\n\n📊 Diagnostics:\n${diagnostics.join('\n')}`);
-        return;
-      }
-
-      if (window.location.protocol !== 'https:') {
-        diagnostics.push(`Speech Recognition: ❌ HTTPS required`);
-        setAiResponse(prev => `${prev}\n\n📊 Diagnostics:\n${diagnostics.join('\n')}`);
-        return;
-      }
-
-      try {
-        const testRecognizer = await initializeVosk();
-        if (testRecognizer) {
-          diagnostics.push(`Vosk Recognition: ✅ Initialized`);
-        } else {
-          diagnostics.push(`Vosk Recognition: ❌ Failed to initialize`);
-        }
-      } catch (error) {
-        diagnostics.push(`Vosk Recognition: ❌ Error: ${error.message}`);
-      }
-
-      setAiResponse(prev => `${prev}\n\n📊 Diagnostics:\n${diagnostics.join('\n')}`);
-    });
-  };
-
-  // Audio Functions
-  const initializeVosk = async () => {
-    try {
-      if (!voskModel) {
-        // Load the vosk model from local file (served from public directory)
-        const model = await createModel('/models/vosk-model-small-en-us-0.15.zip');
-        setVoskModel(model);
-
-        // Create recognizer
-        const recognizer = new model.KaldiRecognizer(16000);
-        recognizer.onresult = (event: any) => {
-          const result = event.result;
-          if (result && result.text) {
-            setCurrentInput(prev => prev + (prev ? ' ' : '') + result.text);
-          }
-        };
-        recognizer.onerror = (error: any) => {
-          console.error('Vosk recognition error:', error);
-          setIsListening(false);
-          setAiResponse(prev => prev ? `${prev}\n\nSpeech recognition error: ${error.message}` : `Speech recognition error: ${error.message}`);
-        };
-        setVoskRecognizer(recognizer);
-      }
-      return voskRecognizer;
-    } catch (error) {
-      console.error('Failed to initialize Vosk:', error);
-      setVoskSupported(false);
-      setAiResponse(prev => prev ? `${prev}\n\nOffline speech recognition not available. Please use text input.` : `Offline speech recognition not available. Please use text input.`);
-      return null;
-    }
-  };
-
-  const startListening = async () => {
-    try {
-      // Initialize Vosk if not done
-      const recognizer = await initializeVosk();
-      if (!recognizer) return;
-
-      // Get microphone access
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0 && voskRecognizer) {
-          const reader = new FileReader();
-          reader.onload = () => {
-            const arrayBuffer = reader.result as ArrayBuffer;
-            voskRecognizer.acceptWaveform(arrayBuffer);
-          };
-          reader.readAsArrayBuffer(event.data);
-        }
-      };
-
-      recorder.onstop = () => {
-        setIsListening(false);
-        // Stop all tracks
-        stream.getTracks().forEach(track => track.stop());
-      };
-
-      setMediaRecorder(recorder);
-      recorder.start(100); // Collect data every 100ms
-      setIsListening(true);
-
-    } catch (error) {
-      console.error('Failed to start listening:', error);
-      setAiResponse(prev => prev ? `${prev}\n\nFailed to access microphone: ${error.message}` : `Failed to access microphone: ${error.message}`);
-    }
-  };
-
-  const stopListening = () => {
-    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-      mediaRecorder.stop();
-    }
-    setIsListening(false);
-  };
-
-  const speakText = (text: string) => {
-    if (!('speechSynthesis' in window)) {
-      alert('Text-to-speech is not supported in this browser.');
-      return;
-    }
-
-    // Stop any ongoing speech
-    if (speechSynthesis) {
-      speechSynthesis.cancel();
-    }
-
-    const utterance = new SpeechSynthesisUtterance(text);
-
-    // Configure voice settings
-    utterance.rate = 0.9;
-    utterance.pitch = 1;
-    utterance.volume = 0.8;
-
-    // Try to use a natural voice
-    const voices = speechSynthesis.getVoices();
-    const preferredVoice = voices.find(voice =>
-      voice.name.includes('Female') || voice.name.includes('Samantha') || voice.name.includes('Zira')
-    );
-    if (preferredVoice) {
-      utterance.voice = preferredVoice;
-    }
-
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
-
-    window.speechSynthesis.speak(utterance);
-  };
-
-  const stopSpeaking = () => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      setIsSpeaking(false);
-    }
-  };
 
   const currentStep = getSteps()[currentStepIndex];
   const currentProgress = stepProgress[currentStepIndex];
@@ -434,62 +170,17 @@ const AssignmentJourney: React.FC<AssignmentJourneyProps> = ({
               </div>
             </div>
 
-            <div className="space-y-3">
-               <div className="flex items-center justify-between">
-                 <label className="block text-sm font-medium text-gray-700">
-                   Your Response
-                 </label>
-                 <div className="flex items-center gap-2">
-                   <button
-                     onClick={voskSupported && navigator.onLine && !isInCooldown() ? (isListening ? stopListening : startListening) : undefined}
-                     disabled={!voskSupported || !navigator.onLine || isInCooldown()}
-                     className={`p-2 rounded-lg transition-all ${
-                       !voskSupported || !navigator.onLine || isInCooldown()
-                         ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                         : isListening
-                         ? 'bg-red-100 text-red-600 hover:bg-red-200'
-                         : 'bg-blue-100 text-blue-600 hover:bg-blue-200'
-                     }`}
-                     title={
-                       !voskSupported
-                         ? 'Voice input not supported in this browser. Try Chrome or enable in Firefox settings.'
-                         : !navigator.onLine
-                         ? 'Voice input unavailable while offline. Please check your internet connection.'
-                         : isListening
-                         ? 'Stop listening'
-                         : 'Start voice input'
-                     }
-                   >
-                     {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                   </button>
-                  {aiResponse && (
-                    <button
-                      onClick={isSpeaking ? stopSpeaking : () => speakText(aiResponse)}
-                      className={`p-2 rounded-lg transition-all ${
-                        isSpeaking
-                          ? 'bg-orange-100 text-orange-600 hover:bg-orange-200'
-                          : 'bg-green-100 text-green-600 hover:bg-green-200'
-                      }`}
-                      title={isSpeaking ? 'Stop speaking' : 'Listen to AI feedback'}
-                    >
-                      {isSpeaking ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-                    </button>
-                  )}
-                </div>
-              </div>
-              <textarea
-                value={currentInput}
-                onChange={(e) => setCurrentInput(e.target.value)}
-                placeholder="Share your thoughts, ask questions, or provide your answer..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 h-32 resize-none"
-              />
-              {isListening && (
-                <div className="flex items-center gap-2 text-sm text-blue-600">
-                  <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                  Listening... Speak now
-                </div>
-              )}
-            </div>
+             <div className="space-y-3">
+               <label className="block text-sm font-medium text-gray-700">
+                 Your Response
+               </label>
+               <textarea
+                 value={currentInput}
+                 onChange={(e) => setCurrentInput(e.target.value)}
+                 placeholder="Share your thoughts, ask questions, or provide your answer..."
+                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 h-32 resize-none"
+               />
+             </div>
 
             {aiResponse && (
               <div className="bg-green-50 p-4 rounded-lg">
@@ -512,62 +203,17 @@ const AssignmentJourney: React.FC<AssignmentJourneyProps> = ({
               <p className="text-purple-800">{currentStep.content}</p>
             </div>
 
-            <div className="space-y-3">
-               <div className="flex items-center justify-between">
-                 <label className="block text-sm font-medium text-gray-700">
-                   Your Answer
-                 </label>
-                 <div className="flex items-center gap-2">
-                   <button
-                     onClick={voskSupported && navigator.onLine ? (isListening ? stopListening : startListening) : undefined}
-                     disabled={!voskSupported || !navigator.onLine}
-                     className={`p-2 rounded-lg transition-all ${
-                       !voskSupported || !navigator.onLine
-                         ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                         : isListening
-                         ? 'bg-red-100 text-red-600 hover:bg-red-200'
-                         : 'bg-blue-100 text-blue-600 hover:bg-blue-200'
-                     }`}
-                     title={
-                       !voskSupported
-                         ? 'Voice input not supported in this browser. Try Chrome or enable in Firefox settings.'
-                         : !navigator.onLine
-                         ? 'Voice input unavailable while offline. Please check your internet connection.'
-                         : isListening
-                         ? 'Stop listening'
-                         : 'Start voice input'
-                     }
-                   >
-                    {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                  </button>
-                  {aiResponse && (
-                    <button
-                      onClick={isSpeaking ? stopSpeaking : () => speakText(aiResponse)}
-                      className={`p-2 rounded-lg transition-all ${
-                        isSpeaking
-                          ? 'bg-orange-100 text-orange-600 hover:bg-orange-200'
-                          : 'bg-green-100 text-green-600 hover:bg-green-200'
-                      }`}
-                      title={isSpeaking ? 'Stop speaking' : 'Listen to AI feedback'}
-                    >
-                      {isSpeaking ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-                    </button>
-                  )}
-                </div>
-              </div>
-              <textarea
-                value={currentInput}
-                onChange={(e) => setCurrentInput(e.target.value)}
-                placeholder="Provide your detailed answer..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 h-48 resize-none"
-              />
-              {isListening && (
-                <div className="flex items-center gap-2 text-sm text-blue-600">
-                  <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                  Listening... Speak now
-                </div>
-              )}
-            </div>
+             <div className="space-y-3">
+               <label className="block text-sm font-medium text-gray-700">
+                 Your Answer
+               </label>
+               <textarea
+                 value={currentInput}
+                 onChange={(e) => setCurrentInput(e.target.value)}
+                 placeholder="Provide your detailed answer..."
+                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 h-48 resize-none"
+               />
+             </div>
 
             {aiResponse && (
               <div className="bg-blue-50 p-4 rounded-lg">
@@ -584,49 +230,10 @@ const AssignmentJourney: React.FC<AssignmentJourneyProps> = ({
               <p className="text-gray-800">{currentStep.content}</p>
             </div>
 
-            <div className="space-y-3">
-               <div className="flex items-center justify-between">
-                 <label className="block text-sm font-medium text-gray-700">
-                   Your Code/Solution
-                 </label>
-                 <div className="flex items-center gap-2">
-                   <button
-                     onClick={voskSupported && navigator.onLine ? (isListening ? stopListening : startListening) : undefined}
-                     disabled={!voskSupported || !navigator.onLine}
-                     className={`p-2 rounded-lg transition-all ${
-                       !voskSupported || !navigator.onLine
-                         ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                         : isListening
-                         ? 'bg-red-100 text-red-600 hover:bg-red-200'
-                         : 'bg-blue-100 text-blue-600 hover:bg-blue-200'
-                     }`}
-                     title={
-                       !voskSupported
-                         ? 'Voice input not supported in this browser. Try Chrome or enable in Firefox settings.'
-                         : !navigator.onLine
-                         ? 'Voice input unavailable while offline. Please check your internet connection.'
-                         : isListening
-                         ? 'Stop listening'
-                         : 'Start voice input'
-                     }
-                   >
-                    {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                  </button>
-                  {aiResponse && (
-                    <button
-                      onClick={isSpeaking ? stopSpeaking : () => speakText(aiResponse)}
-                      className={`p-2 rounded-lg transition-all ${
-                        isSpeaking
-                          ? 'bg-orange-100 text-orange-600 hover:bg-orange-200'
-                          : 'bg-green-100 text-green-600 hover:bg-green-200'
-                      }`}
-                      title={isSpeaking ? 'Stop speaking' : 'Listen to AI feedback'}
-                    >
-                      {isSpeaking ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-                    </button>
-                  )}
-                </div>
-              </div>
+             <div className="space-y-3">
+               <label className="block text-sm font-medium text-gray-700">
+                 Your Code/Solution
+               </label>
 
                <CodeEditor
                  initialCode={currentInput}
@@ -660,14 +267,7 @@ const AssignmentJourney: React.FC<AssignmentJourneyProps> = ({
                  placeholder="Write your JavaScript code here..."
                  height="300px"
                />
-
-              {isListening && (
-                <div className="flex items-center gap-2 text-sm text-blue-600">
-                  <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                  Listening... Speak now
-                </div>
-              )}
-            </div>
+             </div>
 
             {aiResponse && (
               <div className="bg-yellow-50 p-4 rounded-lg">
@@ -685,62 +285,17 @@ const AssignmentJourney: React.FC<AssignmentJourneyProps> = ({
               <p className="text-green-800 mt-1">{currentStep.content}</p>
             </div>
 
-            <div className="space-y-3">
-               <div className="flex items-center justify-between">
-                 <label className="block text-sm font-medium text-gray-700">
-                   Your Reflection
-                 </label>
-                 <div className="flex items-center gap-2">
-                   <button
-                     onClick={voskSupported && navigator.onLine ? (isListening ? stopListening : startListening) : undefined}
-                     disabled={!voskSupported || !navigator.onLine}
-                     className={`p-2 rounded-lg transition-all ${
-                       !voskSupported || !navigator.onLine
-                         ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                         : isListening
-                         ? 'bg-red-100 text-red-600 hover:bg-red-200'
-                         : 'bg-blue-100 text-blue-600 hover:bg-blue-200'
-                     }`}
-                     title={
-                       !voskSupported
-                         ? 'Voice input not supported in this browser. Try Chrome or enable in Firefox settings.'
-                         : !navigator.onLine
-                         ? 'Voice input unavailable while offline. Please check your internet connection.'
-                         : isListening
-                         ? 'Stop listening'
-                         : 'Start voice input'
-                     }
-                   >
-                    {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                  </button>
-                  {aiResponse && (
-                    <button
-                      onClick={isSpeaking ? stopSpeaking : () => speakText(aiResponse)}
-                      className={`p-2 rounded-lg transition-all ${
-                        isSpeaking
-                          ? 'bg-orange-100 text-orange-600 hover:bg-orange-200'
-                          : 'bg-green-100 text-green-600 hover:bg-green-200'
-                      }`}
-                      title={isSpeaking ? 'Stop speaking' : 'Listen to AI feedback'}
-                    >
-                      {isSpeaking ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-                    </button>
-                  )}
-                </div>
-              </div>
-              <textarea
-                value={currentInput}
-                onChange={(e) => setCurrentInput(e.target.value)}
-                placeholder="Reflect on what you've learned and how you'll apply it..."
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 h-32 resize-none"
-              />
-              {isListening && (
-                <div className="flex items-center gap-2 text-sm text-blue-600">
-                  <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                  Listening... Speak now
-                </div>
-              )}
-            </div>
+             <div className="space-y-3">
+               <label className="block text-sm font-medium text-gray-700">
+                 Your Reflection
+               </label>
+               <textarea
+                 value={currentInput}
+                 onChange={(e) => setCurrentInput(e.target.value)}
+                 placeholder="Reflect on what you've learned and how you'll apply it..."
+                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 h-32 resize-none"
+               />
+             </div>
 
             {aiResponse && (
               <div className="bg-green-50 p-4 rounded-lg border border-green-200">
@@ -784,40 +339,9 @@ const AssignmentJourney: React.FC<AssignmentJourneyProps> = ({
     );
   }
 
-  return (
-      <div className="max-w-4xl mx-auto p-6">
-        {/* Debug Mode Indicator */}
-        {debugMode && (
-          <div className="mb-4 p-2 bg-yellow-100 border border-yellow-300 rounded-lg">
-            <div className="flex items-center gap-2">
-              <span className="text-yellow-800 font-medium">🔧 Debug Mode Enabled</span>
-              <span className="text-xs text-yellow-600">Press Ctrl+Shift+D to toggle</span>
-            </div>
-            <div className="text-xs text-yellow-700 mt-1">
-              Online: {navigator.onLine ? '✅' : '❌'} |
-              Speech Supported: {voskSupported ? '✅' : '❌'} |
-              In Cooldown: {isInCooldown() ? `✅ (${Math.ceil((5000 - (Date.now() - lastNetworkError)) / 1000)}s)` : '❌'}
-            </div>
-            <div className="mt-2 flex gap-2">
-              <button
-                onClick={testVoskRecognition}
-                className="px-3 py-1 bg-yellow-600 text-white text-xs rounded hover:bg-yellow-700"
-              >
-                Test Speech Service
-              </button>
-              {isInCooldown() && (
-                <button
-                  onClick={() => setLastNetworkError(0)}
-                  className="px-3 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-700"
-                >
-                  Reset Cooldown
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Header */}
+   return (
+       <div className="max-w-4xl mx-auto p-6">
+         {/* Header */}
         <div className="mb-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">{assignment.title}</h2>
           <p className="text-gray-600">{assignment.description}</p>
@@ -906,42 +430,26 @@ const AssignmentJourney: React.FC<AssignmentJourneyProps> = ({
     </div>
    );
 
-   // Initialize speech synthesis on mount and handle online/offline status
-  React.useEffect(() => {
-    if ('speechSynthesis' in window) {
-      setSpeechSynthesis(window.speechSynthesis);
-    }
+   React.useEffect(() => {
+     // Handle online/offline status changes
+     const handleOnline = () => {
+       // User came back online - could show a subtle notification
+       console.log('Connection restored');
+     };
 
-    // Handle online/offline status changes
-    const handleOnline = () => {
-      // User came back online - could show a subtle notification
-      console.log('Connection restored');
-    };
+     const handleOffline = () => {
+       // User went offline
+       console.log('Connection lost');
+     };
 
-    const handleOffline = () => {
-      // User went offline - could disable voice features
-      console.log('Connection lost');
-    };
+     window.addEventListener('online', handleOnline);
+     window.addEventListener('offline', handleOffline);
 
-    // Add keyboard shortcut for debug mode (Ctrl+Shift+D)
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.ctrlKey && event.shiftKey && event.key === 'D') {
-        event.preventDefault();
-        setDebugMode(prev => !prev);
-        console.log('Speech recognition debug mode:', !debugMode);
-      }
-    };
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    window.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [debugMode]);
+     return () => {
+       window.removeEventListener('online', handleOnline);
+       window.removeEventListener('offline', handleOffline);
+     };
+   }, []);
 
 };
 

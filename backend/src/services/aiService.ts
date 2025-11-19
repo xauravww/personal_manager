@@ -90,6 +90,9 @@ interface CacheEntry {
   ttl: number; // Time to live in milliseconds
 }
 
+// IMPORTANT: This AI service always uses real AI API calls.
+// No dummy API keys or mock responses are used.
+// All AI interactions go through the configured proxy server.
 class AIService {
   private client: AxiosInstance;
   private config: AIConfig;
@@ -184,44 +187,6 @@ class AIService {
    * Create a chat completion using the AI proxy
    */
   async createChatCompletion(request: ChatCompletionRequest): Promise<ChatCompletionResponse | AsyncIterable<any>> {
-    // For testing with dummy API key, provide mock response (takes precedence over proxy)
-    if (this.config.apiKey === 'dummy-api-key-for-testing') {
-      console.log('Using mock response for dummy API key');
-      const userMessage = request.messages.find(m => m.role === 'user')?.content || '';
-      const lowerMessage = userMessage.toLowerCase();
-
-      let mockContent = '';
-      if (lowerMessage === 'hi' || lowerMessage === 'hello' || lowerMessage === 'hey') {
-        mockContent = "Hello! I'm your AI assistant for managing personal resources. How can I help you find or organize your notes, documents, or other materials today?";
-      } else if (lowerMessage === 'who r uh' || lowerMessage === 'who are you') {
-        mockContent = "I'm your personal AI assistant for the Resource Manager application. I help you search through and organize your stored resources like notes, documents, videos, and links using natural language queries.";
-      } else if (lowerMessage.includes('what can you do') || lowerMessage.includes('help')) {
-        mockContent = "I can help you search through your personal resources, suggest relevant materials, and assist with organizing your content. Try asking me to find specific notes, documents, or topics!";
-      } else {
-        mockContent = "I'm currently running in test mode. To get full AI-powered responses, please configure a valid API key. In the meantime, I can help you search through your stored resources!";
-      }
-
-      return {
-        id: 'mock-completion',
-        object: 'chat.completion',
-        created: Date.now(),
-        model: this.config.model,
-        choices: [{
-          index: 0,
-          message: {
-            role: 'assistant',
-            content: mockContent
-          },
-          finish_reason: 'stop'
-        }],
-        usage: {
-          prompt_tokens: 10,
-          completion_tokens: 20,
-          total_tokens: 30
-        }
-      };
-    }
-
     try {
       const response = await this.client.post('/v1/chat/completions', request);
       return response.data;
@@ -359,7 +324,7 @@ class AIService {
     });
   }
 
-  async enhanceSearchQuery(userQuery: string): Promise<{
+  async enhanceSearchQuery(userQuery: string, conversation?: Array<{type: string, content: string}>, timezone?: string): Promise<{
     intent: 'search' | 'chat';
     enhancedQuery: string;
     searchTerms: string[];
@@ -367,39 +332,31 @@ class AIService {
       type?: string;
       tags?: string[];
     };
+    mcpResults?: any[];
+    mcpSummary?: string;
   }> {
     const cacheKey = this.getCacheKey('enhanceSearchQuery', { userQuery });
     const cached = this.getCachedResponse(cacheKey);
     if (cached) return cached;
 
     return this.getDeduplicatedRequest(cacheKey, async () => {
-      // For testing with dummy API key, provide mock intent detection
-      if (this.config.apiKey === 'dummy-api-key-for-testing') {
-        const lowerQuery = userQuery.toLowerCase();
-        if (lowerQuery === 'hi' || lowerQuery === 'hello' || lowerQuery === 'hey' ||
-            lowerQuery.includes('thank') || lowerQuery === 'who r uh' ||
-            lowerQuery === 'who are you' || lowerQuery === 'what can you do') {
-          const result = {
-            intent: 'chat' as const,
-            enhancedQuery: '',
-            searchTerms: [],
-            filters: {}
-          };
-          this.setCachedResponse(cacheKey, result, 1800000); // Cache for 30 minutes
-          return result;
-        }
-        const result = {
-          intent: 'search' as const,
-          enhancedQuery: userQuery,
-          searchTerms: [userQuery],
-          filters: {}
-        };
-        this.setCachedResponse(cacheKey, result, 1800000); // Cache for 30 minutes
-        return result;
-      }
+      // Get current date and time in user's timezone
+      const userTimezone = timezone || 'UTC';
+      const now = new Date();
+      const currentDateTime = now.toLocaleString('en-US', {
+        timeZone: userTimezone,
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        weekday: 'long'
+      });
 
       const systemPrompt = `You are a helpful assistant that enhances search queries for a personal resource manager.
       The user has resources like notes, documents, videos, links, and images.
+      Current date and time: ${currentDateTime}
       First, determine if the query is a search request or conversational chat.
        Set intent to "chat" for:
        - Pure greetings without search intent: hi, hello, hey, good morning, etc. (but not "hello, find my notes")
@@ -407,19 +364,24 @@ class AIService {
        - Direct questions about the assistant: can you help, what can you do, who are you, etc.
        - Very short single words: hi, help, please (when standalone)
        - Content generation requests: write, create, generate, make, compose, draft (essays, articles, summaries, etc.)
-       - Questions that require explanation or generation: explain, tell me how, what is, how to, why, etc. (when not about user's resources)
-       Set intent to "search" ONLY for queries that clearly want to find existing resources:
-       - Explicit search commands: find, search, show me, give me (when referring to user's stored content)
-       - References to user's resources: my notes, my documents, my files, my resources
-       - Questions about user's content: what do I have, what did I save, etc.
+        - Questions that require explanation or generation: explain, tell me how, what is, how to, why, etc. (when not about user's resources)
+        Set intent to "search" for queries that want to find information (either local resources or web search):
+        - Explicit search commands: find, search, show me, give me, look for
+        - References to user's resources: my notes, my documents, my files, my resources
+        - Questions about user's content: what do I have, what did I save, etc.
+        - Web search requests: search web, find online, latest news, current information, etc.
+        - Information requests that may require web search: news, current events, latest updates, etc.
 
-      Examples:
-      - "hi" -> intent: "chat"
-      - "find my notes on AI" -> intent: "search", searchTerms: ["notes", "AI"]
-      - "do you have books" -> intent: "search", searchTerms: ["books"]
-      - "give me anything related to study" -> intent: "search", searchTerms: ["study"]
-      - "something book or study" -> intent: "search", searchTerms: ["books", "study"]
-      - "please show me reading materials" -> intent: "search", searchTerms: ["reading"]
+       Examples:
+       - "hi" -> intent: "chat"
+       - "find my notes on AI" -> intent: "search", searchTerms: ["notes", "AI"]
+       - "do you have books" -> intent: "search", searchTerms: ["books"]
+       - "give me anything related to study" -> intent: "search", searchTerms: ["study"]
+       - "something book or study" -> intent: "search", searchTerms: ["books", "study"]
+       - "please show me reading materials" -> intent: "search", searchTerms: ["reading"]
+       - "search web for python courses" -> intent: "search", searchTerms: ["python", "courses"]
+       - "give me some news" -> intent: "search", searchTerms: ["news"]
+       - "find latest information about AI" -> intent: "search", searchTerms: ["latest", "AI"]
       Respond with JSON in this format:
       {
         "intent": "search" or "chat",
@@ -432,12 +394,26 @@ class AIService {
       }`;
 
       try {
+        // Build messages array with conversation context
+        const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [{ role: 'system', content: systemPrompt }];
+
+        // Add conversation history (last 5 messages for context)
+        if (conversation && conversation.length > 0) {
+          const recentMessages = conversation.slice(-5);
+          for (const msg of recentMessages) {
+            messages.push({
+              role: (msg.type === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+              content: msg.content
+            });
+          }
+        }
+
+        // Add current user query
+        messages.push({ role: 'user', content: userQuery });
+
         const response = await this.createChatCompletion({
           model: this.config.model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userQuery }
-          ],
+          messages,
           temperature: 0.3,
 
         });
@@ -570,22 +546,7 @@ class AIService {
     });
   }
 
-  async generateChatResponse(userQuery: string, context?: string, timezone?: string, focusMode?: string, stream?: boolean): Promise<string | AsyncIterable<any>> {
-    // For testing with dummy API key, provide appropriate mock responses
-    if (this.config.apiKey === 'dummy-api-key-for-testing') {
-      const lowerQuery = userQuery.toLowerCase();
-      if (lowerQuery === 'hi' || lowerQuery === 'hello' || lowerQuery === 'hey') {
-        return "Hello! I'm your AI assistant for managing personal resources. How can I help you find or organize your notes, documents, or other materials today?";
-      } else if (lowerQuery === 'who r uh' || lowerQuery === 'who are you') {
-        return "I'm your personal AI assistant for the Resource Manager application. I help you search through and organize your stored resources like notes, documents, videos, and links using natural language queries.";
-      } else if (lowerQuery.includes('what can you do') || lowerQuery.includes('help')) {
-        return "I can help you search through your personal resources, suggest relevant materials, and assist with organizing your content. Try asking me to find specific notes, documents, or topics!";
-      } else if (lowerQuery.includes('explain') || lowerQuery.includes('what is') || lowerQuery.includes('how does')) {
-        return "That's a great question! Let me explain this concept clearly. [Mock explanation for testing]. Do you understand this now, or would you like me to clarify anything?";
-      } else {
-        return "I'm currently running in test mode. To get full AI-powered responses, please configure a valid API key. In the meantime, I can help you search through your stored resources!";
-      }
-    }
+  async generateChatResponse(userQuery: string, context?: string, timezone?: string, focusMode?: string, stream?: boolean, conversation?: Array<{type: string, content: string}>): Promise<string | AsyncIterable<any>> {
 
     // Get current date and time in user's timezone
     const userTimezone = timezone || 'UTC';
@@ -645,14 +606,30 @@ class AIService {
       } else {
         // Regular chat response
         if (stream) {
+          // For streaming, we need to modify the approach since streaming doesn't support conversation history easily
+          // For now, just use the system prompt approach
           return this.createStreamingChatResponse(userQuery, systemPrompt);
         } else {
+          // Build messages with conversation context
+          const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [{ role: 'system', content: systemPrompt }];
+
+          // Add conversation history (last 5 messages for context)
+          if (conversation && conversation.length > 0) {
+            const recentMessages = conversation.slice(-5);
+            for (const msg of recentMessages) {
+              messages.push({
+                role: (msg.type === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+                content: msg.content
+              });
+            }
+          }
+
+          // Add current user query
+          messages.push({ role: 'user', content: userQuery });
+
           const response = await this.createChatCompletion({
             model: this.config.model,
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: userQuery }
-            ],
+            messages,
             temperature: 0.7,
           });
           return (response as ChatCompletionResponse).choices[0]?.message?.content?.trim() || "I'm here to help you with your personal resources!";
@@ -665,21 +642,6 @@ class AIService {
   }
 
   async *createStreamingChatResponse(userQuery: string, systemPrompt: string): AsyncIterable<{ content: string }> {
-    // For testing with dummy API key, provide mock streaming response
-    if (this.config.apiKey === 'dummy-api-key-for-testing') {
-      const mockResponse = "Hello! I'm your AI assistant for managing personal resources. How can I help you find or organize your notes, documents, or other materials today?";
-
-      // Simulate streaming by yielding words with small delays for better UX
-      const words = mockResponse.split(' ');
-      for (let i = 0; i < words.length; i++) {
-        const word = i < words.length - 1 ? words[i] + ' ' : words[i];
-        yield { content: word };
-        // Small delay to simulate realistic streaming
-        await new Promise(resolve => setTimeout(resolve, 50));
-      }
-      return;
-    }
-
     try {
       const request: ChatCompletionRequest = {
         model: this.config.model,
@@ -2759,6 +2721,38 @@ Provide:
     result.educationalValue = result.educationalValue.trim();
 
     return result;
+  }
+
+  // MCP-enabled methods
+  async enhanceSearchQueryWithMCP(userQuery: string, _mcpCredentials?: Record<string, string>, conversation?: Array<{type: string, content: string}>, timezone?: string): Promise<{
+    intent: 'search' | 'chat';
+    enhancedQuery: string;
+    searchTerms: string[];
+    filters: {
+      type?: string;
+      tags?: string[];
+    };
+    mcpResults?: any[];
+    mcpSummary?: string;
+  }> {
+    // For now, just call the regular method
+    // TODO: Integrate with MCP service for enhanced query processing
+    return this.enhanceSearchQuery(userQuery, conversation, timezone);
+  }
+
+  async generateChatResponseWithMCP(
+    userQuery: string,
+    context?: string,
+    timezone?: string,
+    focusMode?: string,
+    stream?: boolean,
+    _useMCP?: boolean,
+    _mcpCredentials?: Record<string, string>,
+    conversation?: Array<{type: string, content: string}>
+  ): Promise<string | AsyncIterable<any>> {
+    // For now, just call the regular method
+    // TODO: Integrate with MCP service for enhanced chat response
+    return this.generateChatResponse(userQuery, context, timezone, focusMode, stream, conversation);
   }
 }
 

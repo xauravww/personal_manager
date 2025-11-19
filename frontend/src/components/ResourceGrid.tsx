@@ -6,7 +6,7 @@ import ResourceDetailModal from './ResourceDetailModal';
 interface Resource {
   id: string;
   title: string;
-  type: 'note' | 'video' | 'link' | 'document' | 'image';
+  type: 'note' | 'video' | 'link' | 'document';
   content: string;
   description?: string;
   tags: string[];
@@ -193,10 +193,6 @@ const ResourceGrid: React.FC<ResourceGridProps> = React.memo(({
         return <Link className="w-5 h-5 text-blue-500" strokeWidth={1.5} />;
       case 'document':
         return <FileText className="w-5 h-5 text-green-500" strokeWidth={1.5} />;
-      case 'image':
-        return <svg className="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>;
       case 'note':
       default:
         return <FileText className="w-5 h-5 text-gray-500" strokeWidth={1.5} />;
@@ -211,8 +207,6 @@ const ResourceGrid: React.FC<ResourceGridProps> = React.memo(({
         return 'bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200 hover:from-blue-100 hover:to-blue-150';
       case 'document':
         return 'bg-gradient-to-br from-green-50 to-green-100 border-green-200 hover:from-green-100 hover:to-green-150';
-      case 'image':
-        return 'bg-gradient-to-br from-purple-50 to-purple-100 border-purple-200 hover:from-purple-100 hover:to-purple-150';
       case 'note':
       default:
         return 'bg-gradient-to-br from-gray-50 to-gray-100 border-gray-200 hover:from-gray-100 hover:to-gray-150';

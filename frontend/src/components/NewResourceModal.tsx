@@ -5,7 +5,7 @@ import { apiClient } from '../api/client';
 interface NewResourceData {
   title: string;
   description: string;
-  type: 'note' | 'video' | 'link' | 'document' | 'image' | 'file';
+  type: 'note' | 'video' | 'link' | 'document' | 'file';
   tags: string[];
   content: string;
   source?: string;
@@ -65,7 +65,7 @@ const NewResourceModal: React.FC<NewResourceModalProps> = ({
         setError(`File ${file.name} exceeds 10MB limit`);
         return false;
       }
-      const allowedTypes = ['image/', 'video/', 'audio/', 'application/pdf', 'text/'];
+      const allowedTypes = ['video/', 'audio/', 'application/pdf', 'text/'];
       if (!allowedTypes.some(type => file.type.startsWith(type))) {
         setError(`File type ${file.type} not allowed for ${file.name}`);
         return false;
@@ -209,8 +209,6 @@ const NewResourceModal: React.FC<NewResourceModalProps> = ({
         return <Link className="w-4 h-4" strokeWidth={1.5} />;
       case 'document':
         return <Upload className="w-4 h-4" strokeWidth={1.5} />;
-      case 'image':
-        return <Upload className="w-4 h-4" strokeWidth={1.5} />;
       case 'note':
       default:
         return <FileText className="w-4 h-4" strokeWidth={1.5} />;
@@ -269,7 +267,6 @@ const NewResourceModal: React.FC<NewResourceModalProps> = ({
                 { value: 'file', label: 'File Upload' },
                 { value: 'link', label: 'Link' },
                 { value: 'document', label: 'Document' },
-                { value: 'image', label: 'Image' },
                 { value: 'video', label: 'Video' }
               ].map(({ value, label }) => (
                 <label key={value} className="flex items-center">
@@ -299,7 +296,7 @@ const NewResourceModal: React.FC<NewResourceModalProps> = ({
               >
                 <UploadCloud className="w-8 h-8 mx-auto mb-2 text-gray-400" strokeWidth={1.5} />
                 <p className="text-sm text-gray-600 mb-1">Drag and drop files here or click to select</p>
-                <p className="text-xs text-gray-500">Supports images, videos, documents (max 10MB each)</p>
+                <p className="text-xs text-gray-500">Supports videos, documents (max 10MB each)</p>
                 <input
                   ref={fileInputRef}
                   type="file"

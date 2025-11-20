@@ -161,9 +161,14 @@ router.get('/', [
 
             // Generate embedding for vector search (skip for very short queries)
             if (enhancedQuery.length >= 5) {
-              const embeddingResponse = await aiService.createEmbeddings(enhancedQuery);
-              queryEmbedding = embeddingResponse.data[0].embedding;
-              console.log('Query embedding generated, length:', queryEmbedding!.length);
+              try {
+                const embeddingResponse = await aiService.createEmbeddings(enhancedQuery);
+                queryEmbedding = embeddingResponse.data[0].embedding;
+                console.log('Query embedding generated, length:', queryEmbedding!.length);
+              } catch (embeddingError) {
+                console.warn('Embedding generation failed, falling back to text search:', embeddingError);
+                // Continue with text search - queryEmbedding remains null
+              }
             } else {
               console.log('Query too short for embeddings, using text search');
             }
@@ -216,13 +221,18 @@ router.get('/', [
       where.type = type;
     } else if (aiFilters.type) {
       // Handle multiple types separated by pipe or comma
-      const types = aiFilters.type.split(/[|,]/).filter(t => t.trim());
+      // Filter to only valid ResourceType enum values
+      const validTypes = ['note', 'video', 'link', 'document'];
+      const types = aiFilters.type.split(/[|,]/)
+        .filter(t => t.trim())
+        .filter(t => validTypes.includes(t)); // Only include valid types
+
       if (types.length === 1) {
-        where.type = types[0];
+        where.type = types[0] as any; // Type assertion for Prisma enum
       } else if (types.length > 1) {
         where.OR = where.OR || [];
         where.OR.push({
-          type: { in: types }
+          type: { in: types as any[] } // Type assertion for Prisma enum
         });
       }
     }
@@ -263,22 +273,64 @@ router.get('/', [
       }
 
         try {
-          // Check if this is a date/time query
-          const dateTimeQueries = ['current date', 'what date', 'what time', 'current time', 'today', 'now', 'date time', 'time date', 'what day', 'current day'];
-          const queryLower = searchQuery.toLowerCase().trim();
-          const isDateTimeQuery = dateTimeQueries.some(phrase => queryLower.includes(phrase));
+           // Check if this is a date/time query - be more specific to avoid false positives
+           const queryLower = searchQuery.toLowerCase().trim();
+           const isDateTimeQuery =
+             // Exact matches for common date/time questions
+             queryLower === 'what time is it' ||
+             queryLower === 'what time' ||
+             queryLower === 'current time' ||
+             queryLower === 'what date is it' ||
+             queryLower === 'what date' ||
+             queryLower === 'current date' ||
+             queryLower === 'what day is it' ||
+             queryLower === 'what day' ||
+             queryLower === 'current day' ||
+             queryLower === 'today' ||
+             queryLower === 'now' ||
+             // Specific phrases that clearly indicate date/time intent
+             queryLower.includes('what time') && (queryLower.includes('is it') || queryLower.includes('now')) ||
+             queryLower.includes('what date') && (queryLower.includes('is it') || queryLower.includes('today')) ||
+             queryLower.includes('current time') ||
+             queryLower.includes('current date') ||
+             queryLower.includes('what day') && queryLower.includes('is it');
 
           if (isDateTimeQuery) {
-            // Provide accurate current date/time information in user's timezone
+            // Provide accurate current date/time information in user's timezone using AI
             const currentDateTime = aiService.getCurrentDateTime(timezone);
-            chatResponse = `Today is ${currentDateTime.day}, ${currentDateTime.date}. The current time is ${currentDateTime.time}. Is there anything I can help you with in your personal resources?`;
+            const dateTimeContext = `Current date and time: Today is ${currentDateTime.day}, ${currentDateTime.date}. The current time is ${currentDateTime.time}.`;
+
+            // Use AI to generate a natural response that includes the date/time info
+            chatResponse = await aiService.generateChatResponseWithMCP(
+              `The user asked about the current date and time. Provide a friendly, helpful response that includes this information: ${dateTimeContext} and offers assistance with their personal resources.`,
+              context,
+              timezone,
+              focusMode,
+              false,
+              useMCP,
+              mcpCredentials,
+              conversation
+            ) as string;
           } else {
+            // Regular chat response for non-date/time queries
             chatResponse = await aiService.generateChatResponseWithMCP(searchQuery, context, timezone, focusMode, false, useMCP, mcpCredentials, conversation) as string;
-            console.log('Generated chat response:', chatResponse);
           }
+          console.log('Generated chat response:', chatResponse);
         } catch (error) {
           console.warn('Failed to generate chat response:', error);
-          chatResponse = "Hello! I'm your AI assistant for personal resources. How can I help you?";
+          // Use AI to generate a fallback greeting even when primary AI fails
+          try {
+            chatResponse = await aiService.generateChatResponse(
+              "Generate a friendly greeting for a personal resource management assistant. Keep it brief and welcoming.",
+              '',
+              timezone,
+              focusMode,
+              false
+            ) as string;
+          } catch (fallbackError) {
+            console.warn('Fallback AI greeting also failed:', fallbackError);
+            chatResponse = "Hello! I'm here to help you with your personal resources.";
+          }
         }
     }
 
@@ -398,80 +450,41 @@ router.get('/', [
         // General mode uses the default search behavior
       }
 
-    // Generate suggestions if no results found
+    // Generate AI-powered suggestions if no results found
     let suggestions: string[] = [];
-    if (!isChat && total === 0) {
-      // AI suggestions disabled, use fallback
-      const queryLower = searchQuery.toLowerCase();
-      if (queryLower.includes('read') || queryLower.includes('book')) {
-        suggestions = [
-          'find books about reading',
-          'what reading materials do I have',
-          'articles on literature',
-          'study guides for books',
-          'notes on novels',
-          'documents about reading',
-          'book recommendations',
-          'reading lists'
-        ];
-      } else if (queryLower.includes('study') || queryLower.includes('learn')) {
-        suggestions = [
-          'find study materials',
-          'what educational content do I have',
-          'tutorials and guides',
-          'learning resources',
-          'course notes',
-          'study guides',
-          'educational documents',
-          'learning materials'
-        ];
-      } else if (queryLower.includes('video') || queryLower.includes('watch')) {
-        suggestions = [
-          'find video tutorials',
-          'what videos do I have',
-          'watch lectures',
-          'video courses',
-          'how-to videos',
-          'demonstrations',
-          'webinars',
-          'video guides'
-        ];
-      } else if (queryLower.includes('write') || queryLower.includes('writing')) {
-        suggestions = [
-          'writing guides and tips',
-          'notes on writing',
-          'articles about writing',
-          'writing tutorials',
-          'essay examples',
-          'writing resources',
-          'blog posts on writing',
-          'creative writing materials'
-        ];
-      } else if (queryLower.includes('code') || queryLower.includes('programming')) {
-        suggestions = [
-          'find code snippets',
-          'programming tutorials',
-          'code examples',
-          'programming guides',
-          'development resources',
-          'coding projects',
-          'programming documentation',
-          'tech tutorials'
-        ];
-      } else {
+    if (!isChat && total === 0 && searchQuery) {
+      try {
+        // Use AI to generate contextual suggestions based on the search query
+        const suggestionPrompt = `The user searched for "${searchQuery}" but found no results. Generate 6-8 helpful search suggestions that are related to their query and would help them find relevant content in a personal resource management system. Return them as a comma-separated list.`;
+
+        const aiSuggestions = await aiService.generateChatResponse(
+          suggestionPrompt,
+          '',
+          timezone,
+          focusMode,
+          false
+        ) as string;
+
+        // Parse the AI response into an array
+        suggestions = aiSuggestions
+          .split(',')
+          .map(s => s.trim())
+          .filter(s => s.length > 0 && s.length < 100) // Filter out empty or too long suggestions
+          .slice(0, 8); // Limit to 8 suggestions
+
+        console.log('Generated AI suggestions:', suggestions);
+      } catch (suggestionError) {
+        console.warn('Failed to generate AI suggestions, using basic fallback:', suggestionError);
+        // Very basic fallback if AI fails completely
         suggestions = [
           'find my notes',
           'what documents do I have',
           'search books',
           'video tutorials',
           'articles and guides',
-          'personal resources',
-          'saved materials',
-          'reference materials'
+          'personal resources'
         ];
       }
-      // Limit to 8 suggestions
-      suggestions = suggestions.slice(0, 8);
     }
 
     // Generate AI summary for search results

@@ -42,65 +42,76 @@ export async function performWebSearch(
   query: string,
   options: WebSearchOptions = {}
 ): Promise<WebSearchResponse> {
-  const searchUrl = process.env.WEB_SEARCH_URL || 'https://search.canine.tools/search';
+  // Try multiple search engines in order of reliability
+  const searchUrls = [
+    process.env.WEB_SEARCH_URL || 'https://search.canine.tools/search',
+    'https://searx.org/search',
+    'https://search.brave.com/search'
+  ];
 
-  const defaultOptions: WebSearchOptions = {
-    format: 'json',
-    pageno: 1,
-    time_range: 'month',
-    categories: 'it,news',
-    engines: 'duckduckgo,bing',
-    enabled_engines: 'duckduckgo,wikipedia',
-    disabled_engines: '',
-    language: 'en',
-    safesearch: 1,
-    autocomplete: 'duckduckgo',
-    image_proxy: true,
-    results_on_new_tab: 0,
-    theme: 'simple',
-    enabled_plugins: 'Hash_plugin,Self_Information,Tracker_URL_remover,Ahmia_blacklist',
-    disabled_plugins: '',
-    ...options
-  };
+  let lastError: any = null;
 
-  try {
-    const response = await axios.get(searchUrl, {
-      params: {
-        q: query,
-        ...defaultOptions
-      },
-      headers: {
-        'User-Agent': 'curl/7.68.0',
-        'Accept': '*/*',
-      },
-      timeout: 15000, // 15 seconds timeout
-    });
+  for (const searchUrl of searchUrls) {
+    try {
+      const defaultOptions: WebSearchOptions = {
+        format: 'json',
+        pageno: 1,
+        time_range: 'month',
+        categories: 'it,news',
+        engines: 'duckduckgo,bing',
+        enabled_engines: 'duckduckgo,wikipedia',
+        disabled_engines: '',
+        language: 'en',
+        safesearch: 1,
+        autocomplete: 'duckduckgo',
+        image_proxy: true,
+        results_on_new_tab: 0,
+        theme: 'simple',
+        enabled_plugins: 'Hash_plugin,Self_Information,Tracker_URL_remover,Ahmia_blacklist',
+        disabled_plugins: '',
+        ...options
+      };
 
-    if (response.status !== 200) {
-      throw new Error(`Web search API returned status ${response.status}`);
+      console.log(`Trying web search with ${searchUrl} for query: "${query}"`);
+
+      const response = await axios.get(searchUrl, {
+        params: {
+          q: query,
+          ...defaultOptions
+        },
+        headers: {
+          'User-Agent': 'curl/7.68.0',
+          'Accept': '*/*',
+        },
+        timeout: 10000, // 10 seconds timeout per attempt
+      });
+
+      if (response.status !== 200) {
+        throw new Error(`Web search API returned status ${response.status}`);
+      }
+
+      const data: WebSearchResponse = response.data;
+
+      // Validate response structure
+      if (!data.results || !Array.isArray(data.results)) {
+        throw new Error('Invalid response format from web search API');
+      }
+
+      console.log(`Web search successful with ${searchUrl}, found ${data.results.length} results`);
+      return data;
+
+    } catch (error: any) {
+      console.error(`Web search failed with ${searchUrl}:`, error.message);
+      lastError = error;
+
+      // Continue to next search URL
+      continue;
     }
-
-    const data: WebSearchResponse = response.data;
-
-    // Validate response structure
-    if (!data.results || !Array.isArray(data.results)) {
-      throw new Error('Invalid response format from web search API');
-    }
-
-    return data;
-  } catch (error: any) {
-    console.error('Web search error:', error);
-
-    if (error.code === 'ECONNABORTED') {
-      throw new Error('Web search request timed out');
-    }
-
-    if (error.response) {
-      throw new Error(`Web search API error: ${error.response.status} - ${error.response.statusText}`);
-    }
-
-    throw new Error(`Web search failed: ${error.message}`);
   }
+
+  // If all search URLs failed, throw the last error
+  console.error('All web search URLs failed');
+  throw new Error(`Web search failed: ${lastError?.message || 'All search engines unavailable'}`);
 }
 
 export function formatWebSearchResults(searchResponse: WebSearchResponse): string {

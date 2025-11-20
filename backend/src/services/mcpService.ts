@@ -136,7 +136,7 @@ class MCPService {
     return allTools;
   }
 
-  async executeTool(toolName: string, parameters: any, userCredentials?: Record<string, string>): Promise<MCPToolResult[]> {
+  async executeTool(toolName: string, parameters: any, _userCredentials?: Record<string, string>): Promise<MCPToolResult[]> {
     if (!this.config.enabled) {
       return [{
         serverUrl: '',
@@ -180,7 +180,7 @@ class MCPService {
     return results;
   }
 
-  private getServerForTool(tool: MCPTool): string | null {
+  private getServerForTool(_tool: MCPTool): string | null {
     // This is a simplified implementation - in practice, you'd need to track which server provides which tools
     // For now, we'll assume tools are unique across servers
     return null; // Let the execution loop find the right server

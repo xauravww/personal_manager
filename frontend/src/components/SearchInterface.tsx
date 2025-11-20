@@ -99,6 +99,13 @@ const SearchInterface: React.FC = () => {
     currentThought?: any;
     latestTotalThoughts?: number;
   } | null>(null);
+  const [sequentialThinkingProgress, setSequentialThinkingProgress] = useState<{
+    current: number;
+    total: number;
+    currentStep: string;
+    status: 'idle' | 'thinking' | 'analyzing' | 'complete' | 'error';
+    currentThought?: any;
+  } | null>(null);
   const [deepResearchEventSource, setDeepResearchEventSource] = useState<EventSource | null>(null);
   const [researchAnalysisExpanded, setResearchAnalysisExpanded] = useState<boolean>(false);
   const [currentResearchResult, setCurrentResearchResult] = useState<{
@@ -107,6 +114,7 @@ const SearchInterface: React.FC = () => {
     confidence: number;
     sources: any[];
   } | null>(null);
+  const [latestMcpResults, setLatestMcpResults] = useState<any[] | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
 
@@ -186,6 +194,8 @@ const SearchInterface: React.FC = () => {
       }
     ]);
     setCurrentResearchResult(null);
+    setLatestMcpResults(null);
+    setSequentialThinkingProgress(null);
     setResearchAnalysisExpanded(false);
   };
 
@@ -540,6 +550,8 @@ const SearchInterface: React.FC = () => {
           .slice(-5) // Keep only last 5 messages for context
           .map(msg => ({ type: msg.type, content: msg.content }));
 
+        // Don't show fake progress - only show when we have actual MCP results
+
         // Use AI-enhanced search that determines intent and combines sources
         console.log('🚀 Making API call now...');
         const response = await apiClient.searchResources({
@@ -626,20 +638,20 @@ const SearchInterface: React.FC = () => {
         // Generate citations from all sources (local, web, MCP)
         citations = [
           ...results.map((result, index) => ({
-            id: `local-${index + 1}`,
+            id: `${results.length > 1 ? index + 1 : 'local'}`,
             title: result.title,
             url: result.url || '#',
             snippet: result.content.substring(0, 150) + '...'
           })),
           ...webResults.map((result, index) => ({
-            id: `web-${index + 1}`,
+            id: `${(results.length + webResults.length) > 1 ? results.length + index + 1 : 'web'}`,
             title: result.title,
             url: result.url,
             snippet: result.content.substring(0, 200) + '...'
           })),
           // Add sequential thinking results as citations
           ...(response.ai?.mcpResults || []).map((mcpResult, index) => ({
-            id: `sequential-${index + 1}`,
+            id: `${(results.length + webResults.length + (response.ai?.mcpResults || []).length) > 1 ? results.length + webResults.length + index + 1 : 'analysis'}`,
             title: `Sequential Thinking Analysis${!mcpResult.success ? ' (failed)' : ''}`,
             url: '#',
             snippet: mcpResult.success
@@ -648,9 +660,52 @@ const SearchInterface: React.FC = () => {
           }))
         ];
 
+        // Add inline citations to AI content for academic mode or when multiple sources exist
+        if ((focusMode === 'academic' || citations.length > 1) && response.ai?.intent !== 'chat') {
+          if (response.ai?.summary) {
+            // For AI-generated summaries, add citation references at the end
+            aiContent = `${response.ai.summary}\n\n${citations.map((c, i) => `[${c.id}]`).join(' ')}`;
+          } else if (aiContent.includes('From your resources:') || aiContent.includes('From the web:')) {
+            // For structured responses, add citation references
+            aiContent += `\n\n**References:** ${citations.map((c, i) => `[${c.id}]`).join(' ')}`;
+          }
+        }
+
+
+
         // Update sequential thinking error state
         const hasSequentialErrors = response.ai?.mcpResults ? response.ai.mcpResults.some(r => !r.success) : false;
         setSequentialThinkingErrors(hasSequentialErrors);
+
+        // Store MCP results for analysis display
+        if (response.ai?.mcpResults) {
+          setLatestMcpResults(response.ai.mcpResults);
+        }
+
+        // Show sequential thinking results if available
+        if (useSequentialThinking && response.ai?.mcpResults && response.ai.mcpResults.length > 0) {
+          const mcpResults = response.ai.mcpResults;
+
+          // Show the actual MCP results as completed sequential thinking
+          setSequentialThinkingProgress({
+            current: mcpResults.length,
+            total: mcpResults.length,
+            currentStep: 'Sequential reasoning completed',
+            status: 'complete',
+            currentThought: {
+              thought: `Completed ${mcpResults.length} sequential reasoning steps`,
+              action: 'analyze',
+              actionDetails: 'Sequential analysis completed',
+              result: `Processed ${mcpResults.filter(r => r.success).length} successful steps`,
+              timestamp: new Date().toISOString()
+            }
+          });
+
+          // Clear progress after a short delay
+          setTimeout(() => {
+            setSequentialThinkingProgress(null);
+          }, 3000);
+        }
 
         const aiMessage: ConversationMessage = {
           id: (Date.now() + 1).toString(),
@@ -661,6 +716,8 @@ const SearchInterface: React.FC = () => {
           citations: (response.ai?.intent !== 'chat' && citations.length > 0) ? citations : undefined,
           suggestions: response.ai?.suggestions
         };
+
+
 
         setConversation(prev => [...prev, aiMessage]);
       }
@@ -769,7 +826,7 @@ const SearchInterface: React.FC = () => {
     <div className="mt-4 border-t border-gray-200 pt-4">
       <h4 className="text-sm font-medium text-gray-700 mb-2">Sources</h4>
       <div className="space-y-2">
-        {citations.map((citation) => (
+        {citations.map((citation, index) => (
           <div key={citation.id} className="flex items-start gap-2 text-sm">
             <span className="text-blue-500 font-medium">[{citation.id}]</span>
             <div className="flex-1">
@@ -807,13 +864,13 @@ const SearchInterface: React.FC = () => {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && !isLoading && handleSearch(query)}
-                   placeholder={
-                     searchMode === 'deep-research'
-                       ? "Enter a research topic for comprehensive AI-powered analysis..."
-                       : aiEnhancedSearch
-                        ? `Ask me anything about your resources${useSequentialThinking ? ' (with sequential thinking)' : ''}, paste a URL to read its content, or search the web...`
-                       : "Ask me anything about your resources..."
-                   }
+                    placeholder={
+                      searchMode === 'deep-research'
+                        ? "Enter a research topic for comprehensive AI-powered analysis..."
+                        : aiEnhancedSearch
+                         ? `Ask me anything about your resources${useSequentialThinking ? ' (enhanced reasoning)' : ''}, paste a URL to read its content, or search the web...`
+                         : "Ask me anything about your resources..."
+                    }
                  disabled={isLoading}
                   className="w-full px-6 py-4 rounded-full focus:outline-none focus:ring-2 text-lg shadow-sm disabled:opacity-50 disabled:cursor-not-allowed bg-gray-50 border border-gray-300 focus:ring-blue-500 focus:border-transparent"
               />
@@ -906,9 +963,9 @@ const SearchInterface: React.FC = () => {
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-gray-500 flex items-center gap-1">
                           <Brain className="w-4 h-4" strokeWidth={1.5} />
-                          Sequential Thinking
+                          Enhanced Reasoning
                           {useSequentialThinking && sequentialThinkingErrors && (
-                            <span className="text-xs text-red-500" title="Sequential thinking failed">(!)</span>
+                            <span className="text-xs text-red-500" title="Enhanced reasoning had issues">(!)</span>
                           )}
                         </span>
                         <button
@@ -985,19 +1042,19 @@ const SearchInterface: React.FC = () => {
               )}
               </div>
 
-               {/* Sequential Thinking Configuration */}
-               {useSequentialThinking && (
-                 <div className="border-t border-gray-100 pt-6 mt-6">
-                   <div className="flex items-center gap-2 mb-2">
-                     <Brain className="w-4 h-4 text-green-600" strokeWidth={1.5} />
-                     <span className="text-sm font-medium text-gray-900">Sequential Thinking</span>
+                {/* Sequential Thinking Configuration */}
+                {useSequentialThinking && (
+                  <div className="border-t border-gray-100 pt-6 mt-6">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Brain className="w-4 h-4 text-green-600" strokeWidth={1.5} />
+                      <span className="text-sm font-medium text-gray-900">Sequential Thinking Enabled</span>
+                    </div>
+                     <p className="text-xs text-gray-600">
+                       When enabled, the AI uses advanced reasoning techniques to provide more thorough and accurate responses.
+                       This enhances analysis quality for complex queries by applying structured thinking patterns.
+                     </p>
                    </div>
-                    <p className="text-xs text-gray-600">
-                      When enabled, complex queries will use step-by-step reasoning to provide more thorough analysis.
-                      This is particularly useful for questions requiring logical analysis, problem-solving, or multi-step explanations.
-                    </p>
-                  </div>
-               )}
+                )}
             </div>
           </div>
 
@@ -1095,82 +1152,128 @@ const SearchInterface: React.FC = () => {
                  </div>
                ))}
 
-               {/* Research Analysis for Latest AI Message */}
-               {currentResearchResult && currentResearchResult.thoughtProcess && currentResearchResult.thoughtProcess.length > 0 && (
-                 <div className="mt-6 bg-white border border-gray-200 rounded-xl overflow-hidden">
-                   <button
-                     onClick={() => setResearchAnalysisExpanded(!researchAnalysisExpanded)}
-                     className="w-full px-6 py-4 text-left flex items-center justify-between hover:bg-gray-50 transition-colors"
-                   >
-                     <div className="flex items-center gap-3">
-                       <Brain className="w-5 h-5 text-purple-600" strokeWidth={1.5} />
-                       <span className="font-medium text-gray-900">Research Analysis</span>
-                       <span className="text-sm text-gray-600">({currentResearchResult.thoughtProcess.length} steps)</span>
-                     </div>
-                     <ChevronDown
-                       className={`w-5 h-5 text-gray-500 transition-transform ${researchAnalysisExpanded ? 'rotate-180' : ''}`}
-                       strokeWidth={1.5}
-                     />
-                   </button>
+                {/* Research Analysis for Latest AI Message */}
+                {currentResearchResult && currentResearchResult.thoughtProcess && currentResearchResult.thoughtProcess.length > 0 && (
+                  <div className="mt-6 bg-white border border-gray-200 rounded-xl overflow-hidden">
+                    <button
+                      onClick={() => setResearchAnalysisExpanded(!researchAnalysisExpanded)}
+                      className="w-full px-6 py-4 text-left flex items-center justify-between hover:bg-gray-50 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Brain className="w-5 h-5 text-purple-600" strokeWidth={1.5} />
+                        <span className="font-medium text-gray-900">Research Analysis</span>
+                        <span className="text-sm text-gray-600">({currentResearchResult.thoughtProcess.length} steps)</span>
+                      </div>
+                      <ChevronDown
+                        className={`w-5 h-5 text-gray-500 transition-transform ${researchAnalysisExpanded ? 'rotate-180' : ''}`}
+                        strokeWidth={1.5}
+                      />
+                    </button>
 
-                   {researchAnalysisExpanded && (
-                     <div className="border-t border-gray-200">
-                       <div className="max-h-96 overflow-y-auto">
-                         {currentResearchResult.thoughtProcess.map((thought, index) => (
-                           <div key={index} className="px-6 py-4 border-b border-gray-100 last:border-b-0">
-                             <div className="flex items-start gap-4">
-                               <div className="flex-shrink-0 mt-1">
-                                 {getThoughtIcon(thought)}
-                               </div>
-                               <div className="flex-1 min-w-0">
-                                 <div className="flex items-center gap-2 mb-3">
-                                   <h4 className="text-lg font-semibold text-gray-900">
-                                     {thought.isRevision ? 'Revision' : thought.action ? `${thought.action.replace('_', ' ').toUpperCase()}` : 'Analysis'}
-                                   </h4>
-                                   {thought.isRevision && (
-                                     <span className="px-3 py-1 bg-yellow-100 text-yellow-800 text-sm rounded-full">
-                                       Revising step {thought.revisesThought}
-                                     </span>
-                                   )}
-                                 </div>
+                    {researchAnalysisExpanded && (
+                      <div className="border-t border-gray-200">
+                        <div className="max-h-96 overflow-y-auto">
+                          {currentResearchResult.thoughtProcess.map((thought, index) => (
+                            <div key={index} className="px-6 py-4 border-b border-gray-100 last:border-b-0">
+                              <div className="flex items-start gap-4">
+                                <div className="flex-shrink-0 mt-1">
+                                  {getThoughtIcon(thought)}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-3">
+                                    <h4 className="text-lg font-semibold text-gray-900">
+                                      {thought.isRevision ? 'Revision' : thought.action ? `${thought.action.replace('_', ' ').toUpperCase()}` : 'Analysis'}
+                                    </h4>
+                                    {thought.isRevision && (
+                                      <span className="px-3 py-1 bg-yellow-100 text-yellow-800 text-sm rounded-full">
+                                        Revising step {thought.revisesThought}
+                                      </span>
+                                    )}
+                                  </div>
 
-                                 <div className="prose prose-sm max-w-none text-gray-700 mb-4">
-                                   <ReactMarkdown>{thought.thought}</ReactMarkdown>
-                                 </div>
+                                  <div className="prose prose-sm max-w-none text-gray-700 mb-4">
+                                    <ReactMarkdown>{thought.thought}</ReactMarkdown>
+                                  </div>
 
-                                 {thought.actionDetails && (
-                                   <div className="mb-4 p-4 bg-gray-50 rounded-lg border-l-4 border-blue-400">
-                                     <div className="text-sm text-gray-600 mb-2">Action Details:</div>
-                                     <div className="text-sm font-mono text-gray-800 break-all">
-                                       {thought.actionDetails}
-                                     </div>
-                                   </div>
-                                 )}
+                                  {thought.actionDetails && (
+                                    <div className="mb-4 p-4 bg-gray-50 rounded-lg border-l-4 border-blue-400">
+                                      <div className="text-sm text-gray-600 mb-2">Action Details:</div>
+                                      <div className="text-sm font-mono text-gray-800 break-all">
+                                        {thought.actionDetails}
+                                      </div>
+                                    </div>
+                                  )}
 
-                                 {thought.result && (
-                                   <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                                     <div className="text-sm text-green-700 mb-2 font-medium">Result:</div>
-                                     <div className="text-sm text-green-800 whitespace-pre-wrap break-words">
-                                       {thought.result.length > 500 ? `${thought.result.substring(0, 500)}...` : thought.result}
-                                     </div>
-                                   </div>
-                                 )}
+                                  {thought.result && (
+                                    <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                                      <div className="text-sm text-green-700 mb-2 font-medium">Result:</div>
+                                      <div className="text-sm text-green-800 whitespace-pre-wrap break-words">
+                                        {thought.result.length > 500 ? `${thought.result.substring(0, 500)}...` : thought.result}
+                                      </div>
+                                    </div>
+                                  )}
 
-                                 <div className="mt-4 text-xs text-gray-500 flex items-center gap-4">
-                                   <span>{new Date(thought.timestamp).toLocaleTimeString()}</span>
-                                   {!thought.nextThoughtNeeded && (
-                                     <span className="text-green-600 font-medium">Final step</span>
-                                   )}
-                                 </div>
-                               </div>
-                             </div>
-                           </div>
-                         ))}
-                       </div>
-                     </div>
-                   )}
-                 </div>
-               )}
+                                  <div className="mt-4 text-xs text-gray-500 flex items-center gap-4">
+                                    <span>{new Date(thought.timestamp).toLocaleTimeString()}</span>
+                                    {!thought.nextThoughtNeeded && (
+                                      <span className="text-green-600 font-medium">Final step</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Sequential Thinking Analysis - Compact */}
+                {conversation.length > 1 && useSequentialThinking && latestMcpResults && latestMcpResults.length > 0 && (
+                  <div className="mt-4 px-4">
+                    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Brain className="w-4 h-4 text-green-600" strokeWidth={1.5} />
+                        <span className="text-sm font-medium text-gray-900">Enhanced Reasoning Results</span>
+                        <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                          {latestMcpResults.length} reasoning steps
+                        </span>
+                      </div>
+                      <div className="space-y-3">
+                        {latestMcpResults.slice(0, 3).map((mcpResult, index) => (
+                          <div key={index} className="flex items-start gap-3 p-3 bg-white rounded border border-gray-100">
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${
+                              mcpResult.success ? 'bg-green-100' : 'bg-red-100'
+                            }`}>
+                              {mcpResult.success ? (
+                                <CheckCircle className="w-4 h-4 text-green-600" strokeWidth={1.5} />
+                              ) : (
+                                <AlertCircle className="w-4 h-4 text-red-600" strokeWidth={1.5} />
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium text-gray-900 mb-1">
+                                Reasoning Step {index + 1}: {mcpResult.success ? 'Completed' : 'Failed'}
+                              </div>
+                              <div className="text-xs text-gray-600 line-clamp-2">
+                                {mcpResult.success
+                                  ? (mcpResult.result?.thinking || mcpResult.result?.result || 'Enhanced analysis completed successfully')
+                                  : mcpResult.error
+                                }
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        {latestMcpResults.length > 3 && (
+                          <div className="text-xs text-gray-500 text-center">
+                            +{latestMcpResults.length - 3} more reasoning steps...
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                <div ref={chatEndRef} />
 
@@ -1188,26 +1291,31 @@ const SearchInterface: React.FC = () => {
                   </div>
                 )}
 
-                 {/* Deep Research Progress */}
-                 {deepResearchProgress && (
-                   <div className="flex gap-4 px-4">
-                    <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center text-white">
-                      {getResearchStatusIcon(deepResearchProgress.status)}
-                    </div>
-                    <div className="flex-1">
-                      <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-                        {/* Header with status */}
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-blue-500 rounded-lg flex items-center justify-center">
-                              <Brain className="w-5 h-5 text-white" strokeWidth={1.5} />
-                            </div>
-                            <div>
-                              <h3 className="text-lg font-semibold text-gray-900">Deep Research</h3>
-                              <p className="text-sm text-gray-600">{getResearchStatusText(deepResearchProgress.status)}</p>
-                            </div>
+                   {/* Deep Research Progress - Organic Flow */}
+                   {deepResearchProgress && (
+                     <div className="flex gap-4 px-4">
+                      <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full flex items-center justify-center text-white animate-pulse">
+                        {getResearchStatusIcon(deepResearchProgress.status)}
+                      </div>
+                      <div className="flex-1">
+                        <div className="bg-gradient-to-r from-white to-gray-50 border border-gray-200 rounded-xl p-6 shadow-lg relative overflow-hidden">
+                          {/* Subtle background animation */}
+                          <div className="absolute inset-0 opacity-5">
+                            <div className="absolute top-4 right-4 w-16 h-16 bg-purple-500 rounded-full blur-xl animate-pulse"></div>
+                            <div className="absolute bottom-4 left-4 w-12 h-12 bg-blue-500 rounded-full blur-xl animate-pulse" style={{animationDelay: '1s'}}></div>
                           </div>
-                          <div className="flex items-center gap-2">
+
+                          {/* Header - Clean and Focused */}
+                          <div className="relative z-10 flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 bg-gradient-to-r from-purple-500 to-blue-500 rounded-lg flex items-center justify-center shadow-sm">
+                                <Brain className="w-5 h-5 text-white" strokeWidth={1.5} />
+                              </div>
+                              <div>
+                                <h3 className="text-lg font-semibold text-gray-900">AI Research Active</h3>
+                                <p className="text-sm text-gray-600">{getResearchStatusText(deepResearchProgress.status)}</p>
+                              </div>
+                            </div>
                             <button
                               onClick={() => {
                                 if (deepResearchEventSource) {
@@ -1217,83 +1325,100 @@ const SearchInterface: React.FC = () => {
                                 setDeepResearchProgress(null);
                                 setIsLoading(false);
                               }}
-                              className="text-gray-400 hover:text-red-500 transition-colors"
+                              className="text-gray-400 hover:text-red-500 transition-colors p-1"
                               title="Cancel research"
                             >
                               <X className="w-5 h-5" strokeWidth={1.5} />
                             </button>
                           </div>
-                        </div>
 
-                        {/* Progress Bar */}
-                        <div className="mb-6">
-                          <div className="flex items-center justify-between text-sm text-gray-600 mb-1">
-                            <span>Step {deepResearchProgress.current} of {deepResearchProgress.latestTotalThoughts || deepResearchProgress.total}</span>
-                            <span>{Math.round((deepResearchProgress.current / (deepResearchProgress.latestTotalThoughts || deepResearchProgress.total)) * 100)}% complete</span>
-                          </div>
-                          <div className="w-full bg-gray-200 rounded-full h-3">
-                            <div
-                              className="bg-gradient-to-r from-blue-500 to-purple-600 h-3 rounded-full transition-all duration-700 ease-out"
-                              style={{ width: `${Math.min((deepResearchProgress.current / (deepResearchProgress.latestTotalThoughts || deepResearchProgress.total)) * 100, 100)}%` }}
-                            ></div>
-                          </div>
-                        </div>
-
-                        {/* Current Thought Content */}
-                        {deepResearchProgress.currentThought && (
-                          <div className="animate-fade-in">
-                            <div className="flex items-start gap-4">
-                              <div className="flex-shrink-0 mt-1">
-                                {getThoughtIcon(deepResearchProgress.currentThought)}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-3">
-                                  <h4 className="text-xl font-semibold text-gray-900">
-                                    {deepResearchProgress.currentThought.isRevision ? 'Revision' : deepResearchProgress.currentThought.action ? `${deepResearchProgress.currentThought.action.replace('_', ' ').toUpperCase()}` : 'Analysis'}
-                                  </h4>
-                                  {deepResearchProgress.currentThought.isRevision && (
-                                    <span className="px-3 py-1 bg-yellow-100 text-yellow-800 text-sm rounded-full">
-                                      Revising step {deepResearchProgress.currentThought.revisesThought}
-                                    </span>
-                                  )}
+                          {/* Current Thought - Hero Focus */}
+                          {deepResearchProgress.currentThought && (
+                            <div className="relative z-10 animate-fade-in">
+                              <div className="bg-white/80 rounded-lg p-4 border border-gray-100 shadow-sm">
+                                {/* Thought Header */}
+                                <div className="flex items-center gap-3 mb-3">
+                                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                                    deepResearchProgress.currentThought.action === 'search' ? 'bg-blue-100' :
+                                    deepResearchProgress.currentThought.action === 'read_url' ? 'bg-green-100' :
+                                    deepResearchProgress.currentThought.action === 'analyze' ? 'bg-orange-100' : 'bg-purple-100'
+                                  }`}>
+                                    {getThoughtIcon(deepResearchProgress.currentThought)}
+                                  </div>
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-base font-semibold text-gray-900">
+                                        {deepResearchProgress.currentThought.isRevision ? 'Refining Analysis' :
+                                         deepResearchProgress.currentThought.action ? `${deepResearchProgress.currentThought.action.replace('_', ' ').toUpperCase()}` :
+                                         'Deep Analysis'}
+                                      </span>
+                                      <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                                    </div>
+                                    <div className="text-xs text-gray-500">
+                                      {deepResearchProgress.currentThought.isRevision ? 'Revising previous insights' : 'Processing information'}
+                                    </div>
+                                  </div>
                                 </div>
 
-                                <div className="prose prose-lg max-w-none text-gray-700 mb-4">
-                                  <ReactMarkdown>{deepResearchProgress.currentThought.thought}</ReactMarkdown>
+                                {/* Thought Content */}
+                                <div className="text-gray-700 mb-3 leading-relaxed">
+                                  <ReactMarkdown>
+                                    {deepResearchProgress.currentThought.thought}
+                                  </ReactMarkdown>
                                 </div>
 
+                                {/* Action Details - Secondary */}
                                 {deepResearchProgress.currentThought.actionDetails && (
-                                  <div className="mb-4 p-4 bg-gray-50 rounded-lg border-l-4 border-blue-400">
-                                    <div className="text-sm text-gray-600 mb-2">Action Details:</div>
+                                  <div className="mb-3 p-3 bg-gray-50 rounded border-l-4 border-blue-400">
+                                    <div className="text-xs font-medium text-gray-600 mb-1 uppercase tracking-wide">Details</div>
                                     <div className="text-sm font-mono text-gray-800 break-all">
                                       {deepResearchProgress.currentThought.actionDetails}
                                     </div>
                                   </div>
                                 )}
 
+                                {/* Result - Tertiary */}
                                 {deepResearchProgress.currentThought.result && (
-                                  <div className="p-4 bg-green-50 rounded-lg border border-green-200">
-                                    <div className="text-sm text-green-700 mb-2 font-medium">Result:</div>
+                                  <div className="p-3 bg-green-50 rounded border border-green-200">
+                                    <div className="text-xs font-medium text-green-700 mb-1 uppercase tracking-wide">Outcome</div>
                                     <div className="text-sm text-green-800 whitespace-pre-wrap break-words">
-                                      {deepResearchProgress.currentThought.result.length > 500 ? `${deepResearchProgress.currentThought.result.substring(0, 500)}...` : deepResearchProgress.currentThought.result}
+                                      {deepResearchProgress.currentThought.result.length > 300 ? `${deepResearchProgress.currentThought.result.substring(0, 300)}...` : deepResearchProgress.currentThought.result}
                                     </div>
                                   </div>
                                 )}
-
-                                <div className="mt-4 text-xs text-gray-500 flex items-center gap-4">
-                                  <span>{new Date(deepResearchProgress.currentThought.timestamp).toLocaleTimeString()}</span>
-                                  {!deepResearchProgress.currentThought.nextThoughtNeeded && (
-                                    <span className="text-green-600 font-medium">Final step</span>
-                                  )}
-                                </div>
                               </div>
                             </div>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )}
+                  )}
+
+                  {/* Sequential Thinking Status - Only when actually processing */}
+                  {sequentialThinkingProgress && (
+                    <div className="flex gap-3 px-4 mb-4">
+                      <div className="w-8 h-8 bg-gradient-to-br from-green-400 to-blue-500 rounded-full flex items-center justify-center shadow-sm">
+                        <Brain className="w-4 h-4 text-white animate-pulse" strokeWidth={1.5} />
+                      </div>
+                      <div className="flex-1 bg-green-50 rounded-lg p-3 border border-green-200">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-gray-900">Sequential Thinking Active</span>
+                            <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">
+                              Enhanced Analysis
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <CheckCircle className="w-4 h-4 text-green-600" strokeWidth={1.5} />
+                          </div>
+                        </div>
+                        <div className="text-sm text-gray-700">
+                          {sequentialThinkingProgress.currentThought?.thought ||
+                           'AI used step-by-step reasoning to provide more thorough analysis'}
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
 
 

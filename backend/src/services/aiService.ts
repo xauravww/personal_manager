@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
+import mcpService from './mcpService';
 
 interface AIConfig {
   proxyUrl: string;
@@ -158,12 +159,19 @@ class AIService {
       apiKey: process.env.AI_API_KEY || process.env.OPENAI_API_KEY || '',
       model: process.env.AI_MODEL || 'gpt-4',
     };
+
+    const headers: any = {
+      'Content-Type': 'application/json',
+    };
+
+    // Always send auth token if available
+    if (this.config.apiKey) {
+      headers['Authorization'] = `Bearer ${this.config.apiKey}`;
+    }
+
     this.client = axios.create({
       baseURL: this.config.proxyUrl,
-      headers: {
-        'Authorization': `Bearer ${this.config.apiKey}`,
-        'Content-Type': 'application/json',
-      },
+      headers,
       timeout: 30000, // 30 seconds
     });
 
@@ -188,11 +196,32 @@ class AIService {
    */
   async createChatCompletion(request: ChatCompletionRequest): Promise<ChatCompletionResponse | AsyncIterable<any>> {
     try {
+      console.log(`Making AI request to ${this.config.proxyUrl} with model ${request.model}`);
+
       const response = await this.client.post('/v1/chat/completions', request);
+
+      if (response.status !== 200) {
+        throw new Error(`AI API returned status ${response.status}: ${response.statusText}`);
+      }
+
       return response.data;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating chat completion:', error);
-      throw new Error('Failed to generate AI response');
+
+      // Provide more specific error messages
+      if (error.code === 'ECONNREFUSED') {
+        throw new Error('AI proxy server is not running. Please start your AI proxy server at ' + this.config.proxyUrl);
+      } else if (error.code === 'ENOTFOUND') {
+        throw new Error('AI proxy server URL not found: ' + this.config.proxyUrl);
+      } else if (error.response?.status === 500) {
+        throw new Error('AI proxy server returned internal error. Check server logs.');
+      } else if (error.response?.status === 401) {
+        throw new Error('AI proxy authentication failed. Check API key.');
+      } else if (error.response?.status === 429) {
+        throw new Error('AI proxy rate limit exceeded. Please try again later.');
+      }
+
+      throw new Error(`Failed to generate AI response: ${error.message}`);
     }
   }
 
@@ -2724,7 +2753,7 @@ Provide:
   }
 
   // MCP-enabled methods
-  async enhanceSearchQueryWithMCP(userQuery: string, _mcpCredentials?: Record<string, string>, conversation?: Array<{type: string, content: string}>, timezone?: string): Promise<{
+  async enhanceSearchQueryWithMCP(userQuery: string, mcpCredentials?: Record<string, string>, conversation?: Array<{type: string, content: string}>, timezone?: string): Promise<{
     intent: 'search' | 'chat';
     enhancedQuery: string;
     searchTerms: string[];
@@ -2735,9 +2764,87 @@ Provide:
     mcpResults?: any[];
     mcpSummary?: string;
   }> {
-    // For now, just call the regular method
-    // TODO: Integrate with MCP service for enhanced query processing
-    return this.enhanceSearchQuery(userQuery, conversation, timezone);
+    try {
+      // First get the basic AI enhancement
+      const baseResult = await this.enhanceSearchQuery(userQuery, conversation, timezone);
+
+      // If intent is chat, return as-is
+      if (baseResult.intent === 'chat') {
+        return baseResult;
+      }
+
+      // Check if MCP is enabled and available
+      if (!mcpService.isEnabled()) {
+        return baseResult;
+      }
+
+      // Use MCP for enhanced reasoning on complex queries
+      const queryLower = userQuery.toLowerCase();
+      const isComplexQuery = queryLower.includes('how') ||
+                            queryLower.includes('why') ||
+                            queryLower.includes('explain') ||
+                            queryLower.includes('analyze') ||
+                            queryLower.includes('plan') ||
+                            queryLower.length > 100 ||
+                            (conversation && conversation.length > 2);
+
+      if (isComplexQuery) {
+        try {
+          // Use MCP service for enhanced search with sequential reasoning
+          const mcpSearchResult = await mcpService.searchWithMCP(userQuery, {
+            conversation,
+            timezone,
+            baseEnhancedQuery: baseResult.enhancedQuery,
+            baseSearchTerms: baseResult.searchTerms
+          }, mcpCredentials);
+
+          if (mcpSearchResult.results && mcpSearchResult.results.length > 0) {
+            // Enhance the query based on MCP results
+            let enhancedQuery = baseResult.enhancedQuery;
+            let searchTerms = [...baseResult.searchTerms];
+            let mcpSummary = mcpSearchResult.summary;
+
+            // Extract additional search terms from MCP results
+            const successfulResults = mcpSearchResult.results.filter((r: any) => r.success);
+            for (const result of successfulResults) {
+              if (result.result && typeof result.result === 'object') {
+                // Extract reasoning insights that might suggest better search terms
+                if (result.toolName.includes('sequential') && result.result.thinking) {
+                  const thinking = result.result.thinking.toLowerCase();
+                  // Look for specific terms that might be relevant
+                  const potentialTerms = thinking.match(/\b[a-z]{4,}\b/g) || [];
+                  for (const term of potentialTerms.slice(0, 3)) {
+                    if (!searchTerms.includes(term) && !['that', 'this', 'with', 'from', 'have', 'been'].includes(term)) {
+                      searchTerms.push(term);
+                    }
+                  }
+                }
+              }
+            }
+
+            // Limit search terms to prevent over-expansion
+            searchTerms = searchTerms.slice(0, 8);
+
+            return {
+              ...baseResult,
+              enhancedQuery,
+              searchTerms,
+              mcpResults: mcpSearchResult.results,
+              mcpSummary
+            };
+          }
+        } catch (mcpError) {
+          console.warn('MCP search enhancement failed, falling back to basic AI:', mcpError);
+          // Continue with base result
+        }
+      }
+
+      return baseResult;
+    } catch (error) {
+      console.error('Error in enhanceSearchQueryWithMCP:', error);
+      // Fallback to basic enhancement
+      return this.enhanceSearchQuery(userQuery, conversation, timezone);
+    }
   }
 
   async generateChatResponseWithMCP(
@@ -2746,13 +2853,39 @@ Provide:
     timezone?: string,
     focusMode?: string,
     stream?: boolean,
-    _useMCP?: boolean,
-    _mcpCredentials?: Record<string, string>,
+    useMCP?: boolean,
+    mcpCredentials?: Record<string, string>,
     conversation?: Array<{type: string, content: string}>
   ): Promise<string | AsyncIterable<any>> {
-    // For now, just call the regular method
-    // TODO: Integrate with MCP service for enhanced chat response
-    return this.generateChatResponse(userQuery, context, timezone, focusMode, stream, conversation);
+    try {
+      // Check if MCP should be used
+      const shouldUseMCP = useMCP && mcpService.isEnabled() && focusMode === 'deep-research';
+
+      if (shouldUseMCP) {
+        try {
+          // Use sequential thinking for deep research
+          const sequentialResult = await this.executeSequentialThinking(userQuery, context, (progress) => {
+            console.log(`MCP Sequential Thinking Progress: ${progress.phase} (${progress.step}/${progress.totalSteps}) - ${progress.details}`);
+          });
+
+          if (sequentialResult.finalAnswer && sequentialResult.confidence > 70) {
+            return sequentialResult.finalAnswer;
+          } else {
+            // Fallback to regular response if sequential thinking didn't produce confident answer
+            console.log('Sequential thinking did not produce confident answer, falling back to regular response');
+          }
+        } catch (sequentialError) {
+          console.warn('Sequential thinking failed, falling back to regular response:', sequentialError);
+        }
+      }
+
+      // Use regular chat response as fallback or when MCP is not needed
+      return this.generateChatResponse(userQuery, context, timezone, focusMode, stream, conversation);
+    } catch (error) {
+      console.error('Error in generateChatResponseWithMCP:', error);
+      // Final fallback
+      return this.generateChatResponse(userQuery, context, timezone, focusMode, stream, conversation);
+    }
   }
 }
 

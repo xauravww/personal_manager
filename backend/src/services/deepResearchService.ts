@@ -475,16 +475,44 @@ Return JSON:
   "confidence": 0-100
 }`;
 
-        const response = await aiService.createChatCompletion({
-          model: aiService.getConfig().model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: `Execute thought step ${currentThought} for: ${query}` }
-          ],
-          temperature: 0.3,
-        });
+        let response: any;
+        try {
+          response = await aiService.createChatCompletion({
+            model: aiService.getConfig().model,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: `Execute thought step ${currentThought} for: ${query}` }
+            ],
+            temperature: 0.3,
+          });
+         } catch (aiError) {
+           console.error(`AI service failed on thought ${currentThought}:`, aiError);
 
-        const content = (response as any).choices[0]?.message?.content?.trim();
+           // Provide fallback analysis for common queries
+           const fallbackAnalysis = this.generateFallbackAnalysis(query, currentThought, this.thoughtHistory);
+           if (fallbackAnalysis) {
+             response = {
+               choices: [{
+                 message: {
+                   content: JSON.stringify(fallbackAnalysis)
+                 }
+               }]
+             };
+           } else {
+             // Yield error thought to client
+             const errorThought: DeepResearchThought = {
+               thoughtNumber: currentThought,
+               totalThoughts: totalThoughts,
+               thought: `AI service unavailable: ${aiError instanceof Error ? aiError.message : 'Unknown error'}. Try searching your local resources instead.`,
+               nextThoughtNeeded: false,
+               timestamp: new Date()
+             };
+             yield errorThought;
+             return;
+           }
+         }
+
+        const content = response.choices[0]?.message?.content?.trim();
         if (!content) break;
 
         try {
@@ -848,6 +876,40 @@ Return ONLY this JSON - nothing else:
     }
 
     return cleaned || 'Unable to extract clean answer';
+  }
+
+  private generateFallbackAnalysis(query: string, currentThought: number, thoughtHistory: any[]): any {
+    // Provide basic fallback analysis for common query types when AI service fails
+    const lowerQuery = query.toLowerCase();
+
+    if (currentThought === 1) {
+      // First thought: Always try to clarify ambiguous queries
+      return {
+        thought: `The query "${query}" appears to be about ${this.inferQueryType(lowerQuery)}. Since AI analysis is currently unavailable, I recommend searching your local resources or trying a more specific query.`,
+        action: "analyze",
+        actionDetails: "Query analysis completed with limited AI assistance",
+        nextThoughtNeeded: false,
+        totalThoughts: 1,
+        finalAnswer: `Based on the query "${query}", this appears to be about ${this.inferQueryType(lowerQuery)}. Due to AI service unavailability, I recommend:\n\n1. Try searching your local resources for related content\n2. Use more specific search terms\n3. Check if your AI proxy server is running\n\nFor technical issues, ensure your AI service at ${process.env.AI_PROXY_URL || 'localhost:3010'} is operational.`,
+        confidence: 60
+      };
+    }
+
+    return null; // No fallback available
+  }
+
+  private inferQueryType(query: string): string {
+    if (query.includes('tutorial') || query.includes('guide') || query.includes('how to')) {
+      return 'learning tutorials or guides';
+    } else if (query.includes('documentation') || query.includes('docs') || query.includes('api')) {
+      return 'technical documentation or APIs';
+    } else if (query.includes('error') || query.includes('fix') || query.includes('problem')) {
+      return 'troubleshooting or problem-solving';
+    } else if (query.includes('best') || query.includes('recommend') || query.includes('compare')) {
+      return 'recommendations or comparisons';
+    } else {
+      return 'general information or research';
+    }
   }
 }
 

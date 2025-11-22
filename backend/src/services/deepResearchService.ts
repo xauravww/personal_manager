@@ -221,97 +221,97 @@ export class DeepResearchService {
         }
 
         case 'search': {
-           if (!this.includeWebSearch) {
-             return `Web search is disabled. Use 'search_local' to search through your personal resources instead of web search.`;
-           }
+          if (!this.includeWebSearch) {
+            return `Web search is disabled. Use 'search_local' to search through your personal resources instead of web search.`;
+          }
 
-           console.log(`🔍 Performing web search for: "${actionDetails}"`);
+          console.log(`🔍 Performing web search for: "${actionDetails}"`);
 
-           try {
-             const searchResults = await performWebSearch(actionDetails, {
-               pageno: 1,
-               time_range: 'month',
-               categories: 'it,news,science',
-               engines: 'duckduckgo,google,wikipedia',
-               enabled_engines: 'duckduckgo,google',
-               language: 'en',
-               safesearch: 1
-             });
+          try {
+            const searchResults = await performWebSearch(actionDetails, {
+              pageno: 1,
+              time_range: 'month',
+              categories: 'it,news,science',
+              engines: 'duckduckgo,google,wikipedia',
+              enabled_engines: 'duckduckgo,google',
+              language: 'en',
+              safesearch: 1
+            });
 
-             // Filter out academic/research content and irrelevant results
-             const filteredResults = this.filterWebSearchResults(searchResults.results || [], actionDetails);
+            // Filter out academic/research content and irrelevant results
+            const filteredResults = this.filterWebSearchResults(searchResults.results || [], actionDetails);
 
-             const results = filteredResults.slice(0, 5);
-             const formattedResults = results.map((r: any, i: number) =>
-               `${i + 1}. ${r.title} - ${r.url}\n   ${r.content?.substring(0, 150)}...`
-             ).join('\n\n');
+            const results = filteredResults.slice(0, 5);
+            const formattedResults = results.map((r: any, i: number) =>
+              `${i + 1}. ${r.title} - ${r.url}\n   ${r.content?.substring(0, 150)}...`
+            ).join('\n\n');
 
-             // Store sources
-             results.forEach((r: any) => {
-               this.sources.push({
-                 url: r.url,
-                 title: r.title,
-                 content: r.content || '',
-                 relevance: 0.8 // Default relevance
-               });
-             });
+            // Store sources
+            results.forEach((r: any) => {
+              this.sources.push({
+                url: r.url,
+                title: r.title,
+                content: r.content || '',
+                relevance: 0.8 // Default relevance
+              });
+            });
 
-             return `Found ${results.length} results:\n${formattedResults}`;
-           } catch (error) {
-             console.warn(`Web search failed for "${actionDetails}":`, error);
-             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-             return `Web search failed: ${errorMessage}. Try searching your local resources instead using 'search_local' action with relevant keywords.`;
-           }
-         }
+            return `Found ${results.length} results:\n${formattedResults}`;
+          } catch (error) {
+            console.warn(`Web search failed for "${actionDetails}":`, error);
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            return `Web search failed: ${errorMessage}. Try searching your local resources instead using 'search_local' action with relevant keywords.`;
+          }
+        }
 
         case 'read_url': {
-           if (!this.includeWebSearch) {
-             return `Web access is disabled. Cannot read URL: "${actionDetails}". Please analyze available information from local resources only.`;
-           }
+          if (!this.includeWebSearch) {
+            return `Web access is disabled. Cannot read URL: "${actionDetails}". Please analyze available information from local resources only.`;
+          }
 
-           console.log(`📖 Reading URL: ${actionDetails}`);
+          console.log(`📖 Reading URL: ${actionDetails}`);
 
-           try {
-             // Extract URL from actionDetails (AI sometimes includes extra text)
-             const urlRegex = /(https?:\/\/[^\s]+)/;
-             const match = actionDetails.match(urlRegex);
-             const url = match ? match[1] : actionDetails.trim();
+          try {
+            // Extract URL from actionDetails (AI sometimes includes extra text)
+            const urlRegex = /(https?:\/\/[^\s]+)/;
+            const match = actionDetails.match(urlRegex);
+            const url = match ? match[1] : actionDetails.trim();
 
-             if (!url.startsWith('http://') && !url.startsWith('https://')) {
-               return `Invalid URL format: ${actionDetails}. Please provide a valid URL starting with http:// or https://.`;
-             }
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+              return `Invalid URL format: ${actionDetails}. Please provide a valid URL starting with http:// or https://.`;
+            }
 
-             const content = await readUrlContent(url, 15000, {
-               returnRaw: false,
-               maxLength: 3000,
-             });
+            const content = await readUrlContent(url, 15000, {
+              returnRaw: false,
+              maxLength: 3000,
+            });
 
-             // Check if content is meaningful (not just error pages or redirects)
-             if (content.length < 100) {
-               return `URL content too short or inaccessible: ${url}. The page may not exist or be blocked.`;
-             }
+            // Check if content is meaningful (not just error pages or redirects)
+            if (content.length < 100) {
+              return `URL content too short or inaccessible: ${url}. The page may not exist or be blocked.`;
+            }
 
-             // Store as source
-             this.sources.push({
-               url,
-               title: url, // Will be updated if we can extract title
-               content,
-               relevance: 0.9
-             });
+            // Store as source
+            this.sources.push({
+              url,
+              title: url, // Will be updated if we can extract title
+              content,
+              relevance: 0.9
+            });
 
-             // Try to extract title from content
-             const titleMatch = content.match(/<title[^>]*>([^<]+)<\/title>/i);
-             if (titleMatch) {
-               this.sources[this.sources.length - 1].title = titleMatch[1].trim();
-             }
+            // Try to extract title from content
+            const titleMatch = content.match(/<title[^>]*>([^<]+)<\/title>/i);
+            if (titleMatch) {
+              this.sources[this.sources.length - 1].title = titleMatch[1].trim();
+            }
 
-             return `Content read (${content.length} chars): ${content.substring(0, 500)}...`;
-           } catch (error) {
-             console.warn(`URL reading failed for "${actionDetails}":`, error);
-             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-             return `Failed to read URL: ${errorMessage}. Consider searching for alternative sources.`;
-           }
-         }
+            return `Content read (${content.length} chars): ${content.substring(0, 500)}...`;
+          } catch (error) {
+            console.warn(`URL reading failed for "${actionDetails}":`, error);
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+            return `Failed to read URL: ${errorMessage}. Consider searching for alternative sources.`;
+          }
+        }
 
         case 'analyze':
           return `Analysis completed for: ${actionDetails}`;
@@ -335,7 +335,7 @@ export class DeepResearchService {
     }
   }
 
-  async *performDeepResearch(query: string, maxThoughts: number = 10, userTimezone?: string, includeWebSearch: boolean = true, userId?: string): AsyncIterable<DeepResearchThought> {
+  async *performDeepResearch(query: string, maxThoughts: number = 10, userTimezone?: string, includeWebSearch: boolean = true, userId?: string, learningContext?: any): AsyncIterable<DeepResearchThought> {
     this.reset();
     this.includeWebSearch = includeWebSearch;
     this.userId = userId;
@@ -442,7 +442,7 @@ export class DeepResearchService {
           weekday: 'long'
         });
 
-        const systemPrompt = `You are conducting deep research on: "${query}"
+        let systemPrompt = `You are conducting deep research on: "${query}"
 Current date and time: ${currentDateTime}
 
 Current progress: ${currentThought}/${totalThoughts} thoughts completed
@@ -458,22 +458,32 @@ Instructions for this research step:
 3. Be specific about what you're looking for${includeWebSearch ? ' - focus on practical, beginner-friendly content (tutorials, guides, documentation) rather than academic papers or research articles' : ' - search through user\'s local documents, notes, and resources'}
 
 Available actions:
-${availableActions}
+${availableActions}`;
 
+        if (learningContext) {
+          systemPrompt += `\n\nUSER LEARNING CONTEXT:
+          - Completed Modules: ${learningContext.completedModules?.map((m: any) => m.title).join(', ') || 'None'}
+          - Current Weaknesses: ${learningContext.weaknesses?.join(', ') || 'None'}
+          - Recent Topics: ${learningContext.recentTopics?.join(', ') || 'None'}
+          
+          Consider this context when planning research. If the user is learning a topic, prioritize finding resources that address their weaknesses or build on completed modules.`;
+        }
+
+        systemPrompt += `
 ${includeWebSearch ? 'For search queries: Keep them short and direct (2-5 words maximum). Focus on practical content. Examples: "Next.js tutorial", "React beginner guide", "Python basics course", "JavaScript docs"' : 'For local search: Search user\'s personal resources (notes, documents, etc.) with specific keywords. Examples: "python tutorial", "machine learning notes", "web development project"'}
 
 ${includeWebSearch ? 'IMPORTANT: Avoid academic/research content. Prioritize tutorials, guides, documentation, and practical examples over research papers, academic journals, or scholarly articles. If web search fails (times out, network errors, etc.), immediately switch to search_local to search through the user\'s personal resources.' : ''}
 
 Return JSON:
-{
-  "thought": "Your current analysis and plan",
-  ${actionOptions},
-  "actionDetails": "CONCISE details${includeWebSearch ? ' - for search: 2-5 word practical query, for read_url: clean URL only' : ' - for search_local: specific search terms for user resources'}",
-  "nextThoughtNeeded": true/false,
-  "totalThoughts": estimated_total,
-  "finalAnswer": "ONLY if confident (80%+), provide final answer",
-  "confidence": 0-100
-}`;
+        {
+          "thought": "Your current analysis and plan",
+            ${actionOptions},
+          "actionDetails": "CONCISE details${includeWebSearch ? ' - for search: 2-5 word practical query, for read_url: clean URL only' : ' - for search_local: specific search terms for user resources'}",
+            "nextThoughtNeeded": true / false,
+              "totalThoughts": estimated_total,
+                "finalAnswer": "ONLY if confident (80%+), provide final answer",
+                  "confidence": 0 - 100
+        } `;
 
         let response: any;
         try {
@@ -481,36 +491,36 @@ Return JSON:
             model: aiService.getConfig().model,
             messages: [
               { role: 'system', content: systemPrompt },
-              { role: 'user', content: `Execute thought step ${currentThought} for: ${query}` }
+              { role: 'user', content: `Execute thought step ${currentThought} for: ${query} ` }
             ],
             temperature: 0.3,
           });
-         } catch (aiError) {
-           console.error(`AI service failed on thought ${currentThought}:`, aiError);
+        } catch (aiError) {
+          console.error(`AI service failed on thought ${currentThought}: `, aiError);
 
-           // Provide fallback analysis for common queries
-           const fallbackAnalysis = this.generateFallbackAnalysis(query, currentThought, this.thoughtHistory);
-           if (fallbackAnalysis) {
-             response = {
-               choices: [{
-                 message: {
-                   content: JSON.stringify(fallbackAnalysis)
-                 }
-               }]
-             };
-           } else {
-             // Yield error thought to client
-             const errorThought: DeepResearchThought = {
-               thoughtNumber: currentThought,
-               totalThoughts: totalThoughts,
-               thought: `AI service unavailable: ${aiError instanceof Error ? aiError.message : 'Unknown error'}. Try searching your local resources instead.`,
-               nextThoughtNeeded: false,
-               timestamp: new Date()
-             };
-             yield errorThought;
-             return;
-           }
-         }
+          // Provide fallback analysis for common queries
+          const fallbackAnalysis = this.generateFallbackAnalysis(query, currentThought, this.thoughtHistory);
+          if (fallbackAnalysis) {
+            response = {
+              choices: [{
+                message: {
+                  content: JSON.stringify(fallbackAnalysis)
+                }
+              }]
+            };
+          } else {
+            // Yield error thought to client
+            const errorThought: DeepResearchThought = {
+              thoughtNumber: currentThought,
+              totalThoughts: totalThoughts,
+              thought: `AI service unavailable: ${aiError instanceof Error ? aiError.message : 'Unknown error'}. Try searching your local resources instead.`,
+              nextThoughtNeeded: false,
+              timestamp: new Date()
+            };
+            yield errorThought;
+            return;
+          }
+        }
 
         const content = response.choices[0]?.message?.content?.trim();
         if (!content) break;
@@ -521,13 +531,13 @@ Return JSON:
           // Execute the action if specified
           let actionResult = '';
           if (thoughtResult.action && thoughtResult.actionDetails) {
-            console.log(`⚡ Executing action: ${thoughtResult.action} - ${thoughtResult.actionDetails}`);
+            console.log(`⚡ Executing action: ${thoughtResult.action} - ${thoughtResult.actionDetails} `);
 
             // Yield action execution status
             const actionThought: DeepResearchThought = {
               thoughtNumber: currentThought - 0.3,
               totalThoughts: totalThoughts,
-              thought: `Executing: ${thoughtResult.action} - ${thoughtResult.actionDetails}`,
+              thought: `Executing: ${thoughtResult.action} - ${thoughtResult.actionDetails} `,
               action: thoughtResult.action,
               actionDetails: thoughtResult.actionDetails,
               nextThoughtNeeded: true,
@@ -560,17 +570,17 @@ Return JSON:
           nextThoughtNeeded = thoughtResult.nextThoughtNeeded;
           totalThoughts = thoughtResult.totalThoughts || totalThoughts;
 
-           if (thoughtResult.finalAnswer && thoughtResult.confidence > 70) {
-             finalAnswer = thoughtResult.finalAnswer;
-             confidence = thoughtResult.confidence;
-             this.finalConfidence = confidence;
-             this.finalAnswer = finalAnswer;
-             nextThoughtNeeded = false;
-           }
+          if (thoughtResult.finalAnswer && thoughtResult.confidence > 70) {
+            finalAnswer = thoughtResult.finalAnswer;
+            confidence = thoughtResult.confidence;
+            this.finalConfidence = confidence;
+            this.finalAnswer = finalAnswer;
+            nextThoughtNeeded = false;
+          }
 
           currentThought++;
         } catch (error) {
-          console.warn(`Error parsing thought ${currentThought}:`, error);
+          console.warn(`Error parsing thought ${currentThought}: `, error);
           break;
         }
       }
@@ -585,23 +595,23 @@ Return JSON:
       };
       yield synthesisThought;
 
-       // If no high-confidence answer was found, try to synthesize one
-       if (!finalAnswer || confidence <= 70) {
-         console.log('\n🔄 Synthesizing final answer from research...');
-          const synthesis = await this.synthesizeFinalAnswer(query, userTimezone);
-         if (synthesis.confidence > confidence) {
-           finalAnswer = synthesis.answer;
-           confidence = synthesis.confidence;
-           this.finalConfidence = confidence;
-           this.finalAnswer = finalAnswer;
-         }
-       }
+      // If no high-confidence answer was found, try to synthesize one
+      if (!finalAnswer || confidence <= 70) {
+        console.log('\n🔄 Synthesizing final answer from research...');
+        const synthesis = await this.synthesizeFinalAnswer(query, userTimezone);
+        if (synthesis.confidence > confidence) {
+          finalAnswer = synthesis.answer;
+          confidence = synthesis.confidence;
+          this.finalConfidence = confidence;
+          this.finalAnswer = finalAnswer;
+        }
+      }
 
       // Yield final thought with conclusion
       const finalThought: DeepResearchThought = {
         thoughtNumber: currentThought + 1,
         totalThoughts: totalThoughts,
-        thought: `Research completed. ${finalAnswer ? `Final answer: ${finalAnswer}` : 'Unable to find a confident answer.'}`,
+        thought: `Research completed.${finalAnswer ? `Final answer: ${finalAnswer}` : 'Unable to find a confident answer.'} `,
         nextThoughtNeeded: false,
         timestamp: new Date()
       };
@@ -616,7 +626,7 @@ Return JSON:
       const errorThought: DeepResearchThought = {
         thoughtNumber: currentThought,
         totalThoughts: totalThoughts,
-        thought: `Research failed due to error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        thought: `Research failed due to error: ${error instanceof Error ? error.message : 'Unknown error'} `,
         nextThoughtNeeded: false,
         timestamp: new Date()
       };
@@ -653,37 +663,37 @@ Return JSON:
       );
 
       if (hasAcademicContent) {
-        console.log(`Filtering out academic result: ${result.title}`);
+        console.log(`Filtering out academic result: ${result.title} `);
         return false;
       }
 
       // For programming/course queries, prefer practical content
       if (query.toLowerCase().includes('course') || query.toLowerCase().includes('learn') ||
-          query.toLowerCase().includes('tutorial') || query.toLowerCase().includes('programming')) {
+        query.toLowerCase().includes('tutorial') || query.toLowerCase().includes('programming')) {
         const hasPracticalContent = practicalKeywords.some(keyword =>
           title.includes(keyword) || content.includes(keyword)
         );
 
         if (!hasPracticalContent) {
-          console.log(`Filtering out non-practical result for learning query: ${result.title}`);
+          console.log(`Filtering out non - practical result for learning query: ${result.title} `);
           return false;
         }
       }
 
       // Skip results with very short content (likely not useful)
       if (!result.content || result.content.length < 50) {
-        console.log(`Filtering out result with insufficient content: ${result.title}`);
+        console.log(`Filtering out result with insufficient content: ${result.title} `);
         return false;
       }
 
       return true;
     });
 
-    console.log(`Filtered web results: ${results.length} -> ${filtered.length}`);
+    console.log(`Filtered web results: ${results.length} -> ${filtered.length} `);
     return filtered;
   }
 
-  private async synthesizeFinalAnswer(query: string, userTimezone?: string): Promise<{answer: string, confidence: number}> {
+  private async synthesizeFinalAnswer(query: string, userTimezone?: string): Promise<{ answer: string, confidence: number }> {
     try {
       // Get current date and time in user's timezone
       const timezone = userTimezone || 'UTC';
@@ -702,39 +712,39 @@ Return JSON:
       // Use thoughtProcess (excluding final thought) to avoid confusion in synthesis
       const thoughtProcess = this.thoughtHistory.slice(0, -1);
       const thoughtsText = thoughtProcess.map(t =>
-        `Thought ${t.thoughtNumber}: ${t.thought}${t.action ? ` | Action: ${t.action}` : ''}${t.result ? ` | Result: ${t.result}` : ''}`
+        `Thought ${t.thoughtNumber}: ${t.thought}${t.action ? ` | Action: ${t.action}` : ''}${t.result ? ` | Result: ${t.result}` : ''} `
       ).join('\n');
 
       const sourcesText = this.sources.slice(0, 5).map(s =>
-        `Source: ${s.title} (${s.url})\n${s.content.substring(0, 300)}...`
+        `Source: ${s.title} (${s.url}) \n${s.content.substring(0, 300)}...`
       ).join('\n\n');
 
-        const systemPrompt = `You are a research synthesizer. Your ONLY task is to provide a final answer to: "${query}"
+      const systemPrompt = `You are a research synthesizer.Your ONLY task is to provide a final answer to: "${query}"
 Current date and time: ${currentDateTime}
 
 Based on the research that was conducted, provide a comprehensive and accurate answer.
 
-CRITICAL: Your answer MUST be PURE CONTENT ONLY. Do NOT include ANY research process details, methodology, or meta-information.
+          CRITICAL: Your answer MUST be PURE CONTENT ONLY.Do NOT include ANY research process details, methodology, or meta - information.
 
-FORBIDDEN: Do NOT include ANY of these words/phrases in your answer:
-"Research Analysis", "Step", "Research completed", "Final answer:", "Confidence", "Sources explored", "Research steps", "Thought", "Action", "Result", "Executing", "Performing", "Reading URL", "Deep research completed", "Synthesizing final answer", "research methodology", "sources", "citations", "confidence levels", "research process"
+            FORBIDDEN: Do NOT include ANY of these words / phrases in your answer:
+        "Research Analysis", "Step", "Research completed", "Final answer:", "Confidence", "Sources explored", "Research steps", "Thought", "Action", "Result", "Executing", "Performing", "Reading URL", "Deep research completed", "Synthesizing final answer", "research methodology", "sources", "citations", "confidence levels", "research process"
 
-Your answer should be DIRECT CONTENT ONLY. Start immediately with the answer content. No headers, no meta-information, no process details.
+Your answer should be DIRECT CONTENT ONLY.Start immediately with the answer content.No headers, no meta - information, no process details.
 
-EXAMPLE FORMAT (pure content only):
-"Key latest Indian news headlines include: RBI's export relief measures may pressure the Indian rupee by denting dollar flows; Indian stock benchmarks poised to open higher on improving earnings outlook; EU preparing to reject India's demand for exemption from carbon border tax; Blast at police station in Kashmir kills nine and injures 27; Guernsey's Indian community celebrates Diwali. Regional news: Bangladesh tribunal convicts ousted PM Sheikh Hasina of crimes against humanity."
+EXAMPLE FORMAT(pure content only):
+        "Key latest Indian news headlines include: RBI's export relief measures may pressure the Indian rupee by denting dollar flows; Indian stock benchmarks poised to open higher on improving earnings outlook; EU preparing to reject India's demand for exemption from carbon border tax; Blast at police station in Kashmir kills nine and injures 27; Guernsey's Indian community celebrates Diwali. Regional news: Bangladesh tribunal convicts ousted PM Sheikh Hasina of crimes against humanity."
 
 Return ONLY this JSON - nothing else:
-{
-  "answer": "PURE CONTENT ONLY - no research details, no steps, no analysis, no confidence, no sources mentioned",
-  "confidence": 0-100
+    {
+      "answer": "PURE CONTENT ONLY - no research details, no steps, no analysis, no confidence, no sources mentioned",
+      "confidence": 0-100
 }`;
 
       const response = await aiService.createChatCompletion({
         model: aiService.getConfig().model,
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Synthesize final answer from research on: ${query}` }
+          { role: 'user', content: `Synthesize final answer from research on: ${query} ` }
         ],
         temperature: 0.1,
       });
@@ -867,9 +877,9 @@ Return ONLY this JSON - nothing else:
       for (const paragraph of paragraphs) {
         const trimmed = paragraph.trim();
         if (trimmed.length > 50 &&
-            !trimmed.toLowerCase().includes('research') &&
-            !trimmed.toLowerCase().includes('step') &&
-            !trimmed.toLowerCase().includes('confidence')) {
+          !trimmed.toLowerCase().includes('research') &&
+          !trimmed.toLowerCase().includes('step') &&
+          !trimmed.toLowerCase().includes('confidence')) {
           return trimmed;
         }
       }
@@ -890,7 +900,7 @@ Return ONLY this JSON - nothing else:
         actionDetails: "Query analysis completed with limited AI assistance",
         nextThoughtNeeded: false,
         totalThoughts: 1,
-        finalAnswer: `Based on the query "${query}", this appears to be about ${this.inferQueryType(lowerQuery)}. Due to AI service unavailability, I recommend:\n\n1. Try searching your local resources for related content\n2. Use more specific search terms\n3. Check if your AI proxy server is running\n\nFor technical issues, ensure your AI service at ${process.env.AI_PROXY_URL || 'localhost:3010'} is operational.`,
+        finalAnswer: `Based on the query "${query}", this appears to be about ${this.inferQueryType(lowerQuery)}. Due to AI service unavailability, I recommend: \n\n1.Try searching your local resources for related content\n2.Use more specific search terms\n3.Check if your AI proxy server is running\n\nFor technical issues, ensure your AI service at ${process.env.AI_PROXY_URL || 'localhost:3010'} is operational.`,
         confidence: 60
       };
     }

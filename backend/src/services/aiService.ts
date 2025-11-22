@@ -578,7 +578,7 @@ class AIService {
     });
   }
 
-  async generateChatResponse(userQuery: string, context?: string, timezone?: string, focusMode?: string, stream?: boolean, conversation?: Array<{ type: string, content: string }>): Promise<string | AsyncIterable<any>> {
+  async generateChatResponse(userQuery: string, context?: string, timezone?: string, focusMode?: string, stream?: boolean, conversation?: Array<{ type: string, content: string }>, learningContext?: any): Promise<string | AsyncIterable<any>> {
 
     // Get current date and time in user's timezone
     const userTimezone = timezone || 'UTC';
@@ -622,6 +622,15 @@ class AIService {
     - Only provide complete answers when the user explicitly says "please provide full answer" or clicks a button requesting it.
     - This Socratic method helps users learn better by thinking through problems themselves.
     - Always end hints with questions that guide the user toward the solution.`;
+
+    if (learningContext) {
+      systemPrompt += `\n\nUSER LEARNING CONTEXT:
+      - Completed Modules: ${learningContext.completedModules?.map((m: any) => m.title).join(', ') || 'None'}
+      - Current Weaknesses: ${learningContext.weaknesses?.join(', ') || 'None'}
+      - Recent Topics: ${learningContext.recentTopics?.join(', ') || 'None'}
+      
+      Tailor your explanations based on this context. If the user has completed a module on a topic, assume some prior knowledge but verify understanding. If they have weaknesses in an area, provide extra clarity and examples.`;
+    }
 
     if (context) {
       systemPrompt += `\n\nRecent context: ${context}`;
@@ -3112,7 +3121,8 @@ Provide:
     stream?: boolean,
     useMCP?: boolean,
     mcpCredentials?: Record<string, string>,
-    conversation?: Array<{ type: string, content: string }>
+    conversation?: Array<{ type: string, content: string }>,
+    learningContext?: any
   ): Promise<string | AsyncIterable<any>> {
     try {
       // Check if MCP should be used
@@ -3137,11 +3147,11 @@ Provide:
       }
 
       // Use regular chat response as fallback or when MCP is not needed
-      return this.generateChatResponse(userQuery, context, timezone, focusMode, stream, conversation);
+      return this.generateChatResponse(userQuery, context, timezone, focusMode, stream, conversation, learningContext);
     } catch (error) {
       console.error('Error in generateChatResponseWithMCP:', error);
       // Final fallback
-      return this.generateChatResponse(userQuery, context, timezone, focusMode, stream, conversation);
+      return this.generateChatResponse(userQuery, context, timezone, focusMode, stream, conversation, learningContext);
     }
   }
 }

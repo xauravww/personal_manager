@@ -91,6 +91,15 @@ router.get('/', authenticateFromQuery, async (req: express.Request, res: express
     // Flush immediately
     if (res.flush) res.flush();
 
+    let learningContext: any = null;
+    if (req.query.learningContext) {
+      try {
+        learningContext = JSON.parse(req.query.learningContext as string);
+      } catch (error) {
+        console.warn('Failed to parse learningContext parameter:', error);
+      }
+    }
+
     try {
       // Perform deep research and stream thoughts
       const includeWebSearchBool = includeWebSearch === 'true';
@@ -99,7 +108,7 @@ router.get('/', authenticateFromQuery, async (req: express.Request, res: express
 
       // Create new instance for this request
       const researchService = new DeepResearchService(userId);
-      for await (const thought of researchService.performDeepResearch(queryStr, maxThoughtsNum, timezone as string, includeWebSearchBool, userId)) {
+      for await (const thought of researchService.performDeepResearch(queryStr, maxThoughtsNum, timezone as string, includeWebSearchBool, userId, learningContext)) {
         const eventData = {
           type: 'thought',
           thought: {
@@ -123,18 +132,18 @@ router.get('/', authenticateFromQuery, async (req: express.Request, res: express
         await new Promise(resolve => setTimeout(resolve, 200));
       }
 
-        // Send completion message
-        const result = researchService.getResearchResult();
-        res.write(`data: ${JSON.stringify({
-          type: 'complete',
-          result: {
-            finalAnswer: result.finalAnswer,
-            confidence: result.confidence,
-            thoughtProcess: result.thoughtProcess,
-            sources: result.sources
-          },
-          timestamp: new Date().toISOString()
-        })}\n\n`);
+      // Send completion message
+      const result = (researchService as any).getResearchResult();
+      res.write(`data: ${JSON.stringify({
+        type: 'complete',
+        result: {
+          finalAnswer: result.finalAnswer,
+          confidence: result.confidence,
+          thoughtProcess: result.thoughtProcess,
+          sources: result.sources
+        },
+        timestamp: new Date().toISOString()
+      })}\n\n`);
 
       if (res.flush) res.flush();
 

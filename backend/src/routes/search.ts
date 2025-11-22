@@ -80,10 +80,10 @@ router.get('/', [
   query('tags').optional().trim().isLength({ max: 200 }),
   query('limit').optional().isInt({ min: 1, max: 50 }),
   query('offset').optional().isInt({ min: 0 }),
-   query('forceWebSearch').optional().isBoolean(),
-   query('useMCP').optional().isBoolean(),
-   query('mcpCredentials').optional().isObject(),
-    query('conversation').optional(),
+  query('forceWebSearch').optional().isBoolean(),
+  query('useMCP').optional().isBoolean(),
+  query('mcpCredentials').optional().isObject(),
+  query('conversation').optional(),
 ], async (req: express.Request, res: express.Response, next: express.NextFunction) => {
   try {
     const errors = validationResult(req);
@@ -103,13 +103,22 @@ router.get('/', [
     const forceWebSearch = req.query.forceWebSearch === 'true'; // Default to false
     const useMCP = req.query.useMCP === 'true'; // Default to false
     const mcpCredentials = req.query.mcpCredentials as Record<string, string> || {};
-    let conversation: Array<{type: string, content: string}> = [];
+    let conversation: Array<{ type: string, content: string }> = [];
     if (req.query.conversation) {
       try {
         conversation = JSON.parse(req.query.conversation as string);
       } catch (error) {
         console.warn('Failed to parse conversation parameter:', error);
         conversation = [];
+      }
+    }
+
+    let learningContext: any = null;
+    if (req.query.learningContext) {
+      try {
+        learningContext = JSON.parse(req.query.learningContext as string);
+      } catch (error) {
+        console.warn('Failed to parse learningContext parameter:', error);
       }
     }
 
@@ -134,8 +143,8 @@ router.get('/', [
 
       const queryLower = searchQuery.toLowerCase().trim();
       if (simpleGreetings.includes(queryLower) ||
-          conversationalPhrases.some(phrase => queryLower.includes(phrase)) ||
-          dateTimeQueries.some(phrase => queryLower.includes(phrase))) {
+        conversationalPhrases.some(phrase => queryLower.includes(phrase)) ||
+        dateTimeQueries.some(phrase => queryLower.includes(phrase))) {
         searchTerms = [];
         isChat = true;
         console.log('Conversational or date/time query detected, intent is chat');
@@ -173,19 +182,19 @@ router.get('/', [
               console.log('Query too short for embeddings, using text search');
             }
           }
-         } catch (error) {
-           console.warn('AI search enhancement failed, falling back to basic search:', error);
-           // Fallback: extract keywords from query, removing common stop words
-           const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'give', 'me', 'some', 'something', 'anything', 'please', 'show', 'find', 'search', 'related', 'about']);
-           searchTerms = searchQuery.toLowerCase()
-             .split(/\s+/)
-             .filter(word => word.length > 2 && !stopWords.has(word))
-             .slice(0, 5); // Limit to 5 terms
-           if (searchTerms.length === 0) {
-             searchTerms = [searchQuery]; // Fallback to full query if no keywords
-           }
-           console.log('Fallback to text search with terms:', searchTerms);
-         }
+        } catch (error) {
+          console.warn('AI search enhancement failed, falling back to basic search:', error);
+          // Fallback: extract keywords from query, removing common stop words
+          const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'give', 'me', 'some', 'something', 'anything', 'please', 'show', 'find', 'search', 'related', 'about']);
+          searchTerms = searchQuery.toLowerCase()
+            .split(/\s+/)
+            .filter(word => word.length > 2 && !stopWords.has(word))
+            .slice(0, 5); // Limit to 5 terms
+          if (searchTerms.length === 0) {
+            searchTerms = [searchQuery]; // Fallback to full query if no keywords
+          }
+          console.log('Fallback to text search with terms:', searchTerms);
+        }
       }
 
       // Build search conditions based on enhanced terms
@@ -194,7 +203,7 @@ router.get('/', [
       for (const term of searchTerms) {
         // Check if we're using PostgreSQL (has search operator) or SQLite (use contains)
         const isPostgres = process.env.DATABASE_URL?.startsWith('postgresql://') ||
-                          process.env.DATABASE_URL?.startsWith('postgres://');
+          process.env.DATABASE_URL?.startsWith('postgres://');
 
         if (isPostgres && process.env.NODE_ENV !== 'test') {
           // Use PostgreSQL full-text search for production
@@ -272,66 +281,66 @@ router.get('/', [
         ).join('. ')}`;
       }
 
-        try {
-           // Check if this is a date/time query - be more specific to avoid false positives
-           const queryLower = searchQuery.toLowerCase().trim();
-           const isDateTimeQuery =
-             // Exact matches for common date/time questions
-             queryLower === 'what time is it' ||
-             queryLower === 'what time' ||
-             queryLower === 'current time' ||
-             queryLower === 'what date is it' ||
-             queryLower === 'what date' ||
-             queryLower === 'current date' ||
-             queryLower === 'what day is it' ||
-             queryLower === 'what day' ||
-             queryLower === 'current day' ||
-             queryLower === 'today' ||
-             queryLower === 'now' ||
-             // Specific phrases that clearly indicate date/time intent
-             queryLower.includes('what time') && (queryLower.includes('is it') || queryLower.includes('now')) ||
-             queryLower.includes('what date') && (queryLower.includes('is it') || queryLower.includes('today')) ||
-             queryLower.includes('current time') ||
-             queryLower.includes('current date') ||
-             queryLower.includes('what day') && queryLower.includes('is it');
+      try {
+        // Check if this is a date/time query - be more specific to avoid false positives
+        const queryLower = searchQuery.toLowerCase().trim();
+        const isDateTimeQuery =
+          // Exact matches for common date/time questions
+          queryLower === 'what time is it' ||
+          queryLower === 'what time' ||
+          queryLower === 'current time' ||
+          queryLower === 'what date is it' ||
+          queryLower === 'what date' ||
+          queryLower === 'current date' ||
+          queryLower === 'what day is it' ||
+          queryLower === 'what day' ||
+          queryLower === 'current day' ||
+          queryLower === 'today' ||
+          queryLower === 'now' ||
+          // Specific phrases that clearly indicate date/time intent
+          queryLower.includes('what time') && (queryLower.includes('is it') || queryLower.includes('now')) ||
+          queryLower.includes('what date') && (queryLower.includes('is it') || queryLower.includes('today')) ||
+          queryLower.includes('current time') ||
+          queryLower.includes('current date') ||
+          queryLower.includes('what day') && queryLower.includes('is it');
 
-          if (isDateTimeQuery) {
-            // Provide accurate current date/time information in user's timezone using AI
-            const currentDateTime = aiService.getCurrentDateTime(timezone);
-            const dateTimeContext = `Current date and time: Today is ${currentDateTime.day}, ${currentDateTime.date}. The current time is ${currentDateTime.time}.`;
+        if (isDateTimeQuery) {
+          // Provide accurate current date/time information in user's timezone using AI
+          const currentDateTime = aiService.getCurrentDateTime(timezone);
+          const dateTimeContext = `Current date and time: Today is ${currentDateTime.day}, ${currentDateTime.date}. The current time is ${currentDateTime.time}.`;
 
-            // Use AI to generate a natural response that includes the date/time info
-            chatResponse = await aiService.generateChatResponseWithMCP(
-              `The user asked about the current date and time. Provide a friendly, helpful response that includes this information: ${dateTimeContext} and offers assistance with their personal resources.`,
-              context,
-              timezone,
-              focusMode,
-              false,
-              useMCP,
-              mcpCredentials,
-              conversation
-            ) as string;
-          } else {
-            // Regular chat response for non-date/time queries
-            chatResponse = await aiService.generateChatResponseWithMCP(searchQuery, context, timezone, focusMode, false, useMCP, mcpCredentials, conversation) as string;
-          }
-          console.log('Generated chat response:', chatResponse);
-        } catch (error) {
-          console.warn('Failed to generate chat response:', error);
-          // Use AI to generate a fallback greeting even when primary AI fails
-          try {
-            chatResponse = await aiService.generateChatResponse(
-              "Generate a friendly greeting for a personal resource management assistant. Keep it brief and welcoming.",
-              '',
-              timezone,
-              focusMode,
-              false
-            ) as string;
-          } catch (fallbackError) {
-            console.warn('Fallback AI greeting also failed:', fallbackError);
-            chatResponse = "Hello! I'm here to help you with your personal resources.";
-          }
+          // Use AI to generate a natural response that includes the date/time info
+          chatResponse = await aiService.generateChatResponseWithMCP(
+            `The user asked about the current date and time. Provide a friendly, helpful response that includes this information: ${dateTimeContext} and offers assistance with their personal resources.`,
+            context,
+            timezone,
+            focusMode,
+            false,
+            useMCP,
+            mcpCredentials,
+            conversation
+          ) as string;
+        } else {
+          // Regular chat response for non-date/time queries
+          chatResponse = await aiService.generateChatResponseWithMCP(searchQuery, context, timezone, focusMode, false, useMCP, mcpCredentials, conversation, learningContext) as string;
         }
+        console.log('Generated chat response:', chatResponse);
+      } catch (error) {
+        console.warn('Failed to generate chat response:', error);
+        // Use AI to generate a fallback greeting even when primary AI fails
+        try {
+          chatResponse = await aiService.generateChatResponse(
+            "Generate a friendly greeting for a personal resource management assistant. Keep it brief and welcoming.",
+            '',
+            timezone,
+            focusMode,
+            false
+          ) as string;
+        } catch (fallbackError) {
+          console.warn('Fallback AI greeting also failed:', fallbackError);
+          chatResponse = "Hello! I'm here to help you with your personal resources.";
+        }
+      }
     }
 
     if (!isChat) {
@@ -403,7 +412,7 @@ router.get('/', [
     }
 
     // Perform web search only if explicitly requested via toggle
-     if (!isChat && aiEnhancedSearch && forceWebSearch) {
+    if (!isChat && aiEnhancedSearch && forceWebSearch) {
       try {
         console.log('🔍 Performing web search for query:', searchQuery);
         const webSearchResponse = await performWebSearch(searchQuery);
@@ -435,20 +444,20 @@ router.get('/', [
 
 
 
-      if (!isChat && searchQuery) {
-        if (focusMode === 'quick-search') {
-          // Quick search mode - prioritize speed over depth
-          console.log('Quick search mode activated for query:', searchQuery);
-          // For quick search, we could limit the number of results or use faster search methods
-          // Currently uses the same logic but could be optimized for speed
-        } else if (focusMode === 'academic') {
-          // Academic mode - emphasize credible sources and citations
-          console.log('Academic mode activated for query:', searchQuery);
-          // Could prioritize academic sources, add citation requirements, etc.
-          // For now, uses enhanced search with academic focus in AI responses
-        }
-        // General mode uses the default search behavior
+    if (!isChat && searchQuery) {
+      if (focusMode === 'quick-search') {
+        // Quick search mode - prioritize speed over depth
+        console.log('Quick search mode activated for query:', searchQuery);
+        // For quick search, we could limit the number of results or use faster search methods
+        // Currently uses the same logic but could be optimized for speed
+      } else if (focusMode === 'academic') {
+        // Academic mode - emphasize credible sources and citations
+        console.log('Academic mode activated for query:', searchQuery);
+        // Could prioritize academic sources, add citation requirements, etc.
+        // For now, uses enhanced search with academic focus in AI responses
       }
+      // General mode uses the default search behavior
+    }
 
     // Generate AI-powered suggestions if no results found
     let suggestions: string[] = [];
@@ -497,16 +506,16 @@ router.get('/', [
 
         const localContext = resources.length > 0
           ? `Local resources: ${resources.slice(0, maxLocalResults).map(r => {
-              const content = (r.content || r.description || '').substring(0, 100); // Limit content length
-              return `${r.title}: ${content}`;
-            }).join('. ')}`
+            const content = (r.content || r.description || '').substring(0, 100); // Limit content length
+            return `${r.title}: ${content}`;
+          }).join('. ')}`
           : '';
 
         const webContext = webResults.length > 0
           ? `Web results: ${webResults.slice(0, maxWebResults).map(r => {
-              const content = (r.content || 'No description available').substring(0, 100); // Limit content length
-              return `${r.title} (${r.url}): ${content}`;
-            }).join('. ')}`
+            const content = (r.content || 'No description available').substring(0, 100); // Limit content length
+            return `${r.title} (${r.url}): ${content}`;
+          }).join('. ')}`
           : '';
 
         const contextString = [localContext, webContext].filter(Boolean).join('. ');

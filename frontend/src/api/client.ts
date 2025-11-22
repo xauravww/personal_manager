@@ -296,6 +296,7 @@ class ApiClient {
     useMCP?: boolean;
     mcpCredentials?: Record<string, string>;
     conversation?: Array<{ type: string, content: string }>;
+    learningContext?: any;
   }): Promise<{ success: boolean; data: SearchResponse; ai?: any; error?: string }> {
     const searchParams = new URLSearchParams();
 
@@ -314,6 +315,9 @@ class ApiClient {
     }
     if (params.conversation && params.conversation.length > 0) {
       searchParams.set('conversation', JSON.stringify(params.conversation));
+    }
+    if (params.learningContext) {
+      searchParams.set('learningContext', JSON.stringify(params.learningContext));
     }
 
     const url = `${API_BASE_URL}/search?${searchParams.toString()}`;
@@ -405,12 +409,14 @@ class ApiClient {
     maxThoughts?: number;
     timezone?: string;
     includeWebSearch?: boolean;
+    learningContext?: any;
   }): Promise<EventSource> {
     const searchParams = new URLSearchParams();
     searchParams.set('query', params.query);
     if (params.maxThoughts) searchParams.set('maxThoughts', params.maxThoughts.toString());
     if (params.timezone) searchParams.set('timezone', params.timezone);
     if (params.includeWebSearch !== undefined) searchParams.set('includeWebSearch', params.includeWebSearch.toString());
+    if (params.learningContext) searchParams.set('learningContext', JSON.stringify(params.learningContext));
     if (this.token) searchParams.set('token', this.token);
 
     const url = `${API_BASE_URL}/deep-research?${searchParams.toString()}`;

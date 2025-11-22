@@ -18,6 +18,7 @@ import learningRoutes from './routes/learning';
 import captureRoutes from './routes/capture';
 import { errorHandler } from './middleware/errorHandler';
 import dashboardRoutes from './routes/dashboard';
+import conversationsRoutes from './routes/conversations';
 import prisma from './config/database';
 
 dotenv.config();
@@ -96,6 +97,7 @@ app.use('/api/deep-research', deepResearchRoutes);
 app.use('/api/learning', learningRoutes);
 app.use('/api/capture', captureRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/conversations', conversationsRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

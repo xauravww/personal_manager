@@ -789,6 +789,47 @@ class ApiClient {
       method: 'DELETE',
     });
   }
+
+  // Conversation methods
+  async getConversations(): Promise<ApiResponse<any[]>> {
+    return this.request('/conversations');
+  }
+
+  async getConversation(id: string): Promise<ApiResponse<any>> {
+    return this.request(`/conversations/${id}`);
+  }
+
+  async createConversation(title?: string, initialMessage?: string): Promise<ApiResponse<any>> {
+    return this.request('/conversations', {
+      method: 'POST',
+      body: JSON.stringify({ title, initialMessage }),
+    });
+  }
+
+  async deleteConversation(id: string): Promise<ApiResponse<any>> {
+    return this.request(`/conversations/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async updateConversation(id: string, data: { title?: string }): Promise<ApiResponse<any>> {
+    return this.request(`/conversations/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async addMessage(conversationId: string, message: {
+    role: 'user' | 'assistant';
+    content: string;
+    citations?: string;
+    suggestions?: string;
+  }): Promise<ApiResponse<any>> {
+    return this.request(`/conversations/${conversationId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify(message),
+    });
+  }
 }
 
 // Create and export a singleton instance

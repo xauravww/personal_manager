@@ -103,8 +103,33 @@ router.get('/', [
     const forceWebSearch = req.query.forceWebSearch === 'true'; // Default to false
     const useMCP = req.query.useMCP === 'true'; // Default to false
     const mcpCredentials = req.query.mcpCredentials as Record<string, string> || {};
+    const conversationId = req.query.conversationId as string;
+
     let conversation: Array<{ type: string, content: string }> = [];
-    if (req.query.conversation) {
+
+    // If conversationId is provided, fetch context from DB
+    if (conversationId) {
+      try {
+        const dbConversation = await prisma.conversation.findFirst({
+          where: { id: conversationId, user_id: userId },
+          include: {
+            messages: {
+              orderBy: { created_at: 'asc' },
+              take: 10 // Limit context window
+            }
+          }
+        });
+
+        if (dbConversation) {
+          conversation = dbConversation.messages.map((m: any) => ({
+            type: m.role === 'user' ? 'user' : 'ai',
+            content: m.content
+          }));
+        }
+      } catch (error) {
+        console.warn('Failed to fetch conversation context:', error);
+      }
+    } else if (req.query.conversation) {
       try {
         conversation = JSON.parse(req.query.conversation as string);
       } catch (error) {

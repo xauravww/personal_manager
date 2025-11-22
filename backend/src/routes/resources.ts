@@ -233,7 +233,7 @@ router.post('/', [
     const { title, description, url, type, content, file_path, metadata, tag_names }: CreateResourceRequest = req.body;
 
     // Create resource with tags using Prisma transaction
-    const resource = await prisma.$transaction(async (tx) => {
+    const resource = await prisma.$transaction(async (tx: any) => {
       // Create resource
       const newResource = await tx.resource.create({
         data: {
@@ -432,7 +432,7 @@ router.put('/:id', [
     const updates: Partial<CreateResourceRequest> = req.body;
 
     // Update resource with tags using Prisma transaction
-    const resource = await prisma.$transaction(async (tx) => {
+    const resource = await prisma.$transaction(async (tx: any) => {
       // Check if resource exists and belongs to user
       const existingResource = await tx.resource.findFirst({
         where: {

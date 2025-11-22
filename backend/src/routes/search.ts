@@ -166,16 +166,16 @@ router.get('/', [
         });
 
         if (!learningContext) learningContext = {};
-        learningContext.detailedProgress = subjects.map(s => {
+        learningContext.detailedProgress = subjects.map((s: any) => {
           const totalModules = s.modules.length;
           // Count unique completed modules from the progress records
-          const completedModules = s.progress.filter(p => p.status === 'completed').length;
+          const completedModules = s.progress.filter((p: any) => p.status === 'completed').length;
           const progressPercent = totalModules > 0 ? Math.round((completedModules / totalModules) * 100) : 0;
 
           return {
             subject: s.name,
             progress: progressPercent,
-            modules: s.modules.map(m => {
+            modules: s.modules.map((m: any) => {
               const mProgress = m.progress[0];
               return {
                 title: m.title,
@@ -428,21 +428,21 @@ router.get('/', [
         });
 
         // Compute similarities
-        const similarities = allResources.map(resource => ({
+        const similarities = allResources.map((resource: any) => ({
           ...resource,
           _similarity: _cosineSimilarity(queryEmbedding!, JSON.parse(resource.embedding!)),
         }));
 
         // Sort by similarity descending
-        similarities.sort((a, b) => b._similarity - a._similarity);
+        similarities.sort((a: any, b: any) => b._similarity - a._similarity);
 
         // Filter by similarity threshold
         const threshold = 0.0; // Include all positive similarities
-        const relevantResources = similarities.filter(r => r._similarity > threshold);
+        const relevantResources = similarities.filter((r: any) => r._similarity > threshold);
 
         if (relevantResources.length > 0) {
           // Use vector results
-          resources = relevantResources.slice(offset, offset + limit).map(r => {
+          resources = relevantResources.slice(offset, offset + limit).map((r: any) => {
             const { _similarity, ...resourceWithoutSimilarity } = r;
             return resourceWithoutSimilarity;
           });
@@ -730,7 +730,7 @@ router.get('/suggestions', [
       res.json({
         success: true,
         data: {
-          suggestions: tags.map(tag => tag.name),
+          suggestions: tags.map((tag: any) => tag.name),
           type: 'tags',
         },
       });
@@ -765,8 +765,8 @@ router.get('/suggestions', [
     });
 
     const suggestions = [
-      ...titles.map(t => t.title),
-      ...tags.map(t => t.name),
+      ...titles.map((t: any) => t.title),
+      ...tags.map((t: any) => t.name),
     ].slice(0, limit);
 
     res.json({
@@ -829,7 +829,7 @@ router.get('/analytics', authenticateToken, async (req: express.Request, res: ex
 
     const analytics = {
       totalResources,
-      resourcesByType: resourcesByType.reduce((acc, item) => {
+      resourcesByType: resourcesByType.reduce((acc: any, item: any) => {
         acc[item.type] = item._count.type;
         return acc;
       }, {} as Record<string, number>),

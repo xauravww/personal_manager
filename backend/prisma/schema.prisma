@@ -130,6 +130,14 @@ model LearningProgress {
   completed_at DateTime?
   notes      String?  // user notes or reflections
   checkpoints_progress String? // JSON array tracking status of each checkpoint
+  
+  // Personalized learning data for review and AI analysis
+  chat_history String? // Full conversation history (JSON)
+  quiz_attempts String? // Quiz questions, answers, correctness (JSON)
+  identified_weaknesses String? // Areas where user struggled (JSON)
+  code_snippets String? // Code written by user (JSON)
+  key_learnings String? // AI-generated summary of what user learned (JSON)
+  
   created_at DateTime @default(now()) @map("created_at")
   updated_at DateTime @updatedAt @map("updated_at")
 

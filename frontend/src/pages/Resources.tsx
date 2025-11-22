@@ -1,11 +1,12 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Search, Filter, BookOpen, Grid3X3, GraduationCap } from 'lucide-react';
 import DashboardLayout from '../components/layout/DashboardLayout';
 import ResourceGrid from '../components/ResourceGrid';
 import Pagination from '../components/Pagination';
 import NewResourceModal from '../components/NewResourceModal';
 import { useDebounce } from '../hooks/useDebounce';
-
+import { apiClient } from '../api/client';
+import { CheckCircle, Clock, ArrowRight } from 'lucide-react';
 const Resources: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
@@ -14,6 +15,7 @@ const Resources: React.FC = () => {
   const [sortBy, setSortBy] = useState('recent');
   const [isNewResourceModalOpen, setIsNewResourceModalOpen] = useState(false);
   const [totalResources, setTotalResources] = useState(0);
+  const [completedModules, setCompletedModules] = useState<any[]>([]);
   const itemsPerPage = 12;
 
   // Debounce search query to avoid excessive filtering
@@ -21,6 +23,32 @@ const Resources: React.FC = () => {
 
   // Calculate total pages
   const totalPages = useMemo(() => Math.ceil(totalResources / itemsPerPage), [totalResources, itemsPerPage]);
+
+  useEffect(() => {
+    const fetchCompletedModules = async () => {
+      try {
+        const res = await apiClient.getLearningSubjects();
+        if (res.success && res.data) {
+          const allModules = res.data.flatMap((subject: any) =>
+            (subject.modules || []).map((module: any) => ({
+              ...module,
+              subjectName: subject.name
+            }))
+          );
+          const completed = allModules.filter((m: any) =>
+            m.progress && m.progress.length > 0 && m.progress[0].status === 'completed'
+          );
+          setCompletedModules(completed);
+        }
+      } catch (error) {
+        console.error("Failed to fetch completed modules", error);
+      }
+    };
+
+    if (typeFilter === 'learning') {
+      fetchCompletedModules();
+    }
+  }, [typeFilter]);
 
   return (
     <DashboardLayout>
@@ -177,14 +205,52 @@ const Resources: React.FC = () => {
           {/* Resources Grid */}
           <div className="mb-12">
             {typeFilter === 'learning' ? (
-              <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
-                <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <GraduationCap className="w-8 h-8" />
+              completedModules.length === 0 ? (
+                <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
+                  <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <GraduationCap className="w-8 h-8" />
+                  </div>
+                  <h3 className="text-lg font-bold text-slate-900 mb-2">Learning Vault Empty</h3>
+                  <p className="text-slate-500 mb-6">Complete modules to build your personal knowledge vault.</p>
                 </div>
-                <h3 className="text-lg font-bold text-slate-900 mb-2">Learning Vault</h3>
-                <p className="text-slate-500 mb-6">Your completed modules and study notes will appear here.</p>
-                <button className="text-blue-600 font-medium hover:underline">Browse Learning History</button>
-              </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {completedModules.map((module) => (
+                    <div
+                      key={module.id}
+                      onClick={() => {
+                        // Navigate to Learning page - we'll use window.location for simplicity
+                        window.location.href = '/learning';
+                      }}
+                      className="bg-white rounded-xl border border-slate-200 p-6 hover:shadow-lg transition-all group cursor-pointer"
+                    >
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="p-2 bg-green-100 text-green-600 rounded-lg">
+                          <CheckCircle className="w-5 h-5" />
+                        </div>
+                        <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded-full">
+                          {module.subjectName}
+                        </span>
+                      </div>
+                      <h3 className="font-bold text-slate-900 mb-2 group-hover:text-blue-600 transition-colors">
+                        {module.title}
+                      </h3>
+                      <p className="text-sm text-slate-500 mb-4 line-clamp-2">
+                        {module.description}
+                      </p>
+                      <div className="flex items-center justify-between text-sm text-slate-400 pt-4 border-t border-slate-100">
+                        <div className="flex items-center gap-1">
+                          <Clock className="w-4 h-4" />
+                          {module.estimated_time} mins
+                        </div>
+                        <div className="flex items-center gap-1 text-blue-600 font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                          Review <ArrowRight className="w-4 h-4" />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
             ) : (
               <>
                 <div className="flex items-center space-x-4 mb-6">

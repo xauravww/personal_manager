@@ -24,6 +24,9 @@ interface ChatCompletionRequest {
   temperature?: number;
   max_tokens?: number;
   stream?: boolean;
+  response_format?: {
+    type: string;
+  };
 }
 
 interface ChatCompletionResponse {
@@ -933,32 +936,48 @@ class AIService {
       ${context}
 
       Your goal is to help the user master the current topic.
-      
-      IMPORTANT:
-      - Return ONLY a JSON object.
-      - If the user demonstrates mastery of the CURRENT topic/checkpoint, set "mastery_achieved" to true.
-      - If you want to test the user, include a "quiz" object.
-      - If you want to show code, include a "code" object.
-      - Keep "response" friendly and helpful.
+    Context:
+    ${context}
 
-      JSON Structure:
-      {
-        "response": "Your text response here (markdown supported)",
-        "quiz": { // Optional
-          "question": "Quiz question",
-          "options": ["A", "B", "C", "D"],
-          "correctAnswer": 0
-        },
-        "code": { // Optional
-          "language": "javascript",
-          "snippet": "console.log('Hello');"
-        },
-        "mastery_achieved": boolean // Set to true ONLY if user has mastered the current checkpoint
-      }`;
+    Your goal is to help the user master the current topic.
+    
+    CRITICAL INSTRUCTIONS FOR CODE:
+    1. NEVER write code as plain text.
+    2. ALWAYS use markdown code blocks for code snippets in the text (e.g., \`\`\`python ... \`\`\`).
+    3. CRITICAL: If your response involves ANY code (even a small snippet), you MUST populate the "code" field in the JSON response with that snippet.
+    4. CRITICAL: If you are asking a quiz question that involves code, you MUST populate the "quiz.codeSnippet" field.
+    5. Ensure code is syntactically correct and follows best practices.
+    - If you provide a 'code' object in the JSON response, do NOT include that same code block in the 'response' text. Only describe the code in the text.
+    - If you provide a 'quiz' object, do NOT include the question or options in the 'response' text.
+    - Do NOT ask the user if they are ready for the next topic/checkpoint UNLESS you are also setting "mastery_achieved": true in the same response.
+    - If "mastery_achieved" is false, you must continue teaching or testing the CURRENT topic.
+    - Only set "mastery_achieved": true when the user has explicitly demonstrated understanding (e.g., answered a quiz correctly or explained a concept).
+    Response Format (JSON):
+    {
+      "response": "Your conversational response here. Use markdown for formatting. Use bold for emphasis.",
+      "quiz": { // Optional: Only when checking understanding
+        "question": "Question text",
+        "options": ["Option A", "Option B", "Option C", "Option D"],
+        "correctAnswer": 0, // Index of correct option
+        "codeSnippet": "print('Hello')" // Optional: Code context for the question
+      },
+      "code": { // Optional: When explaining with code
+        "language": "python", // or javascript, etc.
+        "snippet": "print('Hello World')"
+      },
+      "mastery_achieved": boolean // Set to true ONLY when user demonstrates mastery of the CURRENT checkpoint/topic.
+    }
+    
+    INTERACTION GUIDELINES:
+    - Keep responses concise and encouraging.
+    - If the user is wrong, explain why gently.
+    - If the user is right, confirm and potentially offer a deeper insight or move to the next step.
+    - When the user demonstrates mastery of the specific concept in the context, set "mastery_achieved" to true.
+    `.trim();
 
-      const messages = [
+      const messages: any[] = [
         { role: 'system', content: systemPrompt },
-        ...history.map(h => ({ role: h.role as 'user' | 'assistant' | 'system', content: h.content })),
+        ...history.map(h => ({ role: h.role, content: h.content })),
         { role: 'user', content: message }
       ];
 
@@ -981,6 +1000,57 @@ class AIService {
         mastery_achieved: false
       };
     }
+  }
+
+  /**
+   * Check prerequisites for a topic
+   */
+  async checkPrerequisites(topic: string): Promise<{
+    hasPrerequisites: boolean;
+    prerequisites: string[];
+    reason: string;
+  }> {
+    const cacheKey = this.getCacheKey('checkPrerequisites', { topic });
+    const cached = this.getCachedResponse(cacheKey);
+    if (cached) return cached;
+
+    return this.getDeduplicatedRequest(cacheKey, async () => {
+      try {
+        const systemPrompt = `You are an expert curriculum advisor.
+        Analyze if the topic "${topic}" has significant prerequisites that a beginner might lack.
+        
+        Return ONLY a JSON object:
+        {
+          "hasPrerequisites": boolean,
+          "prerequisites": ["Prereq 1", "Prereq 2"],
+          "reason": "Brief explanation why these are needed."
+        }
+        
+        Example:
+        Topic: "React" -> { "hasPrerequisites": true, "prerequisites": ["JavaScript", "HTML/CSS"], "reason": "React relies heavily on JS concepts." }
+        Topic: "Python" -> { "hasPrerequisites": false, "prerequisites": [], "reason": "Python is beginner-friendly." }`;
+
+        const response = await this.createChatCompletion({
+          model: this.config.model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `Check prerequisites for: ${topic}` }
+          ],
+          temperature: 0.3,
+          response_format: { type: "json_object" }
+        });
+
+        const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
+        if (!content) throw new Error('No content from AI');
+
+        const result = JSON.parse(content);
+        this.setCachedResponse(cacheKey, result, 86400000); // 24 hours
+        return result;
+      } catch (error) {
+        console.error('Error checking prerequisites:', error);
+        return { hasPrerequisites: false, prerequisites: [], reason: '' };
+      }
+    });
   }
 
   async analyzeUrlContent(content: string, originalQuery: string): Promise<{ found: boolean, answer?: string, confidence: number, summary?: string }> {

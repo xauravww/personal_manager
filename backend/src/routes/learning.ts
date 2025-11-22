@@ -1635,6 +1635,84 @@ router.get('/learning-dna', async (req, res) => {
   }
 });
 
+// Check Prerequisites
+router.post('/prerequisites/check', async (req, res) => {
+  try {
+    const { topic } = req.body;
+    if (!topic) return res.status(400).json({ error: 'Topic is required' });
+
+    const result = await aiService.checkPrerequisites(topic);
+    res.json(result);
+  } catch (error) {
+    console.error('Error checking prerequisites:', error);
+    res.status(500).json({ error: 'Failed to check prerequisites' });
+  }
+});
+
+// Complete Module
+router.post('/modules/:id/complete', async (req, res) => {
+  try {
+    const userId = (req as any).user.id;
+    const moduleId = req.params.id;
+    const {
+      chatHistory,
+      quizAttempts,
+      identifiedWeaknesses,
+      codeSnippets
+    } = req.body;
+
+    const module = await prisma.learningModule.findFirst({
+      where: {
+        id: moduleId,
+        subject: {
+          user_id: userId
+        }
+      },
+      include: { subject: true }
+    });
+
+    if (!module) {
+      return res.status(404).json({ error: 'Module not found' });
+    }
+
+    await prisma.learningProgress.upsert({
+      where: {
+        user_id_module_id: {
+          user_id: userId,
+          module_id: moduleId
+        }
+      },
+      update: {
+        status: 'completed',
+        completed_at: new Date(),
+        score: 100,
+        chat_history: chatHistory ? JSON.stringify(chatHistory) : null,
+        quiz_attempts: quizAttempts ? JSON.stringify(quizAttempts) : null,
+        identified_weaknesses: identifiedWeaknesses ? JSON.stringify(identifiedWeaknesses) : null,
+        code_snippets: codeSnippets ? JSON.stringify(codeSnippets) : null
+      },
+      create: {
+        user_id: userId,
+        subject_id: module.subject_id,
+        module_id: moduleId,
+        status: 'completed',
+        completed_at: new Date(),
+        score: 100,
+        chat_history: chatHistory ? JSON.stringify(chatHistory) : null,
+        quiz_attempts: quizAttempts ? JSON.stringify(quizAttempts) : null,
+        identified_weaknesses: identifiedWeaknesses ? JSON.stringify(identifiedWeaknesses) : null,
+        code_snippets: codeSnippets ? JSON.stringify(codeSnippets) : null
+      }
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error completing module:', error);
+    res.status(500).json({ error: 'Failed to complete module' });
+  }
+});
+
+// AI Chat with Module
 // AI Chat with Module
 router.post('/modules/chat', async (req, res) => {
   try {
@@ -1672,7 +1750,8 @@ router.post('/modules/chat', async (req, res) => {
         response: "This module is already completed! 🎉 You can review the content or move on to the next module.",
         suggestions: [],
         analysis: { score: 100, strengths: [], weakPoints: [] },
-        completed: true
+        completed: true,
+        mastery_achieved: true
       });
     }
 
@@ -1722,135 +1801,43 @@ Conversation History:
 ${conversation_history ? conversation_history.map((msg: any) => `${msg.role}: ${msg.content}`).join('\n') : 'No previous conversation'}
 
 User's current message: ${message}
-
-Instructions:
-- Assess the user's understanding based on their responses
-- CHECK ASSIGNMENT STATUS: If there are unsubmitted assignments, remind the user to complete them before suggesting completion
-- Only suggest completion if: 1) User demonstrates mastery, AND 2) ALL assignments are submitted
-- If assignments are pending, tell the user they must complete and submit all assignments first
-- Be decisive - don't prolong conversations unnecessarily
-- Give encouraging feedback and indicate when they're ready to complete (but only after assignments are done)
-- When suggesting completion, use phrases like "you can now mark this module as completed" or "ready to complete the module"
-- Do NOT suggest completion in the initial welcome message or generic responses
     `.trim();
 
     // Generate AI response with completion authority
-    const aiResponse = await aiService.generateChatResponse(
+    const aiResponse = await aiService.chatWithModule(
       message,
       context,
-      undefined,
-      'academic',
-      false
+      conversation_history || []
     );
 
-    let shouldMarkCompleted = false;
-    let completionResponse = typeof aiResponse === 'string' ? aiResponse : 'I understand. Let me help you with that.';
+    // Check if AI response suggests completion
+    let masteryAchieved = false;
 
-    // Check if AI response suggests completion - be very specific and only if all assignments are submitted
-    const lowerResponse = completionResponse.toLowerCase();
-    if (allAssignmentsSubmitted) {
-      // Look for explicit completion suggestions with positive indicators
-      // Be very strict - only trigger on specific completion suggestions
-      const hasCompletionSuggestion = (
-        lowerResponse.includes('ready to complete the module') ||
-        lowerResponse.includes('you can now mark this module as completed') ||
-        lowerResponse.includes('i suggest marking this module as completed') ||
-        lowerResponse.includes('you\'ve successfully completed this module')
-      );
-
-      const hasPositiveIndicator = (
-        lowerResponse.includes('🎯') ||
-        lowerResponse.includes('great job') ||
-        lowerResponse.includes('excellent work') ||
-        lowerResponse.includes('well done') ||
-        lowerResponse.includes('congratulations') ||
-        lowerResponse.includes('you\'ve demonstrated sufficient understanding')
-      );
-
-      // Additional check: response should be focused on completion, not just mentioning it
-      const isCompletionFocused = (
-        lowerResponse.includes('module as completed') ||
-        lowerResponse.includes('mark this module') ||
-        lowerResponse.includes('complete the module')
-      );
-
-      // Only suggest completion if we have clear suggestion, positive feedback, and completion focus
-      // Also ensure this isn't the first response or a generic response
-      const hasSubstantialConversation = conversation_history && conversation_history.length > 1;
-
-      if (hasCompletionSuggestion && hasPositiveIndicator && isCompletionFocused && hasSubstantialConversation) {
-        shouldMarkCompleted = true;
-      }
+    if (aiResponse.mastery_achieved) {
+      masteryAchieved = true;
     }
 
-    // Note: We don't automatically complete the module here.
-    // The AI will indicate when the user can complete it, but the user must click the button to actually complete it.
-
-    // Analyze learning progress from conversation
-    const progressAnalysis = await aiService.analyzeAssignmentSubmission(
-      {
-        title: module.title,
-        description: module.description || '',
-        solution: undefined
-      },
-      message,
-      module.subject.name
-    );
-
-    // Update weak points if any issues detected
-    if (progressAnalysis.weakPoints.length > 0) {
-      for (const weakPoint of progressAnalysis.weakPoints) {
-        await prisma.weakPoint.upsert({
-          where: {
-            user_id_topic: {
-              user_id: userId,
-              topic: weakPoint.topic
-            }
-          },
-          update: {
-            frequency: {
-              increment: 1
-            },
-            last_identified: new Date()
-          },
-          create: {
-            user_id: userId,
-            subject_id: module.subject_id,
-            topic: weakPoint.topic,
-            description: weakPoint.description,
-            severity: weakPoint.severity as any,
-            suggestions: JSON.stringify(weakPoint.suggestions)
-          }
-        });
-      }
-    }
-
-    // Generate hints based on weak points
-    let suggestions: string[] = [];
-    if (progressAnalysis.improvementAreas.length > 0 && !shouldMarkCompleted) {
-      suggestions = progressAnalysis.improvementAreas.slice(0, 3);
-    }
+    // Note: We DO NOT auto-complete the module here anymore. 
+    // The frontend handles the "Complete Module" action which calls a separate endpoint.
+    // This endpoint just signals mastery of the current topic/checkpoint.
 
     res.json({
-      response: completionResponse,
-      suggestions,
-      analysis: {
-        score: progressAnalysis.score,
-        strengths: progressAnalysis.strengths,
-        weakPoints: progressAnalysis.weakPoints
-      },
-      completed: shouldMarkCompleted,
-      assignmentStatus: {
-        hasAssignments,
-        allSubmitted: allAssignmentsSubmitted,
-        pendingCount: pendingAssignmentsCount
-      }
+      response: aiResponse.response,
+      quiz: aiResponse.quiz,
+      code: aiResponse.code,
+      suggestions: [],
+      analysis: { score: masteryAchieved ? 100 : 0, strengths: [], weakPoints: [] },
+      completed: false, // Deprecated in favor of mastery_achieved
+      mastery_achieved: masteryAchieved
     });
+
   } catch (error) {
-    console.error('Error in module chat:', error);
+    console.error('Error in chat:', error);
     res.status(500).json({ error: 'Failed to process chat message' });
   }
 });
+
+
 
 // Cross-domain learning analysis
 router.post('/cross-domain/analyze', async (req, res) => {

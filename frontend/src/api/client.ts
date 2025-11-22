@@ -548,6 +548,9 @@ class ApiClient {
     conversation_history?: Array<{ role: string, content: string }>;
   }): Promise<ApiResponse<{
     response: string;
+    quiz?: { question: string; options: string[]; correctAnswer: number };
+    code?: { language: string; snippet: string };
+    mastery_achieved?: boolean;
     suggestions?: string[];
     analysis?: {
       score: number;
@@ -648,10 +651,32 @@ class ApiClient {
     });
   }
 
+  async checkPrerequisites(topic: string): Promise<ApiResponse<{ hasPrerequisites: boolean; prerequisites: string[]; reason: string }>> {
+    return this.request('/learning/prerequisites/check', {
+      method: 'POST',
+      body: JSON.stringify({ topic }),
+    });
+  }
+
   async generateCurriculum(topic: string, assessmentResults?: { score: number; weakAreas: string[] }): Promise<ApiResponse<{ subject: any; modules: any[] }>> {
     return this.request('/learning/generate-curriculum', {
       method: 'POST',
       body: JSON.stringify({ topic, assessmentResults }),
+    });
+  }
+
+  async completeModule(
+    moduleId: string,
+    sessionData?: {
+      chatHistory?: any[];
+      quizAttempts?: any[];
+      identifiedWeaknesses?: string[];
+      codeSnippets?: any[];
+    }
+  ): Promise<ApiResponse<{ success: boolean }>> {
+    return this.request(`/learning/modules/${moduleId}/complete`, {
+      method: 'POST',
+      body: sessionData ? JSON.stringify(sessionData) : undefined,
     });
   }
 

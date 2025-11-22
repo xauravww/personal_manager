@@ -470,25 +470,25 @@ const SearchInterface: React.FC = () => {
               <div key={msg.id} className={`flex gap-6 animate-fadeIn ${msg.type === 'user' ? 'flex-row-reverse' : ''}`}>
 
                 {/* Message Content */}
-                <div className={`flex-1 space-y-4 ${msg.type === 'user' ? 'text-right' : ''}`}>
+                <div className={`flex-1 space-y-4 ${msg.type === 'user' ? 'text-right' : ''} min-w-0`}>
 
                   {/* Text Bubble */}
                   <div className={`inline-block text-left ${msg.type === 'user'
                     ? 'bg-slate-100 text-slate-900 px-6 py-3 rounded-2xl rounded-tr-sm'
-                    : 'text-slate-800'
+                    : 'text-slate-800 w-full'
                     }`}>
                     {msg.type === 'ai' ? (
-                      <div className="prose prose-slate max-w-none prose-p:leading-relaxed prose-a:text-blue-600 hover:prose-a:text-blue-700">
+                      <div className="prose prose-slate max-w-none prose-p:leading-relaxed prose-a:text-blue-600 hover:prose-a:text-blue-700 break-words">
                         <ReactMarkdown>{msg.content}</ReactMarkdown>
                       </div>
                     ) : (
-                      <p className="text-lg">{msg.content}</p>
+                      <p className="text-lg break-words">{msg.content}</p>
                     )}
                   </div>
 
                   {/* Citations Carousel (AI Only) */}
                   {msg.citations && msg.citations.length > 0 && (
-                    <div className="flex gap-3 overflow-x-auto pb-4 pt-2 scrollbar-hide snap-x -ml-2 px-2">
+                    <div className="flex gap-3 overflow-x-auto pb-4 pt-2 scrollbar-hide snap-x -ml-2 px-2 max-w-full">
                       {msg.citations.map((citation, cIdx) => (
                         <a
                           key={cIdx}
@@ -501,7 +501,15 @@ const SearchInterface: React.FC = () => {
                             <div className="w-5 h-5 rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
                               <Globe className="w-3 h-3" />
                             </div>
-                            <span className="text-xs font-medium text-slate-500 truncate">{new URL(citation.url || 'https://example.com').hostname}</span>
+                            <span className="text-xs font-medium text-slate-500 truncate">
+                              {(() => {
+                                try {
+                                  return new URL(citation.url || 'https://example.com').hostname;
+                                } catch (e) {
+                                  return 'Local';
+                                }
+                              })()}
+                            </span>
                           </div>
                           <h4 className="text-xs font-medium text-slate-900 line-clamp-2 group-hover:text-blue-600 transition-colors">
                             {citation.title}
@@ -547,13 +555,16 @@ const SearchInterface: React.FC = () => {
                       </div>
                     </div>
                   ) : (
-                    /* Premium Waveform Loader */
-                    <div className="flex items-center gap-1 h-8">
-                      <div className="w-1 h-4 bg-slate-900 rounded-full animate-wave"></div>
-                      <div className="w-1 h-6 bg-slate-900 rounded-full animate-wave delay-75"></div>
-                      <div className="w-1 h-8 bg-slate-900 rounded-full animate-wave delay-150"></div>
-                      <div className="w-1 h-6 bg-slate-900 rounded-full animate-wave delay-200"></div>
-                      <div className="w-1 h-4 bg-slate-900 rounded-full animate-wave delay-300"></div>
+                    /* Learning-style Loader */
+                    <div className="flex flex-col items-center py-12">
+                      <div className="relative w-16 h-16 mb-4">
+                        <div className="absolute inset-0 border-4 border-slate-200 rounded-full"></div>
+                        <div className="absolute inset-0 border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <Brain className="w-6 h-6 text-blue-600 animate-pulse" />
+                        </div>
+                      </div>
+                      <p className="text-sm font-medium text-slate-600">Thinking...</p>
                     </div>
                   )}
                 </div>

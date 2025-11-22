@@ -257,15 +257,27 @@ class AIService {
   }
 
   /**
-   * Generate embeddings for text (if supported by proxy)
+   * Generate embeddings for text using local model
    */
   async createEmbeddings(text: string, model: string = 'text-embedding-ada-002') {
     try {
-      const response = await this.client.post('/v1/embeddings', {
-        input: text,
-        model: model,
-      });
-      return response.data;
+      // Import locally to avoid circular dependencies
+      const embeddingService = (await import('./embeddingService')).default;
+
+      const embedding = await embeddingService.generateEmbedding(text);
+
+      // Return in OpenAI format for compatibility
+      return {
+        data: [{
+          embedding: embedding,
+          index: 0
+        }],
+        model: 'Xenova/all-MiniLM-L6-v2',
+        usage: {
+          prompt_tokens: text.split(' ').length,
+          total_tokens: text.split(' ').length
+        }
+      };
     } catch (error) {
       console.error('Error creating embeddings:', error);
       throw new Error('Failed to generate embeddings');

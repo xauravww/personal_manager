@@ -122,6 +122,50 @@ router.get('/', [
       }
     }
 
+    // Enrich learning context with actual progress data if query relates to learning
+    const learningKeywords = ['progress', 'learning', 'status', 'how am i doing', 'grades', 'scores', 'modules', 'course'];
+    const isLearningQuery = searchQuery && learningKeywords.some(k => searchQuery.toLowerCase().includes(k));
+
+    if (isLearningQuery) {
+      try {
+        const subjects = await prisma.learningSubject.findMany({
+          where: { user_id: userId, is_active: true },
+          include: {
+            modules: {
+              include: {
+                progress: { where: { user_id: userId } }
+              }
+            },
+            progress: { where: { user_id: userId } }
+          }
+        });
+
+        if (!learningContext) learningContext = {};
+        learningContext.detailedProgress = subjects.map(s => {
+          const totalModules = s.modules.length;
+          // Count unique completed modules from the progress records
+          const completedModules = s.progress.filter(p => p.status === 'completed').length;
+          const progressPercent = totalModules > 0 ? Math.round((completedModules / totalModules) * 100) : 0;
+
+          return {
+            subject: s.name,
+            progress: progressPercent,
+            modules: s.modules.map(m => {
+              const mProgress = m.progress[0];
+              return {
+                title: m.title,
+                status: mProgress?.status || 'not_started',
+                score: mProgress?.score
+              };
+            })
+          };
+        });
+        console.log('Enriched learning context with progress data');
+      } catch (error) {
+        console.warn('Failed to fetch learning progress for context:', error);
+      }
+    }
+
     // Build where clause for Prisma
     const where: any = {
       user_id: userId,

@@ -15,6 +15,7 @@
     "db:init": "ts-node src/scripts/initDb.ts",
     "db:migrate": "npx prisma migrate dev",
     "db:push": "npx prisma db push",
+    "postinstall": "npx prisma generate",
     "db:seed": "ts-node src/scripts/seed.ts",
     "db:studio": "npx prisma studio"
   },

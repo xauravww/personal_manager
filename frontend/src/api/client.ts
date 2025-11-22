@@ -183,7 +183,23 @@ class ApiClient {
 
     try {
       const response = await fetch(url, config);
-      const data = await response.json();
+      const text = await response.text();
+      let data;
+
+      try {
+        data = JSON.parse(text);
+      } catch (parseError) {
+        if (!response.ok) {
+          return {
+            success: false,
+            error: `HTTP ${response.status}: ${text || response.statusText}`,
+          };
+        }
+        return {
+          success: false,
+          error: `Invalid JSON response: ${text}`,
+        };
+      }
 
       if (!response.ok) {
         return {
@@ -230,14 +246,26 @@ class ApiClient {
     });
 
     if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Request failed');
+      const text = await response.text();
+      let errorData;
+      try {
+        errorData = JSON.parse(text);
+        throw new Error(errorData.error || 'Request failed');
+      } catch (parseError) {
+        throw new Error(text || 'Request failed');
+      }
     }
 
-    return {
-      data: await response.json(),
-      status: response.status
-    };
+    const text = await response.text();
+    try {
+      const data = JSON.parse(text);
+      return {
+        data,
+        status: response.status
+      };
+    } catch (parseError) {
+      throw new Error(`Invalid JSON response: ${text}`);
+    }
   }
 
   // Authentication methods
@@ -386,7 +414,23 @@ class ApiClient {
 
     try {
       const response = await fetch(url, config);
-      const data = await response.json();
+      const text = await response.text();
+      let data;
+
+      try {
+        data = JSON.parse(text);
+      } catch (parseError) {
+        if (!response.ok) {
+          return {
+            success: false,
+            error: `HTTP ${response.status}: ${text || response.statusText}`,
+          };
+        }
+        return {
+          success: false,
+          error: `Invalid JSON response: ${text}`,
+        };
+      }
 
       if (!response.ok) {
         return {

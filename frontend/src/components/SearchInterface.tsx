@@ -365,7 +365,7 @@ const SearchInterface: React.FC = () => {
 
       {/* Header (Minimal) */}
       {!isInitialState && (
-        <div className="absolute top-0 right-0 p-6 z-50">
+        <div className="fixed top-16 right-4 p-6 z-50">
           <button
             onClick={clearChat}
             className="p-2 text-slate-400 hover:text-slate-600 hover:bg-white rounded-full transition-all shadow-sm border border-transparent hover:border-slate-100"
@@ -580,7 +580,10 @@ const SearchInterface: React.FC = () => {
                 className="p-2 text-slate-400 hover:text-slate-600 transition-colors"
                 title="Upload"
               >
-                <Plus className="w-5 h-5" />
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-plus">
+              <path d="M5 12h14"></path>
+              <path d="M12 5v14"></path>
+            </svg>
               </button>
               <input
                 type="text"

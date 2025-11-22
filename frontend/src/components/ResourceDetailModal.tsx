@@ -59,6 +59,14 @@ const ResourceDetailModal: React.FC<ResourceDetailModalProps> = ({
     }
   }, [resource]);
 
+  const handleClose = useCallback(() => {
+    if (isEditing) {
+      setIsEditing(false);
+    } else {
+      onClose();
+    }
+  }, [isEditing, onClose]);
+
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -76,14 +84,6 @@ const ResourceDetailModal: React.FC<ResourceDetailModalProps> = ({
       document.body.style.overflow = 'unset';
     };
   }, [isOpen, handleClose]);
-
-  const handleClose = useCallback(() => {
-    if (isEditing) {
-      setIsEditing(false);
-    } else {
-      onClose();
-    }
-  }, [isEditing, onClose]);
 
   const handleSave = async () => {
     if (!resource) return;

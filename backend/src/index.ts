@@ -7,6 +7,8 @@ import rateLimit from 'express-rate-limit';
 import swaggerUi from 'swagger-ui-express';
 import swaggerJSDoc from 'swagger-jsdoc';
 import dotenv from 'dotenv';
+import cron from 'node-cron';
+import fetch from 'node-fetch';
 
 import authRoutes from './routes/auth';
 import resourceRoutes from './routes/resources';
@@ -100,8 +102,26 @@ app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/conversations', conversationsRoutes);
 
 // Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+app.get('/health', async (req, res) => {
+  try {
+    // Check database connection
+    await prisma.$queryRaw`SELECT 1`;
+
+    res.json({
+      status: 'OK',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      database: 'connected',
+      version: process.env.npm_package_version || '1.0.0'
+    });
+  } catch (error) {
+    res.status(503).json({
+      status: 'ERROR',
+      timestamp: new Date().toISOString(),
+      database: 'disconnected',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
 });
 
 // Error handling middleware (must be last)
@@ -114,24 +134,32 @@ if (process.env.NODE_ENV !== 'test') {
     console.log(`📚 API Documentation: http://localhost:${PORT}/api-docs`);
   });
 
+  // Self-ping cron job to prevent Render spin-down (every 1 minute)
+  const selfPing = async () => {
+    try {
+      const healthUrl = `http://localhost:${PORT}/health`;
+      const response = await fetch(healthUrl);
+      if (response.ok) {
+        console.log(`✅ Self-ping successful at ${new Date().toISOString()}`);
+      } else {
+        console.log(`❌ Self-ping failed: ${response.status}`);
+      }
+    } catch (error) {
+      console.log(`❌ Self-ping error: ${error}`);
+    }
+  };
+
+  // Run every minute
+  cron.schedule('* * * * *', selfPing);
+
+  // Initial ping after server starts
+  setTimeout(selfPing, 5000);
+
   // Graceful shutdown
   process.on('SIGTERM', () => {
     console.log('SIGTERM received, shutting down gracefully');
     server.close(() => {
-      prisma.$disconnect().then(() => {
-        console.log('Database connection closed');
-        process.exit(0);
-      });
-    });
-  });
-
-  process.on('SIGINT', () => {
-    console.log('SIGINT received, shutting down gracefully');
-    server.close(() => {
-      prisma.$disconnect().then(() => {
-        console.log('Database connection closed');
-        process.exit(0);
-      });
+      console.log('Process terminated');
     });
   });
 }

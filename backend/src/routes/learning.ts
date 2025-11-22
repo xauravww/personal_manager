@@ -501,8 +501,8 @@ router.post('/assignments/submit', async (req, res) => {
 
         feedback = `Quiz Results: ${correctAnswers}/${totalQuestions} correct answers (${score}%). ` +
           (score >= 80 ? 'Great job! You have a good understanding of this topic.' :
-           score >= 60 ? 'Good effort! Consider reviewing the areas you missed.' :
-           'You may need to review this material more thoroughly.');
+            score >= 60 ? 'Good effort! Consider reviewing the areas you missed.' :
+              'You may need to review this material more thoroughly.');
 
         if (quizWeakPoints.length > 0) {
           feedback += ` Focus on improving: ${quizWeakPoints.map(wp => wp.topic).join(', ')}.`;
@@ -550,8 +550,8 @@ router.post('/assignments/submit', async (req, res) => {
 
         feedback = `Quiz Results: ${correctAnswers}/${totalQuestions} correct answers (${score}%). ` +
           (score >= 80 ? 'Great job! You have a good understanding of this topic.' :
-           score >= 60 ? 'Good effort! Consider reviewing the areas you missed.' :
-           'You may need to review this material more thoroughly.');
+            score >= 60 ? 'Good effort! Consider reviewing the areas you missed.' :
+              'You may need to review this material more thoroughly.');
 
         if (quizWeakPoints.length > 0) {
           feedback += ` Focus on improving: ${quizWeakPoints.map(wp => wp.topic).join(', ')}.`;
@@ -893,12 +893,12 @@ router.get('/progress/analytics', async (req, res) => {
     });
 
     analytics.learningPatterns.peakLearningHours = Object.entries(hourCounts)
-      .sort(([,a], [,b]) => b - a)
+      .sort(([, a], [, b]) => b - a)
       .slice(0, 3)
       .map(([hour, count]) => ({ hour: parseInt(hour), count }));
 
     analytics.learningPatterns.mostActiveDays = Object.entries(dayCounts)
-      .sort(([,a], [,b]) => b - a)
+      .sort(([, a], [, b]) => b - a)
       .slice(0, 3)
       .map(([day, count]) => ({
         day: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][parseInt(day)],
@@ -1713,8 +1713,8 @@ Current Status: ${existingProgress?.status || 'not_started'}
 ${assignmentsInfo}
 
 ${hasAssignments && !allAssignmentsSubmitted
-  ? `CRITICAL: This module has ${pendingAssignmentsCount} unsubmitted assignment(s). The user MUST complete and submit ALL assignments before they can mark this module as completed. Do not suggest completion until all assignments are submitted.`
-  : 'All assignments have been submitted - user can potentially complete this module.'}
+        ? `CRITICAL: This module has ${pendingAssignmentsCount} unsubmitted assignment(s). The user MUST complete and submit ALL assignments before they can mark this module as completed. Do not suggest completion until all assignments are submitted.`
+        : 'All assignments have been submitted - user can potentially complete this module.'}
 
 IMPORTANT: You can ONLY suggest that the user mark this module as completed when they demonstrate sufficient understanding AND have completed ALL assignments for this module.
 
@@ -1980,6 +1980,110 @@ router.post('/code/execute', async (req, res) => {
       success: false,
       error: 'Failed to execute code'
     });
+  }
+});
+
+// Skill Assessment
+router.post('/assess-skill', async (req, res) => {
+  try {
+    const { topic } = req.body;
+    if (!topic) {
+      return res.status(400).json({ error: 'Topic is required' });
+    }
+
+    const assessment = await aiService.generateSkillAssessment(topic);
+    res.json(assessment);
+  } catch (error) {
+    console.error('Error generating skill assessment:', error);
+    res.status(500).json({ error: 'Failed to generate assessment' });
+  }
+});
+
+// Generate Curriculum
+router.post('/generate-curriculum', async (req, res) => {
+  try {
+    const userId = (req as any).user.id;
+    const { topic, assessmentResults } = req.body;
+
+    if (!topic) {
+      return res.status(400).json({ error: 'Topic is required' });
+    }
+
+    // Generate curriculum structure
+    const curriculum = await aiService.generateCurriculum(topic, assessmentResults);
+
+    // Create the subject in the database
+    const subject = await prisma.learningSubject.create({
+      data: {
+        user_id: userId,
+        name: curriculum.title,
+        description: curriculum.description,
+        goals: JSON.stringify([`Master ${topic}`])
+      }
+    });
+
+    // Create modules
+    const modules = await Promise.all(curriculum.modules.map((mod, index) =>
+      prisma.learningModule.create({
+        data: {
+          subject_id: subject.id,
+          title: mod.title,
+          description: mod.description,
+          estimated_time: mod.estimated_time,
+          difficulty: mod.difficulty,
+          order_index: index,
+          checkpoints: JSON.stringify(mod.checkpoints || [])
+        }
+      })
+    ));
+
+    res.json({ subject, modules });
+  } catch (error) {
+    console.error('Error generating curriculum:', error);
+    res.status(500).json({ error: 'Failed to generate curriculum' });
+  }
+});
+
+// Archive Subject
+router.patch('/subjects/:id/archive', async (req, res) => {
+  try {
+    const userId = (req as any).user.id;
+    const { id } = req.params;
+
+    const subject = await prisma.learningSubject.updateMany({
+      where: { id, user_id: userId },
+      data: { is_active: false }
+    });
+
+    if (subject.count === 0) {
+      return res.status(404).json({ error: 'Subject not found' });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error archiving subject:', error);
+    res.status(500).json({ error: 'Failed to archive subject' });
+  }
+});
+
+// Delete Subject
+router.delete('/subjects/:id', async (req, res) => {
+  try {
+    const userId = (req as any).user.id;
+    const { id } = req.params;
+
+    const subject = await prisma.learningSubject.deleteMany({
+      where: { id, user_id: userId }
+    });
+
+    if (subject.count === 0) {
+      return res.status(404).json({ error: 'Subject not found' });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting subject:', error);
+    res.status(500).json({ error: 'Failed to delete subject' });
   }
 });
 

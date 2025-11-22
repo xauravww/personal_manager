@@ -295,7 +295,7 @@ class ApiClient {
     forceWebSearch?: boolean;
     useMCP?: boolean;
     mcpCredentials?: Record<string, string>;
-    conversation?: Array<{type: string, content: string}>;
+    conversation?: Array<{ type: string, content: string }>;
   }): Promise<{ success: boolean; data: SearchResponse; ai?: any; error?: string }> {
     const searchParams = new URLSearchParams();
 
@@ -545,14 +545,14 @@ class ApiClient {
   async chatWithModule(params: {
     module_id: string;
     message: string;
-    conversation_history?: Array<{role: string, content: string}>;
+    conversation_history?: Array<{ role: string, content: string }>;
   }): Promise<ApiResponse<{
     response: string;
     suggestions?: string[];
     analysis?: {
       score: number;
       strengths: string[];
-      weakPoints: Array<{topic: string, severity: string, suggestions: string[]}>;
+      weakPoints: Array<{ topic: string, severity: string, suggestions: string[] }>;
     };
     completed?: boolean;
   }>> {
@@ -637,6 +637,33 @@ class ApiClient {
     return this.request('/learning/code/execute', {
       method: 'POST',
       body: JSON.stringify(params),
+    });
+  }
+
+  // New Learning Flow Methods
+  async assessSkill(topic: string): Promise<ApiResponse<{ questions: Array<{ id: string; question: string; options: string[]; correctAnswer: number }> }>> {
+    return this.request('/learning/assess-skill', {
+      method: 'POST',
+      body: JSON.stringify({ topic }),
+    });
+  }
+
+  async generateCurriculum(topic: string, assessmentResults?: { score: number; weakAreas: string[] }): Promise<ApiResponse<{ subject: any; modules: any[] }>> {
+    return this.request('/learning/generate-curriculum', {
+      method: 'POST',
+      body: JSON.stringify({ topic, assessmentResults }),
+    });
+  }
+
+  async archiveSubject(id: string): Promise<ApiResponse<{ success: boolean }>> {
+    return this.request(`/learning/subjects/${id}/archive`, {
+      method: 'PATCH',
+    });
+  }
+
+  async deleteSubject(id: string): Promise<ApiResponse<{ success: boolean }>> {
+    return this.request(`/learning/subjects/${id}`, {
+      method: 'DELETE',
     });
   }
 }

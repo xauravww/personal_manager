@@ -106,6 +106,7 @@ model LearningModule {
   estimated_time Int?    // in minutes
   difficulty    String?  // "easy", "medium", "hard"
   is_optional   Boolean  @default(false)
+  checkpoints   String?  // JSON array of sub-topics/checkpoints
   created_at    DateTime @default(now()) @map("created_at")
   updated_at    DateTime @updatedAt @map("updated_at")
 
@@ -128,6 +129,7 @@ model LearningProgress {
   started_at DateTime?
   completed_at DateTime?
   notes      String?  // user notes or reflections
+  checkpoints_progress String? // JSON array tracking status of each checkpoint
   created_at DateTime @default(now()) @map("created_at")
   updated_at DateTime @updatedAt @map("updated_at")
 

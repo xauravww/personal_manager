@@ -353,7 +353,7 @@ class AIService {
     });
   }
 
-  async enhanceSearchQuery(userQuery: string, conversation?: Array<{type: string, content: string}>, timezone?: string): Promise<{
+  async enhanceSearchQuery(userQuery: string, conversation?: Array<{ type: string, content: string }>, timezone?: string): Promise<{
     intent: 'search' | 'chat';
     enhancedQuery: string;
     searchTerms: string[];
@@ -452,16 +452,16 @@ class AIService {
           throw new Error('No response from AI');
         }
 
-         // Parse the JSON response
-         const parsed = JSON.parse(content);
-         const result = {
-           intent: parsed.intent || 'search',
-           enhancedQuery: parsed.enhancedQuery || userQuery,
-           searchTerms: parsed.searchTerms || [userQuery],
-           filters: parsed.filters || {},
-         };
-         this.setCachedResponse(cacheKey, result, 1800000); // Cache for 30 minutes
-         return result;
+        // Parse the JSON response
+        const parsed = JSON.parse(content);
+        const result = {
+          intent: parsed.intent || 'search',
+          enhancedQuery: parsed.enhancedQuery || userQuery,
+          searchTerms: parsed.searchTerms || [userQuery],
+          filters: parsed.filters || {},
+        };
+        this.setCachedResponse(cacheKey, result, 1800000); // Cache for 30 minutes
+        return result;
       } catch (error) {
         console.error('Error enhancing search query:', error);
         // Fallback to basic search
@@ -514,7 +514,7 @@ class AIService {
             result = Array.isArray(suggestions) ? suggestions.slice(0, 5) : [];
           } catch {
             // Fallback: extract from text
-              result = content.split(',').map((s: string) => s.trim().replace(/["[\]]/g, '')).filter((s: string) => s.length > 0).slice(0, 5);
+            result = content.split(',').map((s: string) => s.trim().replace(/["[\]]/g, '')).filter((s: string) => s.length > 0).slice(0, 5);
           }
         }
         this.setCachedResponse(cacheKey, result, 1800000); // Cache for 30 minutes
@@ -575,7 +575,7 @@ class AIService {
     });
   }
 
-  async generateChatResponse(userQuery: string, context?: string, timezone?: string, focusMode?: string, stream?: boolean, conversation?: Array<{type: string, content: string}>): Promise<string | AsyncIterable<any>> {
+  async generateChatResponse(userQuery: string, context?: string, timezone?: string, focusMode?: string, stream?: boolean, conversation?: Array<{ type: string, content: string }>): Promise<string | AsyncIterable<any>> {
 
     // Get current date and time in user's timezone
     const userTimezone = timezone || 'UTC';
@@ -729,7 +729,7 @@ class AIService {
             result = Array.isArray(queries) ? queries.slice(0, 3) : [];
           } catch {
             // Fallback: extract from text
-              result = content.split(',').map((q: string) => q.trim().replace(/["[\]]/g, '')).filter((q: string) => q.length > 0).slice(0, 3);
+            result = content.split(',').map((q: string) => q.trim().replace(/["[\]]/g, '')).filter((q: string) => q.length > 0).slice(0, 3);
           }
         }
         this.setCachedResponse(cacheKey, result, 1800000); // Cache for 30 minutes
@@ -743,7 +743,7 @@ class AIService {
     });
   }
 
-  async suggestUrlsToRead(searchResults: any[], originalQuery: string): Promise<{url: string, title: string, reason: string}[]> {
+  async suggestUrlsToRead(searchResults: any[], originalQuery: string): Promise<{ url: string, title: string, reason: string }[]> {
     const cacheKey = this.getCacheKey('suggestUrlsToRead', { searchResults, originalQuery });
     const cached = this.getCachedResponse(cacheKey);
     if (cached) return cached;
@@ -777,7 +777,7 @@ class AIService {
         });
 
         const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
-        let result: {url: string, title: string, reason: string}[] = [];
+        let result: { url: string, title: string, reason: string }[] = [];
         if (content) {
           try {
             const suggestions = JSON.parse(content);
@@ -791,14 +791,199 @@ class AIService {
         return result;
       } catch (error) {
         console.warn('Error generating URL suggestions:', error);
-        const result: {url: string, title: string, reason: string}[] = [];
+        const result: { url: string, title: string, reason: string }[] = [];
         this.setCachedResponse(cacheKey, result, 300000); // Cache empty result for 5 minutes
         return result;
       }
     });
   }
 
-  async analyzeUrlContent(content: string, originalQuery: string): Promise<{found: boolean, answer?: string, confidence: number, summary?: string}> {
+  /**
+   * Generate a skill assessment for a given topic
+   */
+  async generateSkillAssessment(topic: string): Promise<{ questions: Array<{ id: string; question: string; options: string[]; correctAnswer: number }> }> {
+    const cacheKey = this.getCacheKey('generateSkillAssessment', { topic });
+    const cached = this.getCachedResponse(cacheKey);
+    if (cached) return cached;
+
+    return this.getDeduplicatedRequest(cacheKey, async () => {
+      try {
+        const systemPrompt = `You are an expert tutor. Create a diagnostic quiz to assess a student's knowledge of "${topic}".
+        Generate 3-5 multiple-choice questions ranging from beginner to intermediate difficulty.
+        Return ONLY a JSON object with this structure:
+        {
+          "questions": [
+            {
+              "id": "q1",
+              "question": "Question text",
+              "options": ["Option A", "Option B", "Option C", "Option D"],
+              "correctAnswer": 0 // Index of correct option (0-3)
+            }
+          ]
+        }`;
+
+        const response = await this.createChatCompletion({
+          model: this.config.model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `Create assessment for: ${topic}` }
+          ],
+          temperature: 0.5,
+        });
+
+        const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
+        if (!content) throw new Error('No content from AI');
+
+        const result = JSON.parse(content);
+        this.setCachedResponse(cacheKey, result, 1800000); // 30 mins
+        return result;
+      } catch (error) {
+        console.error('Error generating skill assessment:', error);
+        throw new Error('Failed to generate assessment');
+      }
+    });
+  }
+
+  /**
+   * Generate a personalized curriculum based on topic and assessment results
+   */
+  async generateCurriculum(topic: string, assessmentResults?: { score: number; weakAreas: string[] }): Promise<{
+    title: string;
+    description: string;
+    modules: Array<{
+      title: string;
+      description: string;
+      estimated_time: number;
+      difficulty: string;
+      order_index: number;
+      checkpoints?: Array<{ title: string; description: string }>;
+    }>
+  }> {
+    // Don't cache curriculum generation as it depends on specific assessment results which might vary
+    try {
+      let prompt = `Create a comprehensive learning curriculum for "${topic}".`;
+
+      if (assessmentResults) {
+        prompt += `\nThe student scored ${assessmentResults.score}% on the diagnostic assessment.`;
+        if (assessmentResults.weakAreas.length > 0) {
+          prompt += `\nFocus specifically on these weak areas: ${assessmentResults.weakAreas.join(', ')}.`;
+        }
+        if (assessmentResults.score > 80) {
+          prompt += `\nThe student is advanced. Skip basics and focus on advanced concepts and best practices.`;
+        } else if (assessmentResults.score < 40) {
+          prompt += `\nThe student is a beginner. Start from the fundamentals.`;
+        }
+      }
+
+      prompt += `\nReturn ONLY a JSON object with this structure:
+      {
+        "title": "Course Title",
+        "description": "Course Description",
+        "modules": [
+          {
+            "title": "Module Title",
+            "description": "Module Description",
+            "estimated_time": 30, // minutes
+            "difficulty": "beginner|intermediate|advanced",
+            "order_index": 0,
+            "checkpoints": [
+              { "title": "Topic 1", "description": "Brief description" },
+              { "title": "Topic 2", "description": "Brief description" }
+            ]
+          }
+        ]
+      }
+      Generate 5-8 modules, each with 3-5 checkpoints.`;
+
+      const response = await this.createChatCompletion({
+        model: this.config.model,
+        messages: [
+          { role: 'system', content: 'You are an expert curriculum designer.' },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.7,
+      });
+
+      const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
+      if (!content) throw new Error('No content from AI');
+
+      return JSON.parse(content);
+    } catch (error) {
+      console.error('Error generating curriculum:', error);
+      throw new Error('Failed to generate curriculum');
+    }
+  }
+
+  /**
+   * Chat with a learning module, returning structured data for rich UI
+   */
+  async chatWithModule(
+    message: string,
+    context: string,
+    history: Array<{ role: string; content: string }>
+  ): Promise<{
+    response: string;
+    quiz?: { question: string; options: string[]; correctAnswer: number };
+    code?: { language: string; snippet: string };
+    mastery_achieved: boolean;
+  }> {
+    try {
+      const systemPrompt = `You are an expert AI tutor.
+      Context:
+      ${context}
+
+      Your goal is to help the user master the current topic.
+      
+      IMPORTANT:
+      - Return ONLY a JSON object.
+      - If the user demonstrates mastery of the CURRENT topic/checkpoint, set "mastery_achieved" to true.
+      - If you want to test the user, include a "quiz" object.
+      - If you want to show code, include a "code" object.
+      - Keep "response" friendly and helpful.
+
+      JSON Structure:
+      {
+        "response": "Your text response here (markdown supported)",
+        "quiz": { // Optional
+          "question": "Quiz question",
+          "options": ["A", "B", "C", "D"],
+          "correctAnswer": 0
+        },
+        "code": { // Optional
+          "language": "javascript",
+          "snippet": "console.log('Hello');"
+        },
+        "mastery_achieved": boolean // Set to true ONLY if user has mastered the current checkpoint
+      }`;
+
+      const messages = [
+        { role: 'system', content: systemPrompt },
+        ...history.map(h => ({ role: h.role as 'user' | 'assistant' | 'system', content: h.content })),
+        { role: 'user', content: message }
+      ];
+
+      const response = await this.createChatCompletion({
+        model: this.config.model,
+        messages,
+        temperature: 0.7,
+        response_format: { type: "json_object" }
+      });
+
+      const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
+      if (!content) throw new Error('No content from AI');
+
+      const jsonContent = content.replace(/```json\n?|\n?```/g, '');
+      return JSON.parse(jsonContent);
+    } catch (error) {
+      console.error('Error in chatWithModule:', error);
+      return {
+        response: "I'm having trouble processing that. Could you rephrase?",
+        mastery_achieved: false
+      };
+    }
+  }
+
+  async analyzeUrlContent(content: string, originalQuery: string): Promise<{ found: boolean, answer?: string, confidence: number, summary?: string }> {
     const cacheKey = this.getCacheKey('analyzeUrlContent', { content: content.substring(0, 1000), originalQuery }); // Use first 1000 chars for cache key
     const cached = this.getCachedResponse(cacheKey);
     if (cached) return cached;
@@ -834,7 +1019,7 @@ class AIService {
         });
 
         const content_response = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
-        let result: {found: boolean, answer?: string, confidence: number, summary?: string};
+        let result: { found: boolean, answer?: string, confidence: number, summary?: string };
         if (content_response) {
           try {
             const analysis = JSON.parse(content_response);
@@ -1013,28 +1198,28 @@ Be methodical and thorough. Don't provide finalAnswer unless you have concrete e
         }
       }
 
-       // Final progress update
-       progressCallback?.({
-         phase: 'Sequential Thinking Complete',
-         step: totalThoughts,
-         totalSteps: totalThoughts,
-         details: confidence > 70 ? `Found confident answer with ${confidence}% certainty` : 'Synthesizing final answer from research...'
-       });
+      // Final progress update
+      progressCallback?.({
+        phase: 'Sequential Thinking Complete',
+        step: totalThoughts,
+        totalSteps: totalThoughts,
+        details: confidence > 70 ? `Found confident answer with ${confidence}% certainty` : 'Synthesizing final answer from research...'
+      });
 
-       // If no high-confidence answer was found during thinking, try to synthesize one
-       if (!finalAnswer || confidence <= 70) {
-         const synthesis = await this.synthesizeFinalAnswer(query, thoughtProcess);
-         if (synthesis.confidence > confidence) {
-           finalAnswer = synthesis.answer;
-           confidence = synthesis.confidence;
-         }
-       }
+      // If no high-confidence answer was found during thinking, try to synthesize one
+      if (!finalAnswer || confidence <= 70) {
+        const synthesis = await this.synthesizeFinalAnswer(query, thoughtProcess);
+        if (synthesis.confidence > confidence) {
+          finalAnswer = synthesis.answer;
+          confidence = synthesis.confidence;
+        }
+      }
 
-       return {
-         finalAnswer: finalAnswer || 'Unable to find a confident answer through sequential thinking',
-         thoughtProcess,
-         confidence
-       };
+      return {
+        finalAnswer: finalAnswer || 'Unable to find a confident answer through sequential thinking',
+        thoughtProcess,
+        confidence
+      };
     } catch (error) {
       console.warn('Error in sequential thinking:', error);
       return {
@@ -1108,19 +1293,19 @@ Be methodical and thorough. Don't provide finalAnswer unless you have concrete e
   /**
     * Synthesize a final answer from the thought process
     */
-   async synthesizeFinalAnswer(query: string, thoughtProcess: Array<{
-     thoughtNumber: number;
-     thought: string;
-     action?: string;
-     result?: string;
-     nextThoughtNeeded: boolean;
-   }>): Promise<{answer: string, confidence: number}> {
-     try {
-       const thoughtsText = thoughtProcess.map(t =>
-         `Thought ${t.thoughtNumber}: ${t.thought}${t.action ? ` | Action: ${t.action}` : ''}${t.result ? ` | Result: ${t.result}` : ''}`
-       ).join('\n');
+  async synthesizeFinalAnswer(query: string, thoughtProcess: Array<{
+    thoughtNumber: number;
+    thought: string;
+    action?: string;
+    result?: string;
+    nextThoughtNeeded: boolean;
+  }>): Promise<{ answer: string, confidence: number }> {
+    try {
+      const thoughtsText = thoughtProcess.map(t =>
+        `Thought ${t.thoughtNumber}: ${t.thought}${t.action ? ` | Action: ${t.action}` : ''}${t.result ? ` | Result: ${t.result}` : ''}`
+      ).join('\n');
 
-       const systemPrompt = `You are a research synthesizer. Analyze the thought process below and extract a concise, final answer to the query: "${query}"
+      const systemPrompt = `You are a research synthesizer. Analyze the thought process below and extract a concise, final answer to the query: "${query}"
 
 Thought Process:
 ${thoughtsText}
@@ -1138,70 +1323,70 @@ Return a JSON object:
   "confidence": 0-100 (based on evidence quality and consistency)
 }`;
 
-        const response = await this.createChatCompletion({
-          model: this.config.model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: `Synthesize a final answer from this research on: ${query}` }
-          ],
-          temperature: 0.1,
-        });
+      const response = await this.createChatCompletion({
+        model: this.config.model,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Synthesize a final answer from this research on: ${query}` }
+        ],
+        temperature: 0.1,
+      });
 
-       const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
-       if (content) {
-         try {
-           const synthesis = JSON.parse(content);
-           return {
-             answer: synthesis.answer || 'No confident answer found',
-             confidence: synthesis.confidence || 0
-           };
-         } catch (error) {
-           console.warn('Error parsing synthesis:', error);
-           return { answer: 'Unable to synthesize answer from research', confidence: 0 };
-         }
-       }
-       return { answer: 'Research completed but no clear answer synthesized', confidence: 0 };
-     } catch (error) {
-       console.warn('Error synthesizing final answer:', error);
-       return { answer: 'Error during answer synthesis', confidence: 0 };
-     }
-   }
+      const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
+      if (content) {
+        try {
+          const synthesis = JSON.parse(content);
+          return {
+            answer: synthesis.answer || 'No confident answer found',
+            confidence: synthesis.confidence || 0
+          };
+        } catch (error) {
+          console.warn('Error parsing synthesis:', error);
+          return { answer: 'Unable to synthesize answer from research', confidence: 0 };
+        }
+      }
+      return { answer: 'Research completed but no clear answer synthesized', confidence: 0 };
+    } catch (error) {
+      console.warn('Error synthesizing final answer:', error);
+      return { answer: 'Error during answer synthesis', confidence: 0 };
+    }
+  }
 
   /**
     * Get current date and time information
     */
-   getCurrentDateTime(timezone: string = 'UTC'): {
-     full: string;
-     date: string;
-     time: string;
-     day: string;
-     timestamp: number;
-   } {
-     const now = new Date();
-     const options: Intl.DateTimeFormatOptions = {
-       timeZone: timezone,
-       year: 'numeric',
-       month: 'long',
-       day: 'numeric',
-       hour: '2-digit',
-       minute: '2-digit',
-       second: '2-digit',
-       weekday: 'long'
-     };
+  getCurrentDateTime(timezone: string = 'UTC'): {
+    full: string;
+    date: string;
+    time: string;
+    day: string;
+    timestamp: number;
+  } {
+    const now = new Date();
+    const options: Intl.DateTimeFormatOptions = {
+      timeZone: timezone,
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      weekday: 'long'
+    };
 
-     const full = now.toLocaleString('en-US', options);
-     const date = now.toLocaleDateString('en-US', { timeZone: timezone, year: 'numeric', month: 'long', day: 'numeric' });
-     const time = now.toLocaleTimeString('en-US', { timeZone: timezone, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-     const day = now.toLocaleDateString('en-US', { timeZone: timezone, weekday: 'long' });
+    const full = now.toLocaleString('en-US', options);
+    const date = now.toLocaleDateString('en-US', { timeZone: timezone, year: 'numeric', month: 'long', day: 'numeric' });
+    const time = now.toLocaleTimeString('en-US', { timeZone: timezone, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const day = now.toLocaleDateString('en-US', { timeZone: timezone, weekday: 'long' });
 
-     return {
-       full,
-       date,
-       time,
-       day,
-       timestamp: now.getTime()
-       };
-    }
+    return {
+      full,
+      date,
+      time,
+      day,
+      timestamp: now.getTime()
+    };
+  }
 
   /**
    * Get the AI service configuration
@@ -2079,12 +2264,14 @@ Return a JSON object with assignment details including estimated time.`;
           });
 
           // Group by subject and calculate performance metrics
-          const subjectPerformance: { [subjectName: string]: {
-            totalScore: number;
-            totalTime: number;
-            completedModules: number;
-            skills: string[];
-          }} = {};
+          const subjectPerformance: {
+            [subjectName: string]: {
+              totalScore: number;
+              totalTime: number;
+              completedModules: number;
+              skills: string[];
+            }
+          } = {};
 
           for (const progress of progressRecords) {
             const subjectName = progress.module.subject.name;
@@ -2301,7 +2488,7 @@ Return a JSON object with assignment details including estimated time.`;
     // Use request deduplication
     return this.getDeduplicatedRequest(cacheKey, async () => {
       try {
-      const contextPrompt = `
+        const contextPrompt = `
 Subject: ${subjectName}
 Module: ${moduleTitle}
 Content: ${moduleContent.substring(0, 200)}...
@@ -2315,7 +2502,7 @@ Generate an adaptive assignment that:
 4. Provides AI assistance at each step
       `.trim();
 
-      const systemPrompt = `You are an adaptive learning AI that creates personalized assignments based on user learning profiles.
+        const systemPrompt = `You are an adaptive learning AI that creates personalized assignments based on user learning profiles.
 
 ${contextPrompt}
 
@@ -2323,64 +2510,64 @@ Create an assignment with multiple steps that progressively build skills. Choose
 
 Return a JSON object with assignment details.`;
 
-      const response = await this.createChatCompletion({
-        model: this.config.model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Create an adaptive assignment for ${subjectName}` }
-        ],
-        temperature: 0.7,
-      });
+        const response = await this.createChatCompletion({
+          model: this.config.model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: `Create an adaptive assignment for ${subjectName}` }
+          ],
+          temperature: 0.7,
+        });
 
-      const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
-      if (content) {
-        try {
-          const result = JSON.parse(content);
-          return result;
-        } catch (error) {
-          console.warn('Error parsing adaptive assignment generation:', error);
-          return {
-            assignment: {
-              title: `Adaptive ${subjectName} Assignment`,
-              type: 'structured',
-              description: `Personalized assignment for ${subjectName}`,
-              steps: [],
-              modalities: ['text'],
-              difficulty: 'intermediate',
-              estimated_time: 30
-            },
-            reasoning: 'Fallback assignment due to parsing error'
-          };
+        const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
+        if (content) {
+          try {
+            const result = JSON.parse(content);
+            return result;
+          } catch (error) {
+            console.warn('Error parsing adaptive assignment generation:', error);
+            return {
+              assignment: {
+                title: `Adaptive ${subjectName} Assignment`,
+                type: 'structured',
+                description: `Personalized assignment for ${subjectName}`,
+                steps: [],
+                modalities: ['text'],
+                difficulty: 'intermediate',
+                estimated_time: 30
+              },
+              reasoning: 'Fallback assignment due to parsing error'
+            };
+          }
         }
-      }
 
-      return {
-        assignment: {
-          title: `Adaptive ${subjectName} Assignment`,
-          type: 'structured',
-          description: `Personalized assignment for ${subjectName}`,
-          steps: [],
-          modalities: ['text'],
-          difficulty: 'intermediate',
-          estimated_time: 30
-        },
-        reasoning: 'Default assignment generation'
-      };
-     } catch (error) {
-       console.warn('Error generating adaptive assignment:', error);
-       return {
-         assignment: {
-           title: `Adaptive ${subjectName} Assignment`,
-           type: 'structured',
-           description: `Personalized assignment for ${subjectName}`,
-           steps: [],
-           modalities: ['text'],
-           difficulty: 'intermediate',
-           estimated_time: 30
-         },
-         reasoning: 'Error fallback assignment'
-       };
-     }
+        return {
+          assignment: {
+            title: `Adaptive ${subjectName} Assignment`,
+            type: 'structured',
+            description: `Personalized assignment for ${subjectName}`,
+            steps: [],
+            modalities: ['text'],
+            difficulty: 'intermediate',
+            estimated_time: 30
+          },
+          reasoning: 'Default assignment generation'
+        };
+      } catch (error) {
+        console.warn('Error generating adaptive assignment:', error);
+        return {
+          assignment: {
+            title: `Adaptive ${subjectName} Assignment`,
+            type: 'structured',
+            description: `Personalized assignment for ${subjectName}`,
+            steps: [],
+            modalities: ['text'],
+            difficulty: 'intermediate',
+            estimated_time: 30
+          },
+          reasoning: 'Error fallback assignment'
+        };
+      }
     });
   }
 
@@ -2505,13 +2692,13 @@ Be specific, actionable, and supportive.`;
           role: 'system' | 'user';
           content: string | VisionMessage[];
         }> = [
-          {
-            role: 'system',
-            content: 'You are an expert at analyzing images for educational purposes. Provide detailed, accurate analysis of images including descriptions, objects identified, any text content, and educational insights.'
-          },
-          {
-            role: 'user',
-            content: `Please analyze this image${context ? ` in the context of: ${context}` : ''}. Image: ${imageUrl}
+            {
+              role: 'system',
+              content: 'You are an expert at analyzing images for educational purposes. Provide detailed, accurate analysis of images including descriptions, objects identified, any text content, and educational insights.'
+            },
+            {
+              role: 'user',
+              content: `Please analyze this image${context ? ` in the context of: ${context}` : ''}. Image: ${imageUrl}
 
 Provide:
 1. A detailed description
@@ -2519,8 +2706,8 @@ Provide:
 3. Any text content visible
 4. Key educational concepts
 5. Confidence level (0-100)`
-          }
-        ];
+            }
+          ];
 
         const request: VisionRequest = {
           model: this.config.model,
@@ -2561,28 +2748,28 @@ Provide:
           role: 'system' | 'user';
           content: string | VisionMessage[];
         }> = [
-          {
-            role: 'system',
-            content: `You are an expert at analyzing educational diagrams and visualizations in ${subject || 'various subjects'}. Identify diagram types, key elements, relationships, and educational applications.`
-          },
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'image_url',
-                image_url: { url: imageUrl }
-              },
-              {
-                type: 'text',
-                text: `Analyze this diagram${subject ? ` for ${subject}` : ''}. Identify:
+            {
+              role: 'system',
+              content: `You are an expert at analyzing educational diagrams and visualizations in ${subject || 'various subjects'}. Identify diagram types, key elements, relationships, and educational applications.`
+            },
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'image_url',
+                  image_url: { url: imageUrl }
+                },
+                {
+                  type: 'text',
+                  text: `Analyze this diagram${subject ? ` for ${subject}` : ''}. Identify:
 1. Diagram type (flowchart, mind map, concept map, timeline, etc.)
 2. Key elements and concepts
 3. Relationships between elements
 4. Educational applications and learning objectives`
-              }
-            ]
-          }
-        ];
+                }
+              ]
+            }
+          ];
 
         const request: VisionRequest = {
           model: this.config.model,
@@ -2616,24 +2803,24 @@ Provide:
           role: 'system' | 'user';
           content: string | VisionMessage[];
         }> = [
-          {
-            role: 'system',
-            content: 'You are an educational content creator. Generate clear, concise descriptions of images that help students learn and understand concepts.'
-          },
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'image_url',
-                image_url: { url: imageUrl }
-              },
-              {
-                type: 'text',
-                text: `Generate a clear, educational description of this image${learningContext ? ` for learning about: ${learningContext}` : ''}. Focus on key visual elements and their educational significance.`
-              }
-            ]
-          }
-        ];
+            {
+              role: 'system',
+              content: 'You are an educational content creator. Generate clear, concise descriptions of images that help students learn and understand concepts.'
+            },
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'image_url',
+                  image_url: { url: imageUrl }
+                },
+                {
+                  type: 'text',
+                  text: `Generate a clear, educational description of this image${learningContext ? ` for learning about: ${learningContext}` : ''}. Focus on key visual elements and their educational significance.`
+                }
+              ]
+            }
+          ];
 
         const request: VisionRequest = {
           model: this.config.model,
@@ -2753,7 +2940,7 @@ Provide:
   }
 
   // MCP-enabled methods
-  async enhanceSearchQueryWithMCP(userQuery: string, mcpCredentials?: Record<string, string>, conversation?: Array<{type: string, content: string}>, timezone?: string): Promise<{
+  async enhanceSearchQueryWithMCP(userQuery: string, mcpCredentials?: Record<string, string>, conversation?: Array<{ type: string, content: string }>, timezone?: string): Promise<{
     intent: 'search' | 'chat';
     enhancedQuery: string;
     searchTerms: string[];
@@ -2781,12 +2968,12 @@ Provide:
       // Use MCP for enhanced reasoning on complex queries
       const queryLower = userQuery.toLowerCase();
       const isComplexQuery = queryLower.includes('how') ||
-                            queryLower.includes('why') ||
-                            queryLower.includes('explain') ||
-                            queryLower.includes('analyze') ||
-                            queryLower.includes('plan') ||
-                            queryLower.length > 100 ||
-                            (conversation && conversation.length > 2);
+        queryLower.includes('why') ||
+        queryLower.includes('explain') ||
+        queryLower.includes('analyze') ||
+        queryLower.includes('plan') ||
+        queryLower.length > 100 ||
+        (conversation && conversation.length > 2);
 
       if (isComplexQuery) {
         try {
@@ -2855,7 +3042,7 @@ Provide:
     stream?: boolean,
     useMCP?: boolean,
     mcpCredentials?: Record<string, string>,
-    conversation?: Array<{type: string, content: string}>
+    conversation?: Array<{ type: string, content: string }>
   ): Promise<string | AsyncIterable<any>> {
     try {
       // Check if MCP should be used

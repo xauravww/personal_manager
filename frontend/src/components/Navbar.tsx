@@ -7,7 +7,6 @@ import {
   Menu,
   X,
   Bell,
-  User,
   ChevronDown,
   LogOut,
   UserCircle,

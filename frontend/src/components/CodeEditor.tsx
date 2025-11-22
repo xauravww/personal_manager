@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Play, RotateCcw, Copy, Check, Terminal, AlertCircle } from 'lucide-react';
 
 interface CodeEditorProps {
@@ -42,14 +42,14 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
       textarea.addEventListener('keydown', handleKeyDown);
       return () => textarea.removeEventListener('keydown', handleKeyDown);
     }
-  }, [code]);
+  }, [handleRun]);
 
   const handleCodeChange = (value: string) => {
     setCode(value);
     onCodeChange?.(value);
   };
 
-  const handleRun = async () => {
+  const handleRun = useCallback(async () => {
     if (!onRun) return;
 
     setIsRunning(true);
@@ -63,7 +63,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     } finally {
       setIsRunning(false);
     }
-  };
+  }, [onRun, code]);
 
   const handleReset = () => {
     setCode(initialCode);
@@ -81,27 +81,7 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     }
   };
 
-  const getLanguageSyntax = (lang: string) => {
-    switch (lang.toLowerCase()) {
-      case 'javascript':
-      case 'js':
-        return 'javascript';
-      case 'python':
-      case 'py':
-        return 'python';
-      case 'java':
-        return 'java';
-      case 'cpp':
-      case 'c++':
-        return 'cpp';
-      case 'html':
-        return 'html';
-      case 'css':
-        return 'css';
-      default:
-        return 'text';
-    }
-  };
+
 
   return (
     <div className="border border-gray-300 rounded-lg overflow-hidden bg-white">

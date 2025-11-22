@@ -606,6 +606,30 @@ router.get('/', [
       ...(useMCP && mcpSummary && { mcpSummary }),
     } : null;
 
+    // Log the search
+    try {
+      const filters = JSON.stringify({
+        type: type || null,
+        tags: tagsParam ? tagsParam.split(',').map(t => t.trim()) : null,
+        focusMode,
+        forceWebSearch,
+        useMCP,
+      });
+
+      await prisma.searchLog.create({
+        data: {
+          user_id: userId,
+          query: searchQuery || '',
+          filters,
+          result_count: resources.length,
+          search_type: isChat ? 'chat' : (forceWebSearch ? 'web_search' : 'basic'),
+        },
+      });
+    } catch (logError) {
+      console.warn('Failed to log search:', logError);
+      // Don't fail the search if logging fails
+    }
+
     res.json({
       success: true,
       data: {

@@ -1,5 +1,12 @@
 // API Client for Personal Resource Manager Backend
 
+// Interface for dashboard statistics
+interface DashboardStats {
+  totalResources: number;
+  addedThisWeek: number;
+  searchesToday: number;
+}
+
 // Determine API base URL based on environment and proxy settings
 const getApiBaseUrl = () => {
   const proxyUrl = import.meta.env.VITE_PROXY_URL;
@@ -292,6 +299,11 @@ class ApiClient {
 
     const query = searchParams.toString();
     return this.request(`/resources${query ? `?${query}` : ''}`);
+  }
+
+  // New method to fetch dashboard stats
+  async getDashboardStats(): Promise<ApiResponse<{ totalResources: number; addedThisWeek: number; searchesToday: number }>> {
+    return this.request('/dashboard/stats');
   }
 
   async getResource(id: string): Promise<ApiResponse<Resource>> {

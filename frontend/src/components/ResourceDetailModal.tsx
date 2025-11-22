@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   X,
   Edit3,
   Trash2,
   Share2,
   Download,
-  Copy,
   Check,
   Calendar,
   Tag,
@@ -15,8 +14,7 @@ import {
   ExternalLink,
   AlertTriangle,
   Loader2,
-  Save,
-  MoreVertical
+  Save
 } from 'lucide-react';
 
 interface Resource {
@@ -77,15 +75,15 @@ const ResourceDetailModal: React.FC<ResourceDetailModalProps> = ({
       document.removeEventListener('keydown', handleEscape);
       document.body.style.overflow = 'unset';
     };
-  }, [isOpen]);
+  }, [isOpen, handleClose]);
 
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     if (isEditing) {
       setIsEditing(false);
     } else {
       onClose();
     }
-  };
+  }, [isEditing, onClose]);
 
   const handleSave = async () => {
     if (!resource) return;
@@ -487,7 +485,7 @@ const ResourceDetailModal: React.FC<ResourceDetailModalProps> = ({
                 <h3 className="text-lg font-semibold text-gray-900">Delete Resource</h3>
               </div>
               <p className="text-gray-600 mb-6">
-                Are you sure you want to delete "{resource.title}"? This action cannot be undone.
+                Are you sure you want to delete &quot;{resource.title}&quot;? This action cannot be undone.
               </p>
               <div className="flex items-center justify-end space-x-3">
                 <button

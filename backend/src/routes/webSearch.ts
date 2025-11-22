@@ -3,6 +3,7 @@ import { body, validationResult } from 'express-validator';
 import { authenticateToken } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
 import { performWebSearch, formatWebSearchResults, WebSearchOptions } from '../utils/webSearch';
+import prisma from '../config/database';
 
 const router = express.Router();
 
@@ -170,6 +171,33 @@ router.post('/', [
     const searchResults = await performWebSearch(query, options);
     const formatted = formatWebSearchResults(searchResults);
     const processingTime = Date.now() - startTime;
+
+    // Log the web search
+    try {
+      const filters = JSON.stringify({
+        pageno,
+        time_range,
+        categories,
+        engines,
+        enabled_engines,
+        disabled_engines,
+        language,
+        safesearch,
+      });
+
+      await prisma.searchLog.create({
+        data: {
+          user_id: req.user!.id,
+          query,
+          filters,
+          result_count: searchResults.results?.length || 0,
+          search_type: 'web_search',
+        },
+      });
+    } catch (logError) {
+      console.warn('Failed to log web search:', logError);
+      // Don't fail the search if logging fails
+    }
 
     res.json({
       success: true,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ArrowRight, TrendingUp, Lightbulb, Target, BookOpen } from 'lucide-react';
 import { apiClient } from '../api/client';
 
@@ -42,9 +42,9 @@ const CrossDomainInsights: React.FC<CrossDomainInsightsProps> = ({
     if (currentSubject && learningHistory.length > 0) {
       loadInsights();
     }
-  }, [currentSubject, learningHistory]);
+  }, [currentSubject, learningHistory, loadInsights]);
 
-  const loadInsights = async () => {
+  const loadInsights = useCallback(async () => {
     setIsLoading(true);
     try {
       const response = await apiClient.analyzeCrossDomainSkills(currentSubject, learningHistory);
@@ -56,7 +56,7 @@ const CrossDomainInsights: React.FC<CrossDomainInsightsProps> = ({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [currentSubject, learningHistory]);
 
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {

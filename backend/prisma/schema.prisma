@@ -18,15 +18,16 @@ model User {
   created_at    DateTime @default(now()) @map("created_at")
   updated_at    DateTime @updatedAt @map("updated_at")
 
-  // Relations
-  resources Resource[]
-  tags      Tag[]
-  learningSubjects LearningSubject[]
-  learningProgress LearningProgress[]
-  assignmentSubmissions AssignmentSubmission[]
-  weakPoints WeakPoint[]
-  mindmaps MindMap[]
-  learningDNA UserLearningDNA?
+   // Relations
+   resources Resource[]
+   tags      Tag[]
+   learningSubjects LearningSubject[]
+   learningProgress LearningProgress[]
+   assignmentSubmissions AssignmentSubmission[]
+   weakPoints WeakPoint[]
+   mindmaps MindMap[]
+   learningDNA UserLearningDNA?
+   searchLogs SearchLog[]
 
   @@map("users")
 }
@@ -244,4 +245,19 @@ model UserLearningDNA {
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@map("user_learning_dna")
+}
+
+model SearchLog {
+  id          String   @id @default(uuid())
+  user_id     String
+  query       String
+  filters     String?  // JSON string of applied filters
+  result_count Int     @default(0)
+  search_type String   @default("basic") // "basic", "deep_research", "web_search"
+  created_at  DateTime @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("search_logs")
 }

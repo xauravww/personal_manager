@@ -1,15 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import {
-  MessageSquare,
   Bot,
   User,
   Send,
   X,
-  BookOpen,
-  Target,
-  Clock,
-  TrendingUp,
   CheckCircle,
   Loader2,
   Zap,
@@ -286,7 +281,7 @@ Ready to generate your custom course?`;
                       <span className="font-medium text-gray-900">Ready to Generate Your Course!</span>
                     </div>
                     <p className="text-sm text-gray-700 mb-4">
-                      I've gathered all the information needed to create your personalized {subjectName} course.
+                      I&apos;ve gathered all the information needed to create your personalized {subjectName} course.
                     </p>
                     <button
                       onClick={generateCourse}

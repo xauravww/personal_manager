@@ -1,10 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import {
-  Search, X, BookOpen, Zap, GraduationCap, ChevronDown, ExternalLink,
-  FileText, StickyNote, Tag, Loader2, Bot, User, Plus, Brain, Lightbulb,
-  Target, CheckCircle, AlertCircle, Clock, MessageSquare, Sparkles,
-  ArrowRight, ChevronRight, Globe, Layers, Command, Microscope, LayoutGrid
+  Search, Zap, GraduationCap, Loader2, Plus, Brain, CheckCircle,
+  ArrowRight, Globe, Command, LayoutGrid
 } from 'lucide-react';
 import { apiClient } from '../api/client';
 
@@ -48,12 +46,10 @@ const SearchInterface: React.FC = () => {
   const [focusMode, setFocusMode] = useState<FocusMode>('general');
   const [searchMode, setSearchMode] = useState<SearchMode>('normal');
   const [includeWebSearch, setIncludeWebSearch] = useState<boolean>(false);
-  const [useSequentialThinking, setUseSequentialThinking] = useState<boolean>(false);
   const [userTimezone, setUserTimezone] = useState<string>('UTC');
 
   const [query, setQuery] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [searchHistory, setSearchHistory] = useState<string[]>([]);
 
   // Learning Context
   const [learningContext, setLearningContext] = useState<any>(null);
@@ -65,9 +61,8 @@ const SearchInterface: React.FC = () => {
     currentStep: string;
     status: 'idle' | 'searching' | 'thinking' | 'reading' | 'analyzing' | 'complete' | 'error';
     currentThought?: any;
-    actionLog: string[];
+    actionLog?: string[];
   } | null>(null);
-  const [deepResearchEventSource, setDeepResearchEventSource] = useState<EventSource | null>(null);
 
   // Conversation State
   const [conversation, setConversation] = useState<ConversationMessage[]>([]);
@@ -165,7 +160,7 @@ const SearchInterface: React.FC = () => {
 
   // --- Handlers ---
 
-  const handleSearch = async (searchQuery: string) => {
+  const handleSearch = useCallback(async (searchQuery: string) => {
     if (!searchQuery.trim()) return;
 
     setIsInitialState(false);
@@ -264,7 +259,7 @@ const SearchInterface: React.FC = () => {
           timezone: userTimezone,
           focusMode,
           forceWebSearch: includeWebSearch,
-          useMCP: useSequentialThinking,
+          useMCP: false,
           conversation: conversation.slice(-5).map(m => ({ type: m.type, content: m.content })),
           learningContext
         });
@@ -332,7 +327,7 @@ const SearchInterface: React.FC = () => {
         timestamp: new Date()
       }]);
     }
-  };
+  }, [searchMode, userTimezone, includeWebSearch, learningContext, conversation, focusMode]);
 
   // --- Helpers ---
   const formatActionText = (thought: any) => {

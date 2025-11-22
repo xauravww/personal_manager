@@ -136,7 +136,68 @@ router.post('/url', async (req: Request, res: Response) => {
 
         console.log('🔗 Fetching URL:', url);
 
-        // Fetch URL content
+        // Detect Instagram URLs (posts or reels)
+        const isInstagram = /https?:\/\/([a-z]+\.)?instagram\.com\//i.test(url);
+
+        if (isInstagram) {
+            // Simple Instagram metadata extraction using cheerio (no headless browser)
+            const response = await axios.get(url, {
+                timeout: 10000,
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (compatible; NexusBrain/1.0)'
+                }
+            });
+            const html = response.data;
+            const $ = cheerio.load(html);
+
+            const ogTitle = $('meta[property="og:title"]').attr('content') || '';
+            const ogDescription = $('meta[property="og:description"]').attr('content') || '';
+            const ogImage = $('meta[property="og:image"]').attr('content') || '';
+            const ogVideo = $('meta[property="og:video"]').attr('content') || '';
+
+            // Use AI to further analyze extracted text
+            const aiResult = await aiService.analyzeAndCategorizeContent(`${ogTitle}\n${ogDescription}`);
+
+            // Generate embedding from AI summary
+            const embedding = await embeddingService.generateEmbedding(aiResult.summary);
+
+            // Create resource entry
+            const resource = await prisma.resource.create({
+                data: {
+                    user_id: userId,
+                    title: aiResult.title || ogTitle,
+                    description: aiResult.description || ogDescription,
+                    type: aiResult.category,
+                    content: `${ogTitle}\n${ogDescription}`,
+                    url,
+                    metadata: { ...aiResult, ogTitle, ogDescription, ogImage, ogVideo },
+                    embedding: JSON.stringify(embedding)
+                }
+            });
+
+            // Upsert tags from AI results
+            await Promise.all(aiResult.tags.map(async (tagName: string) => {
+                const tag = await prisma.tag.upsert({
+                    where: {
+                        user_id_name: {
+                            name: tagName.toLowerCase(),
+                            user_id: userId
+                        }
+                    },
+                    update: {},
+                    create: { name: tagName.toLowerCase(), user_id: userId }
+                });
+                // Connect tag to resource via many-to-many relation
+                await prisma.resource.update({
+                    where: { id: resource.id },
+                    data: { tags: { connect: { id: tag.id } } }
+                });
+            }));
+
+            return res.json({ success: true, resource });
+        }
+
+        // Existing generic URL handling
         const response = await axios.get(url, {
             timeout: 10000,
             headers: {

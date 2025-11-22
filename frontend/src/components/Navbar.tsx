@@ -67,9 +67,8 @@ const Navbar: React.FC<NavbarProps> = ({ showNavigation = true }) => {
 
       {/* Mobile Navigation Sidebar */}
       <div
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform md:hidden ${
-            sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        } transition-transform duration-300 ease-in-out`}
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform md:hidden ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          } transition-transform duration-300 ease-in-out`}
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
@@ -81,11 +80,11 @@ const Navbar: React.FC<NavbarProps> = ({ showNavigation = true }) => {
             >
               <svg width="140" height="32" viewBox="0 0 140 32" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-8 w-auto">
                 {/* Book Icon */}
-                <rect x="2" y="6" width="16" height="20" rx="2" fill="#2563EB"/>
-                <path d="M6 10h8M6 14h8M6 18h6" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
-                <path d="M10 6v20" stroke="#2563EB" strokeWidth="2" strokeLinecap="round"/>
-                <circle cx="10" cy="4" r="2" fill="#2563EB"/>
-                <circle cx="10" cy="28" r="2" fill="#2563EB"/>
+                <rect x="2" y="6" width="16" height="20" rx="2" fill="#2563EB" />
+                <path d="M6 10h8M6 14h8M6 18h6" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M10 6v20" stroke="#2563EB" strokeWidth="2" strokeLinecap="round" />
+                <circle cx="10" cy="4" r="2" fill="#2563EB" />
+                <circle cx="10" cy="28" r="2" fill="#2563EB" />
 
                 {/* Text */}
                 <text x="26" y="22" fontFamily="system-ui, -apple-system, sans-serif" fontSize="14" fontWeight="700" fill="#111827">Personal Manager</text>
@@ -98,20 +97,18 @@ const Navbar: React.FC<NavbarProps> = ({ showNavigation = true }) => {
             {navigation.map((item) => {
               const isCurrent = location.pathname === item.href;
               return (
-                 <Link
-                   key={item.name}
-                   to={item.href}
-                   className={`group flex items-center px-3 py-2 text-base font-medium rounded-md transition-all duration-200 ${
-                     isCurrent
-                       ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-700'
-                       : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                   }`}
-                   onClick={() => setSidebarOpen(false)}
-                 >
-                  <item.icon
-                    className={`mr-3 h-5 w-5 flex-shrink-0 ${
-                      isCurrent ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-500'
+                <Link
+                  key={item.name}
+                  to={item.href}
+                  className={`group flex items-center px-3 py-2 text-base font-medium rounded-md transition-all duration-200 ${isCurrent
+                    ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-700'
+                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
                     }`}
+                  onClick={() => setSidebarOpen(false)}
+                >
+                  <item.icon
+                    className={`mr-3 h-5 w-5 flex-shrink-0 ${isCurrent ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-500'
+                      }`}
                     strokeWidth={1.5}
                   />
                   {item.name}
@@ -154,11 +151,11 @@ const Navbar: React.FC<NavbarProps> = ({ showNavigation = true }) => {
               >
                 <svg width="140" height="32" viewBox="0 0 140 32" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-8 w-auto">
                   {/* Book Icon */}
-                  <rect x="2" y="6" width="16" height="20" rx="2" fill="#2563EB"/>
-                  <path d="M6 10h8M6 14h8M6 18h6" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
-                  <path d="M10 6v20" stroke="#2563EB" strokeWidth="2" strokeLinecap="round"/>
-                  <circle cx="10" cy="4" r="2" fill="#2563EB"/>
-                  <circle cx="10" cy="28" r="2" fill="#2563EB"/>
+                  <rect x="2" y="6" width="16" height="20" rx="2" fill="#2563EB" />
+                  <path d="M6 10h8M6 14h8M6 18h6" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
+                  <path d="M10 6v20" stroke="#2563EB" strokeWidth="2" strokeLinecap="round" />
+                  <circle cx="10" cy="4" r="2" fill="#2563EB" />
+                  <circle cx="10" cy="28" r="2" fill="#2563EB" />
 
                   {/* Text */}
                   <text x="26" y="22" fontFamily="system-ui, -apple-system, sans-serif" fontSize="14" fontWeight="700" fill="#111827">Personal Manager</text>
@@ -166,34 +163,33 @@ const Navbar: React.FC<NavbarProps> = ({ showNavigation = true }) => {
               </Link>
             </div>
 
-             {/* Center - Desktop Navigation */}
-             {showNavigation && (
-               <nav className="hidden md:flex space-x-8">
-                 {navigation.map((item) => {
-                   const isCurrent = location.pathname === item.href;
-                   return (
-                     <Link
-                       key={item.name}
-                       to={item.href}
-                       className={`inline-flex items-center px-3 py-2 text-base font-medium rounded-md transition-all duration-200 ${
-                         isCurrent
-                           ? 'bg-blue-50 text-blue-700'
-                           : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                       }`}
-                     >
-                       {item.name}
-                     </Link>
-                   );
-                 })}
-               </nav>
-             )}
+            {/* Center - Desktop Navigation */}
+            {showNavigation && (
+              <nav className="hidden md:flex space-x-8">
+                {navigation.map((item) => {
+                  const isCurrent = location.pathname === item.href;
+                  return (
+                    <Link
+                      key={item.name}
+                      to={item.href}
+                      className={`inline-flex items-center px-3 py-2 text-base font-medium rounded-md transition-all duration-200 ${isCurrent
+                        ? 'bg-blue-50 text-blue-700'
+                        : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                        }`}
+                    >
+                      {item.name}
+                    </Link>
+                  );
+                })}
+              </nav>
+            )}
 
             {/* Right side - Notifications, Profile */}
             <div className="flex items-center space-x-4">
-               {/* Notifications */}
-               <button className="p-2 text-gray-500 hover:text-gray-600 focus:outline-none">
-                 <Bell className="h-5 w-5" strokeWidth={1.5} />
-               </button>
+              {/* Notifications */}
+              <button className="p-2 text-gray-500 hover:text-gray-600 focus:outline-none">
+                <Bell className="h-5 w-5" strokeWidth={1.5} />
+              </button>
 
               {/* Profile dropdown */}
               <div className="relative" ref={dropdownRef}>
@@ -205,10 +201,10 @@ const Navbar: React.FC<NavbarProps> = ({ showNavigation = true }) => {
                     <div className="h-8 w-8 rounded-full bg-primary-100 flex items-center justify-center">
                       <UserCircle className="h-5 w-5 text-primary-600" strokeWidth={1.5} />
                     </div>
-                     <div className="hidden lg:block text-left">
-                       <p className="text-sm font-medium text-gray-700">{user?.name || 'User'}</p>
-                       <p className="text-xs text-gray-500">{user?.email}</p>
-                     </div>
+                    <div className="hidden lg:block text-left">
+                      <p className="text-sm font-medium text-gray-700">{user?.name || 'User'}</p>
+                      <p className="text-xs text-gray-500">{user?.email}</p>
+                    </div>
                     <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${profileDropdownOpen ? 'rotate-180' : ''}`} strokeWidth={1.5} />
                   </div>
                 </button>

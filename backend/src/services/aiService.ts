@@ -285,6 +285,65 @@ class AIService {
   }
 
   /**
+   * Analyze content and generate metadata (for Universal Capture)
+   */
+  async analyzeAndCategorizeContent(content: string): Promise<{
+    title: string;
+    description: string;
+    tags: string[];
+    category: 'note' | 'link' | 'document' | 'video';
+    summary: string;
+  }> {
+    try {
+      const response = await this.createChatCompletion({
+        model: this.config.model,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a content analysis expert. Analyze the given content and extract metadata. Respond ONLY with valid JSON in this exact format: {"title": "short title", "description": "brief description", "tags": ["tag1", "tag2", "tag3"], "category": "note|link|document|video", "summary": "concise summary"}'
+          },
+          {
+            role: 'user',
+            content: `Analyze this content and generate metadata:\n\n${content.substring(0, 2000)}`
+          }
+        ],
+        temperature: 0.3,
+        max_tokens: 500
+      });
+
+      const text = (response as ChatCompletionResponse).choices[0]?.message?.content || '{}';
+
+      // Parse JSON response
+      try {
+        const metadata = JSON.parse(text);
+
+        // Validate and return with defaults
+        return {
+          title: metadata.title || 'Untitled',
+          description: metadata.description || '',
+          tags: Array.isArray(metadata.tags) ? metadata.tags.slice(0, 5) : [],
+          category: ['note', 'link', 'document', 'video'].includes(metadata.category)
+            ? metadata.category
+            : 'note',
+          summary: metadata.summary || metadata.description || ''
+        };
+      } catch (parseError) {
+        console.warn('Failed to parse AI metadata response, using defaults');
+        return {
+          title: content.substring(0, 100).split('\n')[0] || 'Captured Content',
+          description: content.substring(0, 200),
+          tags: [],
+          category: 'note',
+          summary: content.substring(0, 300)
+        };
+      }
+    } catch (error) {
+      console.error('Error analyzing content:', error);
+      throw new Error('Failed to analyze content');
+    }
+  }
+
+  /**
    * Summarize content to a specified length
    */
   async summarizeContent(content: string, maxLength: number = 100): Promise<string> {

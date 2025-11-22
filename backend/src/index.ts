@@ -15,6 +15,7 @@ import urlReaderRoutes from './routes/urlReader';
 import webSearchRoutes from './routes/webSearch';
 import deepResearchRoutes from './routes/deepResearch';
 import learningRoutes from './routes/learning';
+import captureRoutes from './routes/capture';
 import { errorHandler } from './middleware/errorHandler';
 import prisma from './config/database';
 
@@ -90,6 +91,7 @@ app.use('/api/url-reader', urlReaderRoutes);
 app.use('/api/web-search', webSearchRoutes);
 app.use('/api/deep-research', deepResearchRoutes);
 app.use('/api/learning', learningRoutes);
+app.use('/api/capture', captureRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

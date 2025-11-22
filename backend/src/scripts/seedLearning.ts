@@ -124,6 +124,8 @@ async function seed() {
                     description: `Learning module for ${sub.name}. ${mod.content}`,
                     content: resourceContent,
                     type: 'document',
+                    // Add internal URL for navigation
+                    url: `/learning?subject=${encodeURIComponent(subject.id)}&module=${encodeURIComponent(module.id)}`,
                     tags: {
                         connectOrCreate: [
                             { where: { user_id_name: { user_id: userId, name: 'learning' } }, create: { user_id: userId, name: 'learning' } },

@@ -197,6 +197,42 @@ class ApiClient {
     }
   }
 
+  // Generic POST method for flexibility
+  async post<T = any>(endpoint: string, data?: any, config?: RequestInit): Promise<{ data: T, status: number }> {
+    const url = `${API_BASE_URL}${endpoint}`;
+
+    const headers: any = {
+      ...config?.headers
+    };
+
+    // Add authorization if token exists
+    if (this.token) {
+      headers.Authorization = `Bearer ${this.token}`;
+    }
+
+    // Only add Content-Type if not FormData
+    if (!(data instanceof FormData)) {
+      headers['Content-Type'] = 'application/json';
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: data instanceof FormData ? data : JSON.stringify(data),
+      ...config
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Request failed');
+    }
+
+    return {
+      data: await response.json(),
+      status: response.status
+    };
+  }
+
   // Authentication methods
   async login(email: string, password: string): Promise<ApiResponse<AuthResponse>> {
     const response = await this.request<AuthResponse>('/auth/login', {

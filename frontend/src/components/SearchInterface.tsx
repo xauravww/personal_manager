@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import {
   Search, Zap, GraduationCap, Loader2, Plus, Brain, CheckCircle,
   ArrowRight, Globe, Command, LayoutGrid, MessageSquare, Trash2, Menu, X
 } from 'lucide-react';
 import { apiClient } from '../api/client';
+import CookingAnimation from './CookingAnimation';
 
 // --- Types ---
 interface SearchResult {
@@ -49,6 +51,15 @@ type FocusMode = 'general' | 'quick-search' | 'academic' | 'deep-research';
 type SearchMode = 'normal' | 'deep-research';
 type TabType = 'all' | 'quick' | 'web' | 'academic' | 'analysis';
 
+interface DeepResearchProgress {
+  current: number;
+  total: number;
+  currentStep: string;
+  status: 'idle' | 'searching' | 'thinking' | 'reading' | 'analyzing' | 'complete' | 'error';
+  currentThought?: any;
+  actionLog?: string[];
+}
+
 const SearchInterface: React.FC = () => {
   // --- State ---
   const [activeTab, setActiveTab] = useState<TabType>('all');
@@ -64,15 +75,9 @@ const SearchInterface: React.FC = () => {
   const [learningContext, setLearningContext] = useState<any>(null);
 
   // Deep Research State
-  const [deepResearchProgress, setDeepResearchProgress] = useState<{
-    current: number;
-    total: number;
-    currentStep: string;
-    status: 'idle' | 'searching' | 'thinking' | 'reading' | 'analyzing' | 'complete' | 'error';
-    currentThought?: any;
-    actionLog?: string[];
-  } | null>(null);
+  const [deepResearchProgress, setDeepResearchProgress] = useState<DeepResearchProgress | null>(null);
   const [deepResearchEventSource, setDeepResearchEventSource] = useState<EventSource | null>(null);
+  const navigate = useNavigate();
 
   // Conversation State
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -392,6 +397,15 @@ const SearchInterface: React.FC = () => {
               snippet: r.content.substring(0, 100)
             }))];
           }
+
+          if (response.data?.learningResults) {
+            citations = [...citations, ...response.data.learningResults.map((r: any, i: number) => ({
+              id: `learning-${i}`,
+              title: r.title,
+              url: '/learning', // Navigate to learning hub
+              snippet: r.description || r.content?.substring(0, 100) || ''
+            }))];
+          }
         }
 
         const aiMessage: ConversationMessage = {
@@ -627,8 +641,20 @@ const SearchInterface: React.FC = () => {
                           <a
                             key={cIdx}
                             href={citation.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                            target={citation.url.startsWith('/') ? undefined : "_blank"}
+                            rel={citation.url.startsWith('/') ? undefined : "noopener noreferrer"}
+                            onClick={(e) => {
+                              if (citation.url === '/learning') {
+                                e.preventDefault();
+                                navigate('/learning', {
+                                  state: {
+                                    initialQuery: citation.title,
+                                    chatHistory: conversation,
+                                    fromChat: true
+                                  }
+                                });
+                              }
+                            }}
                             className="snap-start min-w-[200px] max-w-[200px] p-3 bg-white rounded-xl border border-slate-200 hover:border-slate-300 hover:shadow-md transition-all group cursor-pointer block"
                           >
                             <div className="flex items-center gap-2 mb-2">
@@ -691,14 +717,7 @@ const SearchInterface: React.FC = () => {
                     ) : (
                       /* Learning-style Loader */
                       <div className="flex flex-col items-center py-12">
-                        <div className="relative w-16 h-16 mb-4">
-                          <div className="absolute inset-0 border-4 border-slate-200 rounded-full"></div>
-                          <div className="absolute inset-0 border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
-                          <div className="absolute inset-0 flex items-center justify-center">
-                            <Brain className="w-6 h-6 text-blue-600 animate-pulse" />
-                          </div>
-                        </div>
-                        <p className="text-sm font-medium text-slate-600">Thinking...</p>
+                        <CookingAnimation message="Thinking..." />
                       </div>
                     )}
                   </div>

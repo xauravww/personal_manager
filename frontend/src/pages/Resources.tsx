@@ -180,8 +180,8 @@ const Resources: React.FC = () => {
             </div>
           </div>
 
-          {/* Tabs */}
-          <div className="flex space-x-8 border-b border-gray-200 mb-8">
+          {/* Tabs - REMOVED Learning Vault Tab as per user request */}
+          {/* <div className="flex space-x-8 border-b border-gray-200 mb-8">
             <button
               onClick={() => setTypeFilter('all')}
               className={`pb-4 px-2 font-medium text-sm transition-colors relative ${typeFilter !== 'learning' ? 'text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
@@ -200,76 +200,27 @@ const Resources: React.FC = () => {
                 <div className="absolute bottom-0 left-0 w-full h-0.5 bg-blue-600 rounded-t-full"></div>
               )}
             </button>
-          </div>
+          </div> */}
 
           {/* Resources Grid */}
           <div className="mb-12">
-            {typeFilter === 'learning' ? (
-              completedModules.length === 0 ? (
-                <div className="bg-white rounded-xl border border-slate-200 p-8 text-center">
-                  <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <GraduationCap className="w-8 h-8" />
-                  </div>
-                  <h3 className="text-lg font-bold text-slate-900 mb-2">Learning Vault Empty</h3>
-                  <p className="text-slate-500 mb-6">Complete modules to build your personal knowledge vault.</p>
+            <>
+              <div className="flex items-center space-x-4 mb-6">
+                <div className="p-3 bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl">
+                  <Grid3X3 className="w-6 h-6 text-gray-600" strokeWidth={1.5} />
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {completedModules.map((module) => (
-                    <div
-                      key={module.id}
-                      onClick={() => {
-                        // Navigate to Learning page - we'll use window.location for simplicity
-                        window.location.href = '/learning';
-                      }}
-                      className="bg-white rounded-xl border border-slate-200 p-6 hover:shadow-lg transition-all group cursor-pointer"
-                    >
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="p-2 bg-green-100 text-green-600 rounded-lg">
-                          <CheckCircle className="w-5 h-5" />
-                        </div>
-                        <span className="text-xs font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded-full">
-                          {module.subjectName}
-                        </span>
-                      </div>
-                      <h3 className="font-bold text-slate-900 mb-2 group-hover:text-blue-600 transition-colors">
-                        {module.title}
-                      </h3>
-                      <p className="text-sm text-slate-500 mb-4 line-clamp-2">
-                        {module.description}
-                      </p>
-                      <div className="flex items-center justify-between text-sm text-slate-400 pt-4 border-t border-slate-100">
-                        <div className="flex items-center gap-1">
-                          <Clock className="w-4 h-4" />
-                          {module.estimated_time} mins
-                        </div>
-                        <div className="flex items-center gap-1 text-blue-600 font-medium opacity-0 group-hover:opacity-100 transition-opacity">
-                          Review <ArrowRight className="w-4 h-4" />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )
-            ) : (
-              <>
-                <div className="flex items-center space-x-4 mb-6">
-                  <div className="p-3 bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl">
-                    <Grid3X3 className="w-6 h-6 text-gray-600" strokeWidth={1.5} />
-                  </div>
-                  <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Your Resources</h2>
-                </div>
-                <ResourceGrid
-                  currentPage={currentPage}
-                  itemsPerPage={itemsPerPage}
-                  searchQuery={debouncedSearchQuery}
-                  typeFilter={typeFilter}
-                  tagFilter={tagFilter}
-                  sortBy={sortBy}
-                  onTotalChange={setTotalResources}
-                />
-              </>
-            )}
+                <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Your Resources</h2>
+              </div>
+              <ResourceGrid
+                currentPage={currentPage}
+                itemsPerPage={itemsPerPage}
+                searchQuery={debouncedSearchQuery}
+                typeFilter={typeFilter}
+                tagFilter={tagFilter}
+                sortBy={sortBy}
+                onTotalChange={setTotalResources}
+              />
+            </>
           </div>
 
           {/* Pagination */}

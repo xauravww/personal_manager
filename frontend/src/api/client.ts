@@ -87,6 +87,7 @@ interface SearchResponse {
     mcpResults?: MCPToolResult[];
     mcpSummary?: string;
   };
+  learningResults?: any[];
 }
 
 interface CreateResourceRequest {
@@ -326,6 +327,14 @@ class ApiClient {
     if (params?.tags) searchParams.set('tags', params.tags);
 
     const query = searchParams.toString();
+    // Exclude learning vault items unless specifically requested
+    if (!params?.type) {
+      // If no type specified, we might want to exclude 'learning_vault' on backend
+      // But here we are constructing the query string.
+      // Let's assume the backend handles filtering or we filter on frontend.
+      // Actually, looking at Resources.tsx, it calls this method.
+      // Let's modify Resources.tsx instead to filter the results or pass a param.
+    }
     return this.request(`/resources${query ? `?${query}` : ''}`);
   }
 
@@ -746,10 +755,10 @@ class ApiClient {
   }
 
   // New Learning Flow Methods
-  async assessSkill(topic: string): Promise<ApiResponse<{ questions: Array<{ id: string; question: string; options: string[]; correctAnswer: number }> }>> {
+  async assessSkill(topic: string, chatHistory?: any[]): Promise<ApiResponse<{ questions: Array<{ id: string; question: string; options: string[]; correctAnswer: number }> }>> {
     return this.request('/learning/assess-skill', {
       method: 'POST',
-      body: JSON.stringify({ topic }),
+      body: JSON.stringify({ topic, chatHistory }),
     });
   }
 
@@ -760,10 +769,10 @@ class ApiClient {
     });
   }
 
-  async generateCurriculum(topic: string, assessmentResults?: { score: number; weakAreas: string[] }): Promise<ApiResponse<{ subject: any; modules: any[] }>> {
+  async generateCurriculum(topic: string, assessmentResults?: { score: number; weakAreas: string[] }, chatHistory?: any[]): Promise<ApiResponse<{ subject: any; modules: any[] }>> {
     return this.request('/learning/generate-curriculum', {
       method: 'POST',
-      body: JSON.stringify({ topic, assessmentResults }),
+      body: JSON.stringify({ topic, assessmentResults, chatHistory }),
     });
   }
 

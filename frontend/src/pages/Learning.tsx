@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   BookOpen, Brain, Target, Zap, ChevronRight, CheckCircle,
   Play, Clock, Award, ArrowRight, Sparkles, Layout, Search,
@@ -166,7 +167,8 @@ const Assessment = ({ topic, questions, onComplete }: { topic: string, questions
       if (answers[idx] === q.correctAnswer) {
         correct++;
       } else {
-        weakAreas.push(`Concept related to: ${q.question.substring(0, 30)}...`);
+        // Store the full question text for weak areas
+        weakAreas.push(q.question);
       }
     });
 
@@ -242,7 +244,109 @@ const Assessment = ({ topic, questions, onComplete }: { topic: string, questions
   );
 };
 
-const CurriculumPreview = ({ course, onStart }: { course: Course, onStart: () => void }) => {
+// --- New Component: Assessment Result View ---
+const AssessmentResultView = ({
+  result,
+  topic,
+  existingSubject,
+  onGenerate,
+  onContinue
+}: {
+  result: AssessmentResult,
+  topic: string,
+  existingSubject?: VaultItem,
+  onGenerate: () => void,
+  onContinue: () => void
+}) => {
+  return (
+    <div className="max-w-2xl mx-auto py-12 px-4 text-center">
+      <div className="mb-8">
+        <div className="inline-flex items-center justify-center w-20 h-20 bg-blue-100 text-blue-600 rounded-full mb-6">
+          <Award className="w-10 h-10" />
+        </div>
+        <h2 className="text-3xl font-bold text-slate-900 mb-2">Assessment Complete!</h2>
+        <p className="text-slate-600">You scored <span className="font-bold text-blue-600 text-xl">{result.score}%</span> on {topic}.</p>
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 mb-8 text-left">
+        <h3 className="font-bold text-slate-900 mb-4">Analysis</h3>
+        {result.score > 80 ? (
+          <p className="text-slate-600 mb-4">You have a strong grasp of the fundamentals! We'll tailor the course to focus on advanced concepts and practical applications.</p>
+        ) : result.score > 50 ? (
+          <p className="text-slate-600 mb-4">You have a good foundation. We'll reinforce core concepts while introducing new material to help you master the subject.</p>
+        ) : (
+          <p className="text-slate-600 mb-4">This is a great starting point! We'll build your knowledge from the ground up with clear explanations and hands-on practice.</p>
+        )}
+
+        {result.weakAreas.length > 0 && (
+          <div className="mt-6 pt-6 border-t border-slate-200">
+            <h4 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-3">Areas to Focus On</h4>
+            <div className="space-y-3">
+              {result.weakAreas.map((area, i) => (
+                <div key={i} className="flex items-start gap-3 p-3 bg-amber-50 rounded-lg border border-amber-200">
+                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-200 text-amber-700 flex items-center justify-center text-xs font-bold mt-0.5">
+                    {i + 1}
+                  </div>
+                  <p className="text-sm text-slate-700 leading-relaxed flex-1">{area}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {existingSubject && (
+        <div className="bg-blue-50 rounded-xl p-6 mb-8 border border-blue-100">
+          <div className="flex items-start gap-4 text-left">
+            <div className="p-2 bg-blue-100 rounded-lg text-blue-600">
+              <BookOpen className="w-6 h-6" />
+            </div>
+            <div>
+              <h4 className="font-bold text-slate-900 mb-1">Existing Course Found</h4>
+              <p className="text-sm text-slate-600 mb-3">You already have a course related to "{existingSubject.title}". Would you like to continue that instead?</p>
+              <button
+                onClick={onContinue}
+                className="text-blue-700 font-bold text-sm hover:underline"
+              >
+                Continue "{existingSubject.title}"
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="flex flex-col sm:flex-row gap-4 justify-center">
+        <button
+          onClick={onGenerate}
+          className="bg-slate-900 text-white px-8 py-3 rounded-xl font-bold hover:bg-slate-800 transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
+        >
+          <Sparkles className="w-5 h-5" />
+          Generate Custom Course
+        </button>
+        {existingSubject && (
+          <button
+            onClick={onContinue}
+            className="px-8 py-3 rounded-xl font-bold border border-slate-200 hover:bg-slate-50 transition-all text-slate-700"
+          >
+            Continue Existing
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const CurriculumPreview = ({
+  course,
+  onStart,
+  onRegenerate,
+  onChat
+}: {
+  course: Course,
+  onStart: () => void,
+  onRegenerate: () => void,
+  onChat: () => void
+}) => {
   return (
     <div className="max-w-5xl mx-auto py-8 px-4">
       <div className="text-center mb-12">
@@ -256,9 +360,27 @@ const CurriculumPreview = ({ course, onStart }: { course: Course, onStart: () =>
       </div>
 
       <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden mb-8">
-        <div className="p-8 border-b border-slate-100 bg-slate-50">
-          <h3 className="text-2xl font-bold text-slate-900 mb-2">{course.title}</h3>
-          <p className="text-slate-600">{course.description}</p>
+        <div className="p-8 border-b border-slate-100 bg-slate-50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h3 className="text-2xl font-bold text-slate-900 mb-2">{course.title}</h3>
+            <p className="text-slate-600">{course.description}</p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={onRegenerate}
+              className="p-2 text-slate-500 hover:bg-slate-200 rounded-lg transition-colors tooltip"
+              title="Regenerate Curriculum"
+            >
+              <RefreshCw className="w-5 h-5" />
+            </button>
+            <button
+              onClick={onChat}
+              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors tooltip"
+              title="Chat about this course"
+            >
+              <MessageSquare className="w-5 h-5" />
+            </button>
+          </div>
         </div>
         <div className="divide-y divide-slate-100">
           {course.modules.map((module, idx) => (
@@ -592,90 +714,160 @@ const Learning = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   // State for Study Mode Logic
-  const [step, setStep] = useState<'input' | 'assessment' | 'curriculum' | 'module'>('input');
+  const [step, setStep] = useState<'input' | 'assessment' | 'result' | 'curriculum' | 'module'>('input');
   const [topic, setTopic] = useState('');
   const [assessmentQuestions, setAssessmentQuestions] = useState<Question[]>([]);
+  const [assessmentResult, setAssessmentResult] = useState<AssessmentResult | null>(null);
   const [generatedCourse, setGeneratedCourse] = useState<Course | null>(null);
   const [currentModule, setCurrentModule] = useState<Module | null>(null);
   const [loadingMessage, setLoadingMessage] = useState('');
+  const [existingSubjectMatch, setExistingSubjectMatch] = useState<VaultItem | undefined>(undefined);
+
+  // Chat history from navigation
+  const location = useLocation();
+  const [chatHistory, setChatHistory] = useState<any[]>([]);
+
+  // Check for chat context from navigation
+  useEffect(() => {
+    if (location.state?.fromChat && location.state?.chatHistory) {
+      setChatHistory(location.state.chatHistory);
+      if (location.state?.initialQuery) {
+        setTopic(location.state.initialQuery);
+        setViewMode('study');
+        setStep('input');
+      }
+    }
+  }, [location.state]);
 
   // Fetch Vault Data
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setIsLoading(true);
-        const subjectsRes = await apiClient.getLearningSubjects();
-        const resourcesRes = await apiClient.getResources({ limit: 1000 });
+  const fetchVaultData = React.useCallback(async () => {
+    try {
+      // Only set loading on initial fetch if items are empty
+      if (items.length === 0) setIsLoading(true);
 
-        if (subjectsRes.success && subjectsRes.data) {
-          const subjects = subjectsRes.data;
-          const resources = resourcesRes.data?.resources || [];
+      const subjectsRes = await apiClient.getLearningSubjects();
 
-          const tree: VaultItem[] = await Promise.all(subjects.map(async (subject: any) => {
-            const modulesRes = await apiClient.getLearningModules(subject.id);
-            const modules = modulesRes.data?.modules || [];
+      if (subjectsRes.success && subjectsRes.data) {
+        const subjects = subjectsRes.data;
 
-            // Filter resources for this subject
-            // const subjectResources = resources.filter(r => 
-            //   r.tags.some(t => t.name.toLowerCase() === subject.name.toLowerCase())
-            // );
-            // User wants "Learnings" not just random resources. 
-            // Let's focus on the Modules as the source of "Learnings".
+        const tree: VaultItem[] = await Promise.all(subjects.map(async (subject: any) => {
+          const modulesRes = await apiClient.getLearningModules(subject.id);
+          const modules = modulesRes.data?.modules || [];
 
-            const children: VaultItem[] = modules.map((m: any) => {
-              // Create mock "generated notes" for each module to simulate the "Auto-created" vault
-              const moduleNotes: VaultItem[] = [
-                {
-                  id: `${m.id}-summary`,
-                  title: 'Module Summary.md',
-                  type: 'note',
-                  data: {
-                    title: 'Module Summary',
-                    content: `# ${m.title} - Summary\n\n## Key Concepts\n- Concept A\n- Concept B\n\n## Mistakes Made\n- None recorded.\n\n## Solution Approach\n- Step by step breakdown...`,
-                    created_at: new Date().toISOString()
-                  }
-                },
-                {
-                  id: `${m.id}-practice`,
-                  title: 'Practice Notes.md',
-                  type: 'note',
-                  data: {
-                    title: 'Practice Notes',
-                    content: `# Practice Session\n\n## Code Snippets\n\`\`\`javascript\nconsole.log("Hello World");\n\`\`\`\n\n## Reflections\n- Need to practice async/await more.`,
-                    created_at: new Date().toISOString()
-                  }
+          const children: VaultItem[] = modules.map((m: any) => {
+            // Initial state: Not loaded
+            // We create a placeholder note item that will be populated on demand
+            const moduleNotes: VaultItem[] = [
+              {
+                id: `${m.id}-practice`,
+                title: 'Learning Notes.md',
+                type: 'note',
+                data: {
+                  id: m.id,
+                  title: 'Learning Notes',
+                  content: 'Loading notes...', // Placeholder
+                  status: 'unknown',
+                  notes: '',
+                  isLoaded: false // Flag to track if we need to fetch
                 }
-              ];
-
-              return {
-                id: m.id,
-                title: m.title,
-                type: 'module', // Module acts as a folder now
-                data: m,
-                children: moduleNotes
-              };
-            });
+              }
+            ];
 
             return {
-              id: subject.id,
-              title: subject.name,
-              type: 'subject',
-              children, // Subject contains Modules (which contain Notes)
-              data: subject
+              id: m.id,
+              title: m.title,
+              type: 'module',
+              data: { ...m, status: 'unknown', isLoaded: false },
+              children: moduleNotes
             };
-          }));
+          });
 
-          setItems(tree);
-        }
-      } catch (error) {
-        console.error("Failed to fetch vault data", error);
-      } finally {
-        setIsLoading(false);
+          return {
+            id: subject.id,
+            title: subject.name,
+            type: 'subject',
+            children,
+            data: subject
+          };
+        }));
+
+        setItems(tree);
       }
-    };
-
-    fetchData();
+    } catch (error) {
+      console.error("Failed to fetch vault data", error);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchVaultData();
+  }, [fetchVaultData]);
+
+  // Function to load module data on demand
+  const loadModuleData = async (moduleId: string) => {
+    try {
+      // Find the module in the items tree to check if already loaded
+      // This is a bit complex with the nested structure, so we'll just fetch and update
+      // Optimization: In a real app with Redux/Context, check state first.
+
+      const progressRes = await apiClient.getProgressOverview();
+      let progressNotes = '# Learning Progress\n\n*No notes saved yet. Use the AI Assistant to save your learnings!*';
+      let moduleStatus = 'not_started';
+
+      if (progressRes.success && progressRes.data) {
+        const moduleProgress = progressRes.data.find((p: any) => p.module_id === moduleId);
+        if (moduleProgress) {
+          if (moduleProgress.notes) progressNotes = moduleProgress.notes;
+          if (moduleProgress.status) moduleStatus = moduleProgress.status;
+        }
+      }
+
+      // Update the items state with the fetched data
+      setItems(prevItems => {
+        return prevItems.map(subject => {
+          if (!subject.children) return subject;
+
+          const updatedModules = subject.children.map(module => {
+            if (module.id === moduleId) {
+              // Update this module
+              const updatedModule: VaultItem = {
+                ...module,
+                data: { ...module.data, status: moduleStatus, notes: progressNotes, isLoaded: true },
+                children: [
+                  {
+                    id: `${moduleId}-practice`,
+                    title: 'Learning Notes.md',
+                    type: 'note',
+                    data: {
+                      id: moduleId,
+                      title: 'Learning Notes',
+                      content: progressNotes,
+                      status: moduleStatus,
+                      notes: progressNotes,
+                      created_at: new Date().toISOString(),
+                      isLoaded: true
+                    }
+                  }
+                ]
+              };
+              return updatedModule;
+            }
+            return module;
+          });
+
+          return { ...subject, children: updatedModules };
+        });
+      });
+
+      // Return the updated data for immediate use if needed
+      return { status: moduleStatus, notes: progressNotes };
+
+    } catch (error) {
+      console.error('Failed to load module data:', error);
+      return null;
+    }
+  };
 
   // Mobile responsive check
   useEffect(() => {
@@ -687,18 +879,24 @@ const Learning = () => {
   // --- Study Mode Handlers ---
 
   const handleAnalyze = async (selectedTopic: string) => {
+    // Clear previous state
+    setAssessmentQuestions([]);
+    setAssessmentResult(null);
+    setGeneratedCourse(null);
+    setExistingSubjectMatch(undefined);
+
     setTopic(selectedTopic);
     setLoadingMessage(`Analyzing your knowledge of ${selectedTopic}...`);
-    setStep('assessment'); // In a real app, we might skip to loading first
+    setStep('assessment');
 
-    // Mock assessment generation for now or use API
-    // For this refactor, I'll assume we go straight to assessment logic
-    // But wait, the original code called `apiClient.assessSkill`
+    // Check for existing subject
+    const match = items.find(item => item.title.toLowerCase().includes(selectedTopic.toLowerCase()) || selectedTopic.toLowerCase().includes(item.title.toLowerCase()));
+    if (match) {
+      setExistingSubjectMatch(match);
+    }
 
     try {
-      // We can reuse the LoadingState by setting a temporary loading step if needed
-      // But let's just fetch
-      const res = await apiClient.assessSkill(selectedTopic);
+      const res = await apiClient.assessSkill(selectedTopic, chatHistory.length > 0 ? chatHistory : undefined);
       if (res.success && res.data) {
         setAssessmentQuestions(res.data.questions);
       }
@@ -708,26 +906,58 @@ const Learning = () => {
   };
 
   const handleAssessmentComplete = async (result: AssessmentResult) => {
+    setAssessmentResult(result);
+    setStep('result');
+  };
+
+  const handleGenerateCourse = async () => {
+    if (!assessmentResult) return;
+
     setLoadingMessage('Designing your custom curriculum...');
-    // setStep('loading'); // We don't have a 'loading' step in the type definition above, but we can add it or just show loading state
+    // Show loading state temporarily if needed, but we can just use the loading message in a loading component
+    // For now, let's switch to a loading view or just show loading overlay
+    // We'll reuse the LoadingState component by temporarily setting step to a loading state if we had one, 
+    // or just conditionally rendering. 
+    // Let's add a 'loading' step to the type or just use a flag.
+    // For simplicity, I'll add a 'loading' step to the state type in the next refactor, 
+    // but here I'll just set step to 'curriculum' and let it show loading if generatedCourse is null.
+    setGeneratedCourse(null);
+    setStep('curriculum');
 
     try {
-      const res = await apiClient.generateCurriculum(topic, { score: result.score, weakAreas: result.weakAreas });
+      const res = await apiClient.generateCurriculum(topic, { score: assessmentResult.score, weakAreas: assessmentResult.weakAreas }, chatHistory.length > 0 ? chatHistory : undefined);
       if (res.success && res.data) {
-        setGeneratedCourse(res.data.subject); // The API returns { subject, modules } but mapped to Course type
-        // Actually the API returns { subject: any, modules: any[] }
-        // We need to map it to our Course interface
         const courseData: Course = {
           title: res.data.subject.name,
           description: res.data.subject.description,
           modules: res.data.modules
         };
         setGeneratedCourse(courseData);
-        setStep('curriculum');
+
+        // Refresh sidebar to show new course
+        fetchVaultData();
       }
     } catch (e) {
       console.error(e);
+      setStep('result'); // Go back on error
     }
+  };
+
+  const handleContinueExisting = () => {
+    if (existingSubjectMatch) {
+      setSelectedItem(existingSubjectMatch);
+      setViewMode('vault');
+      // Optionally expand sidebar item
+    }
+  };
+
+  const handleRegenerate = () => {
+    handleGenerateCourse();
+  };
+
+  const handleChatAboutCourse = () => {
+    setIsChatOpen(true);
+    // Ideally set context for chat
   };
 
   const handleStartCourse = () => {
@@ -738,25 +968,39 @@ const Learning = () => {
   };
 
   const handleModuleComplete = async (sessionData: any) => {
-    // Logic to move to next module or finish
-    // For now, just go back to curriculum
     setStep('curriculum');
   };
 
   // --- Vault Actions ---
   const handleVaultAction = (action: string, data?: any) => {
     if (action === 'start_module') {
-      // Switch to study mode and start the module
       setViewMode('study');
       setCurrentModule(data);
       setStep('module');
     }
   };
 
+  const handleDeleteSubject = async (subjectId: string) => {
+    if (confirm('Are you sure you want to delete this course? This action cannot be undone.')) {
+      try {
+        await apiClient.deleteLearningSubject(subjectId);
+        setItems(prev => prev.filter(item => item.id !== subjectId));
+        if (selectedItem?.id === subjectId) {
+          setSelectedItem(null);
+          setViewMode('study');
+          setStep('input');
+        }
+      } catch (error) {
+        console.error('Failed to delete subject', error);
+        alert('Failed to delete course');
+      }
+    }
+  };
+
   // --- Render Content Area based on Mode ---
   const renderContent = () => {
     if (viewMode === 'vault') {
-      return <VaultContent selectedItem={selectedItem} onAction={handleVaultAction} viewMode="vault" />;
+      return <VaultContent selectedItem={selectedItem} onAction={handleVaultAction} viewMode="vault" onSelect={setSelectedItem} />;
     }
 
     // Study Mode Content
@@ -765,9 +1009,28 @@ const Learning = () => {
       if (assessmentQuestions.length === 0) return <LoadingState message={loadingMessage} />;
       return <Assessment topic={topic} questions={assessmentQuestions} onComplete={handleAssessmentComplete} />;
     }
+    if (step === 'result') {
+      if (!assessmentResult) return <div>Error: No result</div>;
+      return (
+        <AssessmentResultView
+          result={assessmentResult}
+          topic={topic}
+          existingSubject={existingSubjectMatch}
+          onGenerate={handleGenerateCourse}
+          onContinue={handleContinueExisting}
+        />
+      );
+    }
     if (step === 'curriculum') {
       if (!generatedCourse) return <LoadingState message={loadingMessage} />;
-      return <CurriculumPreview course={generatedCourse} onStart={handleStartCourse} />;
+      return (
+        <CurriculumPreview
+          course={generatedCourse}
+          onStart={handleStartCourse}
+          onRegenerate={handleRegenerate}
+          onChat={handleChatAboutCourse}
+        />
+      );
     }
     if (step === 'module') {
       if (!currentModule) return <div>Error: No module selected</div>;
@@ -777,6 +1040,51 @@ const Learning = () => {
     return <div>Unknown step</div>;
   };
 
+  const handleNotesUpdated = (moduleId: string, newNotes: string) => {
+    // Update items state
+    setItems(prevItems => {
+      return prevItems.map(subject => {
+        if (!subject.children) return subject;
+
+        const updatedModules = subject.children.map(module => {
+          if (module.id === moduleId) {
+            // Update module data
+            const updatedModuleData = { ...module.data, notes: newNotes };
+
+            // Update children (notes file)
+            const updatedChildren = module.children?.map(child => {
+              if (child.id === `${moduleId}-practice`) {
+                return {
+                  ...child,
+                  data: { ...child.data, content: newNotes, notes: newNotes }
+                };
+              }
+              return child;
+            });
+
+            const updatedModule: VaultItem = {
+              ...module,
+              data: updatedModuleData,
+              children: updatedChildren
+            };
+            return updatedModule;
+          }
+          return module;
+        });
+        return { ...subject, children: updatedModules };
+      });
+    });
+
+    // Update selected item if it matches
+    if (selectedItem) {
+      if (selectedItem.id === moduleId) {
+        setSelectedItem(prev => prev ? { ...prev, data: { ...prev.data, notes: newNotes } } : null);
+      } else if (selectedItem.id === `${moduleId}-practice`) {
+        setSelectedItem(prev => prev ? { ...prev, data: { ...prev.data, content: newNotes, notes: newNotes } } : null);
+      }
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="flex h-[calc(100dvh-160px)] md:h-[calc(100vh-100px)] bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200 relative">
@@ -784,22 +1092,26 @@ const Learning = () => {
         {/* Sidebar */}
         <VaultSidebar
           items={items}
-          onSelect={(item) => {
+          onSelect={async (item) => {
             setSelectedItem(item);
-            // If in study mode and clicking a module, maybe we want to preview it?
-            // For now, let's keep selection state independent or sync it?
-            // If in study mode, clicking sidebar items might just show them in the vault view?
-            // Or maybe we switch to vault mode?
-            // Let's keep it simple: Clicking sidebar selects the item. 
-            // If in Study mode, we might want to switch to Vault mode to see the item details, 
-            // UNLESS it's a module and we want to start it?
-            // Let's stay in current mode but if it's Vault mode we show content.
-            // If Study mode, we might effectively be "browsing" while studying.
-            // But the prompt said "toggle to switch".
-            // So if I am in Study mode, the main content is the "Active Course".
-            // If I click sidebar, maybe I just want to see it?
-            // Let's auto-switch to Vault mode if a user explicitly selects a file from sidebar.
-            // EXCEPT if we are just navigating folders.
+
+            // Lazy load data if needed
+            if (item.type === 'module' || (item.type === 'note' && item.id.endsWith('-practice'))) {
+              const moduleId = item.type === 'module' ? item.id : item.data.id;
+              // Check if we need to load (simplified check, ideally check isLoaded flag from item)
+              // Since item comes from state, we can check data.isLoaded
+              if (item.data && !item.data.isLoaded) {
+                const loadedData = await loadModuleData(moduleId);
+                // Update the selected item with loaded data so the view updates immediately
+                if (loadedData) {
+                  setSelectedItem(prev => prev ? {
+                    ...prev,
+                    data: { ...prev.data, ...loadedData, isLoaded: true }
+                  } : null);
+                }
+              }
+            }
+
             if (item.type !== 'subject') {
               setViewMode('vault');
             }
@@ -809,6 +1121,7 @@ const Learning = () => {
           onClose={() => setIsSidebarOpen(false)}
           viewMode={viewMode}
           onViewModeChange={setViewMode}
+          onDelete={handleDeleteSubject} // Pass delete handler
         />
 
         {/* Main Content Area */}
@@ -863,7 +1176,7 @@ const Learning = () => {
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-hidden relative">
+          <div className="flex-1 overflow-y-auto relative">
             {isLoading ? (
               <div className="flex items-center justify-center h-full">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-900"></div>
@@ -888,6 +1201,7 @@ const Learning = () => {
           contextItem={selectedItem}
           isOpen={isChatOpen}
           onClose={() => setIsChatOpen(false)}
+          onNotesUpdated={handleNotesUpdated}
         />
 
       </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Sparkles, X } from 'lucide-react';
+import { Send, Sparkles, X, Save } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { apiClient } from '../../api/client';
 import { VaultItem } from './VaultSidebar';
@@ -8,18 +8,44 @@ interface VaultChatProps {
     contextItem: VaultItem | null;
     isOpen: boolean;
     onClose: () => void;
+    onNotesUpdated?: (moduleId: string, newNotes: string) => void;
 }
 
 interface Message {
     role: 'user' | 'assistant';
     content: string;
+    quiz?: {
+        question: string;
+        options: string[];
+        correctAnswer: number;
+    };
+    code?: {
+        language: string;
+        snippet: string;
+    };
+    savePrompt?: {
+        title: string;
+        content: string;
+    };
 }
 
-const VaultChat: React.FC<VaultChatProps> = ({ contextItem, isOpen, onClose }) => {
+const VaultChat: React.FC<VaultChatProps> = ({ contextItem, isOpen, onClose, onNotesUpdated }) => {
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [isTyping, setIsTyping] = useState(false);
+    const [quizAnswered, setQuizAnswered] = useState<Set<number>>(new Set());
+    // Track if there is an active unanswered quiz
+    const [isQuizActive, setIsQuizActive] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
+
+    // Check if the current context is a locked module
+    const isLocked = React.useMemo(() => {
+        if (contextItem?.type === 'module') {
+            // Check if status is explicitly completed
+            return contextItem.data?.status !== 'completed';
+        }
+        return false;
+    }, [contextItem]);
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -29,7 +55,7 @@ const VaultChat: React.FC<VaultChatProps> = ({ contextItem, isOpen, onClose }) =
 
     // Add welcome message when context changes
     useEffect(() => {
-        if (contextItem && messages.length === 0) {
+        if (contextItem && messages.length === 0 && !isLocked) {
             setMessages([
                 {
                     role: 'assistant',
@@ -37,40 +63,171 @@ const VaultChat: React.FC<VaultChatProps> = ({ contextItem, isOpen, onClose }) =
                 }
             ]);
         }
-    }, [contextItem?.id]);
+    }, [contextItem?.id, isLocked]);
 
-    const handleSend = async () => {
-        if (!input.trim() || isTyping) return;
+    const saveToNotes = async (title: string, content: string) => {
+        try {
+            // Check if this is a learning module
+            if (contextItem?.type === 'module' && contextItem?.data?.id) {
+                // For learning modules, update the progress with new notes
+                const moduleId = contextItem.data.id;
 
-        const userMsg: Message = { role: 'user', content: input };
-        setMessages(prev => [...prev, userMsg]);
+                // Get current notes from context if available (may be undefined)
+                const currentNotes = contextItem.data?.notes || '';
+
+                // Append new note with timestamp
+                const timestamp = new Date().toLocaleString();
+                const newNote = `\n\n---\n**${title}** (${timestamp})\n${content}`;
+                const updatedNotes = currentNotes + newNote;
+
+                // Update the progress with new notes
+                await apiClient.updateProgress({
+                    module_id: moduleId,
+                    status: contextItem.data?.status || 'in_progress',
+                    notes: updatedNotes
+                });
+
+                // Notify parent to update state
+                if (onNotesUpdated) {
+                    onNotesUpdated(moduleId, updatedNotes);
+                }
+
+                setMessages(prev => [...prev, {
+                    role: 'assistant',
+                    content: '✅ **Saved to module notes!** You can review this in your learning progress.'
+                }]);
+            } else {
+                // For non-learning content, save as resource
+                await apiClient.createResource({
+                    title: `📝 ${title}`,
+                    description: `Notes from ${contextItem?.title}`,
+                    content: content,
+                    type: 'note',
+                    tag_names: [contextItem?.title || 'notes', 'ai-assistant']
+                });
+
+                setMessages(prev => [...prev, {
+                    role: 'assistant',
+                    content: '✅ **Saved to your notes!** You can find this in your Resources.'
+                }]);
+            }
+        } catch (error) {
+            console.error('Failed to save note:', error);
+            setMessages(prev => [...prev, {
+                role: 'assistant',
+                content: '❌ Failed to save note. Please try again.'
+            }]);
+        }
+    };
+
+    const handleQuizAnswer = async (messageIndex: number, selectedOption: string, correctAnswer: number, selectedIndex: number) => {
+        setQuizAnswered(prev => new Set(prev).add(messageIndex));
+        // After answering, deactivate quiz mode
+        setIsQuizActive(false);
+
+        const isCorrect = selectedIndex === correctAnswer;
+        const feedback = isCorrect
+            ? `✅ **Correct!** Great job!`
+            : `❌ **Incorrect.** The correct answer was: ${messages[messageIndex].quiz?.options[correctAnswer]}`;
+
+        // Send the answer to continue the conversation
+        await handleSend(`I choose: ${selectedOption}`, false);
+
+        // If there was a mistake, suggest saving it
+        if (!isCorrect && contextItem) {
+            const mistakeNote = {
+                title: `Mistake in ${contextItem.title}`,
+                content: `**Question:** ${messages[messageIndex].quiz?.question}\n\n**My Answer:** ${selectedOption}\n\n**Correct Answer:** ${messages[messageIndex].quiz?.options[correctAnswer]}\n\n**Notes:** [Add your notes here about why this was confusing]`
+            };
+
+            setMessages(prev => [...prev, {
+                role: 'assistant',
+                content: feedback,
+                savePrompt: mistakeNote
+            }]);
+        } else {
+            setMessages(prev => [...prev, {
+                role: 'assistant',
+                content: feedback
+            }]);
+        }
+    };
+
+    const handleSend = async (text?: string, addUserMessage: boolean = true) => {
+        // Prevent sending new messages while a quiz is active
+        if (isQuizActive) {
+            // Optionally show a warning or ignore
+            return;
+        }
+        const messageText = text || input;
+        if (!messageText.trim() || isTyping) return;
+
+        if (addUserMessage) {
+            const userMsg: Message = { role: 'user', content: messageText };
+            setMessages(prev => [...prev, userMsg]);
+        }
+
         setInput('');
         setIsTyping(true);
 
         try {
-            // Prepare context with conversation history
-            const context = {
-                type: contextItem?.type,
-                title: contextItem?.title,
-                content: contextItem?.data?.content || contextItem?.data?.description || '',
-                id: contextItem?.id
-            };
+            // Check if this is a learning module context
+            const isLearningModule = contextItem?.type === 'module';
 
-            // Pass full conversation history for context
-            const response = await apiClient.searchResources({
-                q: input,
-                learningContext: context,
-                conversation: messages.map(m => ({ type: m.role, content: m.content }))
-            });
+            if (isLearningModule && contextItem?.data?.id) {
+                // Use the learning module chat API which supports quizzes
+                const response = await apiClient.chatWithModule({
+                    module_id: contextItem.data.id,
+                    message: messageText,
+                    conversation_history: messages.filter(m => !m.savePrompt).map(m => ({ role: m.role, content: m.content }))
+                });
 
-            let aiResponse = "I couldn't process that request.";
-            if (response.ai?.chatResponse) {
-                aiResponse = response.ai.chatResponse;
-            } else if (response.ai?.summary) {
-                aiResponse = response.ai.summary;
+                if (response.data) {
+                    const aiMsg: Message = {
+                        role: 'assistant',
+                        content: response.data.response || "I'm processing that...",
+                        quiz: response.data.quiz,
+                        code: response.data.code
+                    };
+                    // If a quiz is present, activate quiz mode
+                    if (response.data.quiz) {
+                        setIsQuizActive(true);
+                    }
+                    // Check if mastery was achieved
+                    if (response.data.mastery_achieved && contextItem) {
+                        aiMsg.savePrompt = {
+                            title: `Mastered: ${contextItem.title}`,
+                            content: `🎉 **Achievement Unlocked!**\n\nI've successfully mastered the concepts in **${contextItem.title}**.\n\n**Key Takeaways:**\n[Add your summary of what you learned]`
+                        };
+                    }
+                    setMessages(prev => [...prev, aiMsg]);
+                } else {
+                    setMessages(prev => [...prev, { role: 'assistant', content: "I couldn't process that request." }]);
+                }
+            } else {
+                // Use the search/chat API for other contexts
+                const context = {
+                    type: contextItem?.type,
+                    title: contextItem?.title,
+                    content: contextItem?.data?.content || contextItem?.data?.description || '',
+                    id: contextItem?.id
+                };
+
+                const response = await apiClient.searchResources({
+                    q: messageText,
+                    learningContext: context,
+                    conversation: messages.filter(m => !m.savePrompt).map(m => ({ type: m.role, content: m.content }))
+                });
+
+                let aiResponse = "I couldn't process that request.";
+                if (response.ai?.chatResponse) {
+                    aiResponse = response.ai.chatResponse;
+                } else if (response.ai?.summary) {
+                    aiResponse = response.ai.summary;
+                }
+
+                setMessages(prev => [...prev, { role: 'assistant', content: aiResponse }]);
             }
-
-            setMessages(prev => [...prev, { role: 'assistant', content: aiResponse }]);
         } catch (error) {
             console.error("Chat error", error);
             setMessages(prev => [...prev, { role: 'assistant', content: "Sorry, I encountered an error." }]);
@@ -112,13 +269,61 @@ const VaultChat: React.FC<VaultChatProps> = ({ contextItem, isOpen, onClose }) =
                     </div>
                 )}
                 {messages.map((msg, idx) => (
-                    <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fadeIn`}>
-                        <div className={`max-w-[85%] rounded-2xl p-3 text-sm ${msg.role === 'user'
-                            ? 'bg-gradient-to-br from-slate-800 to-slate-900 text-white rounded-tr-none shadow-lg'
-                            : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none shadow-sm'
-                            }`}>
-                            <ReactMarkdown>{msg.content}</ReactMarkdown>
+                    <div key={idx} className="space-y-2">
+                        <div className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-fadeIn`}>
+                            <div className={`max-w-[85%] rounded-2xl p-3 text-sm ${msg.role === 'user'
+                                ? 'bg-gradient-to-br from-slate-800 to-slate-900 text-white rounded-tr-none shadow-lg'
+                                : 'bg-white border border-slate-200 text-slate-800 rounded-tl-none shadow-sm'
+                                }`}>
+                                <ReactMarkdown>{msg.content}</ReactMarkdown>
+                            </div>
                         </div>
+
+                        {/* Quiz UI with clickable buttons */}
+                        {msg.quiz && !quizAnswered.has(idx) && (
+                            <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-xl p-4 border border-purple-200 shadow-sm animate-fadeIn">
+                                <div className="flex items-center gap-2 mb-3 text-purple-700 font-bold text-sm">
+                                    <Sparkles className="w-4 h-4" />
+                                    Quiz Time!
+                                </div>
+                                <p className="text-slate-800 font-medium mb-3 text-sm">{msg.quiz.question}</p>
+                                <div className="space-y-2">
+                                    {msg.quiz.options.map((option, optIdx) => (
+                                        <button
+                                            key={optIdx}
+                                            onClick={() => handleQuizAnswer(idx, option, msg.quiz!.correctAnswer, optIdx)}
+                                            className="w-full text-left p-3 rounded-lg border-2 border-purple-200 hover:border-purple-400 hover:bg-white transition-all text-sm text-slate-700 font-medium hover:shadow-md"
+                                        >
+                                            {String.fromCharCode(65 + optIdx)}. {option}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Code block */}
+                        {msg.code && (
+                            <div className="bg-slate-900 rounded-lg p-4 overflow-x-auto">
+                                <div className="text-xs text-slate-400 mb-2">{msg.code.language}</div>
+                                <pre className="text-sm text-slate-100">
+                                    <code>{msg.code.snippet}</code>
+                                </pre>
+                            </div>
+                        )}
+
+                        {/* Save to Notes prompt */}
+                        {msg.savePrompt && (
+                            <div className="bg-blue-50 rounded-lg p-3 border border-blue-200 animate-fadeIn">
+                                <p className="text-xs text-blue-800 mb-2 font-medium">💡 Save this to your notes?</p>
+                                <button
+                                    onClick={() => saveToNotes(msg.savePrompt!.title, msg.savePrompt!.content)}
+                                    className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                                >
+                                    <Save className="w-3 h-3" />
+                                    Save to Notes
+                                </button>
+                            </div>
+                        )}
                     </div>
                 ))}
                 {isTyping && (
@@ -143,11 +348,11 @@ const VaultChat: React.FC<VaultChatProps> = ({ contextItem, isOpen, onClose }) =
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
                         placeholder="Ask a question..."
-                        disabled={isTyping}
+                        disabled={isTyping || isQuizActive}
                         className="w-full pl-4 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition-all disabled:opacity-50"
                     />
                     <button
-                        onClick={handleSend}
+                        onClick={() => handleSend()}
                         disabled={!input.trim() || isTyping}
                         className="absolute right-2 top-2 p-1.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
                     >

@@ -683,6 +683,13 @@ class AIService {
     ${modeSpecificInstructions}
     Always include accurate current date/time information when asked about dates, times, or current status.
     Respond to user queries in a friendly, helpful manner. Keep responses concise but informative.
+    
+    CRITICAL INSTRUCTION: Answer the user's question DIRECTLY. 
+    - Do NOT start by summarizing the search results (e.g., "Based on the search results...").
+    - Jump straight into the answer.
+    - Use the provided context/search results to inform your answer and provide citations where appropriate.
+    - If the user asks a question, answer it. If they ask for a summary, then summarize. But for general queries, be direct.
+
     If they ask about your capabilities, explain that you help search and organize personal resources.
     If they greet you, respond warmly and offer assistance.
     Do not mention technical details unless asked.
@@ -884,15 +891,22 @@ class AIService {
   /**
    * Generate a skill assessment for a given topic
    */
-  async generateSkillAssessment(topic: string): Promise<{ questions: Array<{ id: string; question: string; options: string[]; correctAnswer: number }> }> {
-    const cacheKey = this.getCacheKey('generateSkillAssessment', { topic });
+  async generateSkillAssessment(topic: string, chatHistory?: any[]): Promise<{ questions: Array<{ id: string; question: string; options: string[]; correctAnswer: number }> }> {
+    const cacheKey = this.getCacheKey('generateSkillAssessment', { topic, hasChatHistory: !!chatHistory });
     const cached = this.getCachedResponse(cacheKey);
     if (cached) return cached;
 
     return this.getDeduplicatedRequest(cacheKey, async () => {
       try {
+        let contextInfo = '';
+        if (chatHistory && chatHistory.length > 0) {
+          // Extract relevant context from chat history
+          const chatContext = chatHistory.slice(-5).map((msg: any) => `${msg.type}: ${msg.content}`).join('\n');
+          contextInfo = `\n\nContext from user's previous conversation:\n${chatContext}\n\nUse this context to tailor the assessment questions to be more relevant to what the user has been discussing.`;
+        }
+
         const systemPrompt = `You are an expert tutor. Create a diagnostic quiz to assess a student's knowledge of "${topic}".
-        Generate 3-5 multiple-choice questions ranging from beginner to intermediate difficulty.
+        Generate 3-5 multiple-choice questions ranging from beginner to intermediate difficulty.${contextInfo}
         Return ONLY a JSON object with this structure:
         {
           "questions": [
@@ -930,7 +944,7 @@ class AIService {
   /**
    * Generate a personalized curriculum based on topic and assessment results
    */
-  async generateCurriculum(topic: string, assessmentResults?: { score: number; weakAreas: string[] }): Promise<{
+  async generateCurriculum(topic: string, assessmentResults?: { score: number; weakAreas: string[] }, chatHistory?: any[]): Promise<{
     title: string;
     description: string;
     modules: Array<{
@@ -946,8 +960,14 @@ class AIService {
     try {
       let prompt = `Create a comprehensive learning curriculum for "${topic}".`;
 
+      if (chatHistory && chatHistory.length > 0) {
+        // Extract relevant context from chat history
+        const chatContext = chatHistory.slice(-5).map((msg: any) => `${msg.type}: ${msg.content}`).join('\n');
+        prompt += `\n\nContext from user's previous conversation:\n${chatContext}\n\nConsider this context when designing the curriculum to make it more relevant to the user's interests and prior knowledge.`;
+      }
+
       if (assessmentResults) {
-        prompt += `\nThe student scored ${assessmentResults.score}% on the diagnostic assessment.`;
+        prompt += `\n\nThe student scored ${assessmentResults.score}% on the diagnostic assessment.`;
         if (assessmentResults.weakAreas.length > 0) {
           prompt += `\nFocus specifically on these weak areas: ${assessmentResults.weakAreas.join(', ')}.`;
         }

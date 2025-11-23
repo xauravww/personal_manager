@@ -7,7 +7,8 @@ import {
     BookOpen,
     Hash,
     MoreVertical,
-    Search
+    Search,
+    Trash2
 } from 'lucide-react';
 
 // Types for the tree structure
@@ -27,6 +28,7 @@ interface VaultSidebarProps {
     onClose: () => void;
     viewMode: 'study' | 'vault';
     onViewModeChange: (mode: 'study' | 'vault') => void;
+    onDelete?: (id: string) => void;
 }
 
 const VaultTreeItem: React.FC<{
@@ -35,7 +37,8 @@ const VaultTreeItem: React.FC<{
     onSelect: (item: VaultItem) => void;
     selectedId?: string;
     viewMode?: 'study' | 'vault';
-}> = ({ item, level, onSelect, selectedId, viewMode }) => {
+    onDelete?: (id: string) => void;
+}> = ({ item, level, onSelect, selectedId, viewMode, onDelete }) => {
     const [isExpanded, setIsExpanded] = useState(false);
 
     // Filter children based on viewMode
@@ -63,6 +66,13 @@ const VaultTreeItem: React.FC<{
         onSelect(item);
     };
 
+    const handleDelete = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (onDelete) {
+            onDelete(item.id);
+        }
+    };
+
     const getIcon = () => {
         switch (item.type) {
             case 'subject': return <Folder className="w-4 h-4 text-blue-500" />;
@@ -77,7 +87,7 @@ const VaultTreeItem: React.FC<{
         <div>
             <div
                 className={`
-          flex items-center gap-2 py-1.5 px-2 cursor-pointer select-none transition-colors rounded-md
+          flex items-center gap-2 py-1.5 px-2 cursor-pointer select-none transition-colors rounded-md group
           ${isSelected ? 'bg-blue-100 text-blue-900' : 'hover:bg-slate-100 text-slate-700'}
         `}
                 style={{ paddingLeft: `${level * 12 + 8}px` }}
@@ -89,7 +99,18 @@ const VaultTreeItem: React.FC<{
                     )}
                 </span>
                 {getIcon()}
-                <span className="truncate text-sm font-medium">{item.title}</span>
+                <span className="truncate text-sm font-medium flex-1">{item.title}</span>
+
+                {/* Delete button only for subjects and when onDelete is provided */}
+                {item.type === 'subject' && onDelete && (
+                    <button
+                        onClick={handleDelete}
+                        className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded transition-all"
+                        title="Delete Course"
+                    >
+                        <Trash2 className="w-3 h-3" />
+                    </button>
+                )}
             </div>
             {isExpanded && hasChildren && (
                 <div>
@@ -101,6 +122,7 @@ const VaultTreeItem: React.FC<{
                             onSelect={onSelect}
                             selectedId={selectedId}
                             viewMode={viewMode}
+                            onDelete={onDelete}
                         />
                     ))}
                 </div>
@@ -109,7 +131,7 @@ const VaultTreeItem: React.FC<{
     );
 };
 
-const VaultSidebar: React.FC<VaultSidebarProps> = ({ items, onSelect, selectedId, isOpen, onClose, viewMode, onViewModeChange }) => {
+const VaultSidebar: React.FC<VaultSidebarProps> = ({ items, onSelect, selectedId, isOpen, onClose, viewMode, onViewModeChange, onDelete }) => {
     const [searchTerm, setSearchTerm] = useState('');
 
     // Filter items based on search (simple implementation for now)
@@ -197,6 +219,7 @@ const VaultSidebar: React.FC<VaultSidebarProps> = ({ items, onSelect, selectedId
                             }}
                             selectedId={selectedId}
                             viewMode={viewMode}
+                            onDelete={onDelete}
                         />
                     ))}
                 </div>

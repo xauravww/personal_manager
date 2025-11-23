@@ -2015,12 +2015,12 @@ router.post('/code/execute', async (req, res) => {
 // Skill Assessment
 router.post('/assess-skill', async (req, res) => {
   try {
-    const { topic } = req.body;
+    const { topic, chatHistory } = req.body;
     if (!topic) {
       return res.status(400).json({ error: 'Topic is required' });
     }
 
-    const assessment = await aiService.generateSkillAssessment(topic);
+    const assessment = await aiService.generateSkillAssessment(topic, chatHistory);
     res.json(assessment);
   } catch (error) {
     console.error('Error generating skill assessment:', error);
@@ -2032,14 +2032,14 @@ router.post('/assess-skill', async (req, res) => {
 router.post('/generate-curriculum', async (req, res) => {
   try {
     const userId = (req as any).user.id;
-    const { topic, assessmentResults } = req.body;
+    const { topic, assessmentResults, chatHistory } = req.body;
 
     if (!topic) {
       return res.status(400).json({ error: 'Topic is required' });
     }
 
     // Generate curriculum structure
-    const curriculum = await aiService.generateCurriculum(topic, assessmentResults);
+    const curriculum = await aiService.generateCurriculum(topic, assessmentResults, chatHistory);
 
     // Create the subject in the database
     const subject = await prisma.learningSubject.create({

@@ -18,6 +18,7 @@ import webSearchRoutes from './routes/webSearch';
 import deepResearchRoutes from './routes/deepResearch';
 import learningRoutes from './routes/learning';
 import captureRoutes from './routes/capture';
+import instagramWebhookRoutes from './routes/instagram-webhook';
 import { errorHandler } from './middleware/errorHandler';
 import dashboardRoutes from './routes/dashboard';
 import conversationsRoutes from './routes/conversations';
@@ -100,6 +101,7 @@ app.use('/api/learning', learningRoutes);
 app.use('/api/capture', captureRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/conversations', conversationsRoutes);
+app.use('/api/webhooks', instagramWebhookRoutes);
 
 // Health check
 app.get('/health', async (req, res) => {

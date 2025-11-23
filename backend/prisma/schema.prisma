@@ -115,6 +115,7 @@ model LearningSubject {
   goals       String?  // JSON string of learning goals
   estimated_hours Int?
   is_active   Boolean  @default(true)
+  embedding   String?  // Vector embedding for semantic search
   created_at  DateTime @default(now()) @map("created_at")
   updated_at  DateTime @updatedAt @map("updated_at")
 
@@ -140,6 +141,7 @@ model LearningModule {
   difficulty    String?  // "easy", "medium", "hard"
   is_optional   Boolean  @default(false)
   checkpoints   String?  // JSON array of sub-topics/checkpoints
+  embedding     String?  // Vector embedding for semantic search
   created_at    DateTime @default(now()) @map("created_at")
   updated_at    DateTime @updatedAt @map("updated_at")
 

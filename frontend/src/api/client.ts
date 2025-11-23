@@ -372,6 +372,7 @@ class ApiClient {
     useMCP?: boolean;
     mcpCredentials?: Record<string, string>;
     conversation?: Array<{ type: string, content: string }>;
+    conversationId?: string;
     learningContext?: any;
   }): Promise<{ success: boolean; data: SearchResponse; ai?: any; error?: string }> {
     const searchParams = new URLSearchParams();
@@ -391,6 +392,9 @@ class ApiClient {
     }
     if (params.conversation && params.conversation.length > 0) {
       searchParams.set('conversation', JSON.stringify(params.conversation));
+    }
+    if (params.conversationId) {
+      searchParams.set('conversationId', params.conversationId);
     }
     if (params.learningContext) {
       searchParams.set('learningContext', JSON.stringify(params.learningContext));

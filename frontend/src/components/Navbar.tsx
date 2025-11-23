@@ -4,8 +4,6 @@ import {
   Home,
   FolderOpen,
   Search,
-  Menu,
-  X,
   Bell,
   ChevronDown,
   LogOut,
@@ -19,7 +17,6 @@ interface NavbarProps {
 }
 
 const Navbar: React.FC<NavbarProps> = ({ showNavigation = true }) => {
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -38,8 +35,6 @@ const Navbar: React.FC<NavbarProps> = ({ showNavigation = true }) => {
     navigate('/login');
   };
 
-
-
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -56,94 +51,12 @@ const Navbar: React.FC<NavbarProps> = ({ showNavigation = true }) => {
 
   return (
     <>
-      {/* Mobile sidebar overlay */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-gray-600 bg-opacity-75 md:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-
-      {/* Mobile Navigation Sidebar */}
-      <div
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-lg transform md:hidden ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-          } transition-transform duration-300 ease-in-out`}
-      >
-        <div className="flex flex-col h-full">
-          {/* Logo */}
-          <div className="flex items-center justify-center h-16 px-4 bg-white border-b border-gray-200">
-            <Link
-              to="/"
-              className="hover:opacity-80 transition-opacity"
-              onClick={() => setSidebarOpen(false)}
-            >
-              <svg width="140" height="32" viewBox="0 0 140 32" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-8 w-auto">
-                {/* Book Icon */}
-                <rect x="2" y="6" width="16" height="20" rx="2" fill="#2563EB" />
-                <path d="M6 10h8M6 14h8M6 18h6" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
-                <path d="M10 6v20" stroke="#2563EB" strokeWidth="2" strokeLinecap="round" />
-                <circle cx="10" cy="4" r="2" fill="#2563EB" />
-                <circle cx="10" cy="28" r="2" fill="#2563EB" />
-
-                {/* Text */}
-                <text x="26" y="22" fontFamily="system-ui, -apple-system, sans-serif" fontSize="14" fontWeight="700" fill="#111827">Personal Manager</text>
-              </svg>
-            </Link>
-          </div>
-
-          {/* Navigation */}
-          <nav className="flex-1 px-4 py-6 space-y-2">
-            {navigation.map((item) => {
-              const isCurrent = location.pathname === item.href;
-              return (
-                <Link
-                  key={item.name}
-                  to={item.href}
-                  className={`group flex items-center px-3 py-2 text-base font-medium rounded-md transition-all duration-200 ${isCurrent
-                    ? 'bg-blue-50 text-blue-700 border-r-2 border-blue-700'
-                    : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                    }`}
-                  onClick={() => setSidebarOpen(false)}
-                >
-                  <item.icon
-                    className={`mr-3 h-5 w-5 flex-shrink-0 ${isCurrent ? 'text-blue-600' : 'text-gray-400 group-hover:text-gray-500'
-                      }`}
-                    strokeWidth={1.5}
-                  />
-                  {item.name}
-                </Link>
-              );
-            })}
-          </nav>
-
-          {/* Close button for mobile */}
-          <div className="p-4 border-t border-gray-200">
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="flex items-center justify-center w-full px-3 py-2 text-sm font-medium text-gray-600 bg-gray-50 rounded-md hover:bg-gray-100"
-            >
-              <X className="mr-2 h-4 w-4" strokeWidth={1.5} />
-              Close Menu
-            </button>
-          </div>
-        </div>
-      </div>
-
       {/* Top Navbar */}
       <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            {/* Left side - Logo and Mobile Menu */}
+            {/* Left side - Logo */}
             <div className="flex items-center">
-              {/* Mobile menu button */}
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className="md:hidden p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none mr-2"
-              >
-                <Menu className="h-6 w-6" strokeWidth={1.5} />
-              </button>
-
-              {/* Logo */}
               <Link
                 to="/"
                 className="hover:opacity-80 transition-opacity"

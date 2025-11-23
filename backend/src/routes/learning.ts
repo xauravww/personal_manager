@@ -58,12 +58,25 @@ router.post('/subjects', async (req, res) => {
     const userId = (req as any).user.id;
     const { name, description, goals }: CreateLearningSubjectRequest = req.body;
 
+    // Generate embedding for semantic search
+    let embedding: string | null = null;
+    try {
+      const textToEmbed = `${name} ${description || ''} ${goals ? JSON.stringify(goals) : ''}`;
+      const embeddingResponse = await aiService.createEmbeddings(textToEmbed);
+      embedding = JSON.stringify(embeddingResponse.data[0].embedding);
+      console.log(`✅ Generated embedding for learning subject: ${name}`);
+    } catch (embeddingError) {
+      console.warn('Failed to generate embedding for learning subject:', embeddingError);
+      // Continue without embedding
+    }
+
     const subject = await prisma.learningSubject.create({
       data: {
         user_id: userId,
         name,
         description,
-        goals: goals ? JSON.stringify(goals) : null
+        goals: goals ? JSON.stringify(goals) : null,
+        embedding
       }
     });
 
@@ -80,6 +93,21 @@ router.put('/subjects/:id', async (req, res) => {
     const { id } = req.params;
     const { name, description, goals }: UpdateLearningSubjectRequest = req.body;
 
+    // Regenerate embedding if content changed
+    let embedding: string | undefined = undefined;
+    if (name || description || goals) {
+      try {
+        const textToEmbed = `${name || ''} ${description || ''} ${goals ? JSON.stringify(goals) : ''}`;
+        if (textToEmbed.trim()) {
+          const embeddingResponse = await aiService.createEmbeddings(textToEmbed);
+          embedding = JSON.stringify(embeddingResponse.data[0].embedding);
+          console.log(`✅ Regenerated embedding for learning subject: ${id}`);
+        }
+      } catch (embeddingError) {
+        console.warn('Failed to regenerate embedding for learning subject:', embeddingError);
+      }
+    }
+
     const subject = await prisma.learningSubject.update({
       where: {
         id,
@@ -88,7 +116,8 @@ router.put('/subjects/:id', async (req, res) => {
       data: {
         name,
         description,
-        goals: goals ? JSON.stringify(goals) : undefined
+        goals: goals ? JSON.stringify(goals) : undefined,
+        ...(embedding && { embedding })
       }
     });
 
@@ -200,6 +229,18 @@ router.post('/modules', async (req, res) => {
       return res.status(404).json({ error: 'Subject not found' });
     }
 
+    // Generate embedding for semantic search
+    let embedding: string | null = null;
+    try {
+      const textToEmbed = `${title} ${description || ''} ${content || ''}`;
+      const embeddingResponse = await aiService.createEmbeddings(textToEmbed);
+      embedding = JSON.stringify(embeddingResponse.data[0].embedding);
+      console.log(`✅ Generated embedding for learning module: ${title}`);
+    } catch (embeddingError) {
+      console.warn('Failed to generate embedding for learning module:', embeddingError);
+      // Continue without embedding
+    }
+
     const module = await prisma.learningModule.create({
       data: {
         subject_id,
@@ -210,7 +251,8 @@ router.post('/modules', async (req, res) => {
         prerequisites: prerequisites ? JSON.stringify(prerequisites) : null,
         estimated_time,
         difficulty,
-        is_optional: is_optional || false
+        is_optional: is_optional || false,
+        embedding
       }
     });
 

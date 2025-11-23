@@ -87,6 +87,7 @@ export interface SearchResponse {
   total: number;
   has_more: boolean;
   webResults?: WebSearchResult[];
+  learningResults?: any[];
   ai?: {
     enhancedQuery: string;
     searchTerms: string[];

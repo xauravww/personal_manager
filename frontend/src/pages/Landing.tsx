@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Menu, X } from 'lucide-react';
+import { Menu, X, BookOpen, Folder, Sparkles } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import Navbar from '../components/Navbar';
 
@@ -479,7 +479,7 @@ const Landing: React.FC = () => {
         </div>
       </section>
 
-      {/* AI Study Partner Section - Game Changer */}
+      {/* Learning Hub & Vault Section - Game Changer */}
       <section className="py-24 bg-slate-900 text-white relative overflow-hidden">
         {/* Abstract Background */}
         <div className="absolute inset-0 opacity-20">
@@ -491,16 +491,16 @@ const Landing: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="text-center mb-20">
             <span className="inline-block py-1 px-3 rounded-full bg-blue-500/20 border border-blue-500/30 text-blue-300 text-sm font-semibold mb-6 tracking-wide uppercase">
-              Game Changer
+              New Feature
             </span>
             <h2 className="text-4xl md:text-6xl font-bold mb-6 tracking-tight">
-              Your Personal
+              The Unified
               <span className="block text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
-                AI Study Partner
+                Learning Hub
               </span>
             </h2>
             <p className="text-xl text-slate-300 max-w-3xl mx-auto leading-relaxed">
-              Master any skill faster. Our AI analyzes your knowledge gaps and creates a personalized curriculum just for you.
+              Experience the power of a second brain. Switch seamlessly between active <strong>Study Mode</strong> and reflective <strong>Vault Mode</strong>.
             </p>
           </div>
 
@@ -508,42 +508,36 @@ const Landing: React.FC = () => {
             <div className="space-y-12">
               <div className="flex gap-6">
                 <div className="w-14 h-14 rounded-2xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center flex-shrink-0">
-                  <svg className="w-7 h-7 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                  </svg>
+                  <BookOpen className="w-7 h-7 text-blue-400" />
                 </div>
                 <div>
-                  <h3 className="text-2xl font-bold mb-3">Adaptive Learning</h3>
+                  <h3 className="text-2xl font-bold mb-3">Study Mode</h3>
                   <p className="text-slate-400 leading-relaxed">
-                    The AI tracks your strong and weak points in real-time. It skips what you know and drills down on what you don't, optimizing your study time.
+                    Active learning with AI-generated curriculums. Master any skill with interactive modules, quizzes, and coding challenges tailored to your level.
                   </p>
                 </div>
               </div>
 
               <div className="flex gap-6">
                 <div className="w-14 h-14 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center flex-shrink-0">
-                  <svg className="w-7 h-7 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                  </svg>
+                  <Folder className="w-7 h-7 text-purple-400" />
                 </div>
                 <div>
-                  <h3 className="text-2xl font-bold mb-3">Interactive Testing</h3>
+                  <h3 className="text-2xl font-bold mb-3">Vault Mode</h3>
                   <p className="text-slate-400 leading-relaxed">
-                    Generate quizzes and assignments instantly from your notes. The AI grades your work, explains mistakes, and adjusts your future lessons.
+                    Your knowledge, organized. Browse your learning history in an <strong>Obsidian-like file tree</strong>. Every session automatically generates detailed Markdown notes.
                   </p>
                 </div>
               </div>
 
               <div className="flex gap-6">
                 <div className="w-14 h-14 rounded-2xl bg-green-500/10 border border-green-500/20 flex items-center justify-center flex-shrink-0">
-                  <svg className="w-7 h-7 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
-                  </svg>
+                  <Sparkles className="w-7 h-7 text-green-400" />
                 </div>
                 <div>
-                  <h3 className="text-2xl font-bold mb-3">Live Web Integration</h3>
+                  <h3 className="text-2xl font-bold mb-3">Knowledge Dashboard</h3>
                   <p className="text-slate-400 leading-relaxed">
-                    Want to learn a new tech stack? The AI browses the web for the latest documentation and tutorials, creating a live curriculum that's always up-to-date.
+                    Visualize your progress. See your strengths, weaknesses, and next steps at a glance for every subject you're mastering.
                   </p>
                 </div>
               </div>
@@ -551,53 +545,15 @@ const Landing: React.FC = () => {
 
             <div className="relative">
               <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-purple-500 rounded-2xl blur-2xl opacity-20 transform rotate-3"></div>
-              <div className="bg-slate-800 border border-slate-700 rounded-2xl p-8 relative shadow-2xl">
-                <div className="flex items-center justify-between mb-8">
-                  <div className="flex items-center gap-3">
-                    <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                    <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                    <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                  </div>
-                  <div className="text-slate-500 text-sm font-mono">Study Session: React Patterns</div>
-                </div>
-
-                <div className="space-y-6">
-                  <div className="bg-slate-900/50 rounded-xl p-4 border border-slate-700/50">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="text-blue-400 text-sm font-semibold">Current Topic</span>
-                      <span className="text-slate-500 text-xs">85% Mastery</span>
-                    </div>
-                    <h4 className="text-white font-medium">Advanced Composition Patterns</h4>
-                    <div className="w-full bg-slate-700 h-1.5 rounded-full mt-3">
-                      <div className="bg-blue-500 h-1.5 rounded-full w-[85%]"></div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="flex gap-3">
-                      <div className="w-8 h-8 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400 text-xs font-bold">AI</div>
-                      <div className="bg-slate-700/50 rounded-lg rounded-tl-none p-3 text-slate-300 text-sm">
-                        I noticed you struggled with the "Render Props" concept in the last quiz. Let's review that with a practical example. Ready?
-                      </div>
-                    </div>
-                    <div className="flex gap-3 flex-row-reverse">
-                      <div className="w-8 h-8 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 text-xs font-bold">ME</div>
-                      <div className="bg-blue-600/20 rounded-lg rounded-tr-none p-3 text-blue-100 text-sm border border-blue-500/30">
-                        Yes, show me how it compares to custom hooks.
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3 mt-4">
-                    <div className="bg-slate-700/30 p-3 rounded-lg text-center border border-slate-600/30">
-                      <div className="text-2xl font-bold text-white mb-1">12</div>
-                      <div className="text-xs text-slate-400 uppercase tracking-wider">Daily Streak</div>
-                    </div>
-                    <div className="bg-slate-700/30 p-3 rounded-lg text-center border border-slate-600/30">
-                      <div className="text-2xl font-bold text-white mb-1">A+</div>
-                      <div className="text-xs text-slate-400 uppercase tracking-wider">Avg Grade</div>
-                    </div>
-                  </div>
+              <div className="bg-slate-800 border border-slate-700 rounded-2xl p-2 relative shadow-2xl overflow-hidden">
+                <img
+                  src="/assets/learning-hub-preview.png"
+                  alt="Learning Hub Interface"
+                  className="rounded-xl w-full h-auto"
+                />
+                {/* Overlay UI Mockup if image missing */}
+                <div className="absolute inset-0 bg-slate-900/80 flex items-center justify-center text-slate-500 text-sm">
+                  (Preview Image)
                 </div>
               </div>
             </div>
@@ -1116,6 +1072,39 @@ const Landing: React.FC = () => {
           </div>
 
           <div className="space-y-4">
+            {/* FAQ Item 0 - New */}
+            <div className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 overflow-hidden">
+              <button
+                onClick={() => toggleFAQ(10)}
+                className="w-full px-8 py-6 text-left flex justify-between items-center hover:bg-gradient-to-r hover:from-blue-50 hover:to-purple-50 transition-all duration-300 group"
+              >
+                <div className="flex items-center space-x-4">
+                  <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-md group-hover:scale-110 transition-transform duration-300">
+                    <span className="text-white font-bold text-lg">?</span>
+                  </div>
+                  <span className="text-xl font-bold text-gray-900 group-hover:text-indigo-600 transition-colors duration-300">
+                    What's the difference between Study Mode and Vault Mode?
+                  </span>
+                </div>
+                <svg
+                  className={`w-6 h-6 text-gray-500 transform transition-transform duration-300 ${openFAQ === 10 ? 'rotate-180' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              <div className={`overflow-hidden transition-all duration-500 ease-in-out ${openFAQ === 10 ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
+                <div className="px-8 pb-6">
+                  <div className="w-1 h-16 bg-gradient-to-b from-indigo-400 to-purple-400 rounded-full mx-auto mb-4"></div>
+                  <p className="text-gray-700 text-lg leading-relaxed">
+                    Think of <strong>Study Mode</strong> as your classroom where you actively learn new concepts with an AI tutor. <strong>Vault Mode</strong> is your library—an Obsidian-like file tree where all your generated notes, summaries, and code snippets are automatically organized for review and reference.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             {/* FAQ Item 1 */}
             <div className="bg-white rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 border border-gray-100 overflow-hidden">
               <button

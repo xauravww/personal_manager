@@ -11,6 +11,7 @@ const Dashboard = React.lazy(() => import('./pages/Dashboard'));
 const Search = React.lazy(() => import('./pages/Search'));
 const Upload = React.lazy(() => import('./pages/Upload'));
 const Resources = React.lazy(() => import('./pages/Resources'));
+const Vault = React.lazy(() => import('./pages/Vault'));
 const DeepResearch = React.lazy(() => import('./pages/DeepResearch'));
 const Learning = React.lazy(() => import('./pages/Learning'));
 const ModuleReview = React.lazy(() => import('./pages/ModuleReview'));
@@ -35,6 +36,9 @@ function App() {
               <Route path="/" element={<Landing />} />
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
+
+              {/* ... */}
+
               <Route
                 path="/dashboard"
                 element={

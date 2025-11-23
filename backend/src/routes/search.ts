@@ -75,7 +75,7 @@ router.use(authenticateToken);
  *         description: Search results retrieved successfully
  */
 router.get('/', [
-  query('q').optional().trim().isLength({ min: 1, max: 500 }).matches(/^[a-zA-Z0-9\s\-_.,!?()]+$/).withMessage('Search query contains invalid characters'),
+  query('q').optional().trim().isLength({ min: 1, max: 500 }).matches(/^[a-zA-Z0-9\s\-_.,!?()'"]+$/).withMessage('Search query contains invalid characters'),
   query('type').optional().isIn(['note', 'video', 'link', 'document']),
   query('tags').optional().trim().isLength({ max: 200 }),
   query('limit').optional().isInt({ min: 1, max: 50 }),
@@ -336,6 +336,7 @@ router.get('/', [
     }
 
     let resources: any[] = [];
+    let learningResults: any[] = []; // New: learning subjects and modules
     let webResults: any[] = [];
     let total: number = 0;
     let chatResponse: string | AsyncIterable<any> | null = null;
@@ -413,57 +414,100 @@ router.get('/', [
     }
 
     if (!isChat) {
+      // Search in Resources
       if (queryEmbedding) {
-        // Use vector search for semantic similarity
+        // Use vector search for semantic similarity - no text operators needed
         const allResources = await prisma.resource.findMany({
           where: {
-            ...where,
-            embedding: { not: null }, // Only resources with embeddings
+            user_id: userId,
+            embedding: { not: null }
           },
           include: {
             tags: {
-              select: { name: true },
-            },
-          },
+              select: { name: true }
+            }
+          }
         });
 
-        // Compute similarities
-        const similarities = allResources.map((resource: any) => ({
+        // Calculate cosine similarity for each resource
+        const resourcesWithSimilarity = allResources.map((resource: any) => ({
           ...resource,
-          _similarity: _cosineSimilarity(queryEmbedding!, JSON.parse(resource.embedding!)),
+          _similarity: _cosineSimilarity(queryEmbedding!, JSON.parse(resource.embedding!))
         }));
 
-        // Sort by similarity descending
-        similarities.sort((a: any, b: any) => b._similarity - a._similarity);
+        // Filter by similarity threshold and sort
+        const threshold = 0.3;
+        resources = resourcesWithSimilarity
+          .filter((r: any) => r._similarity > threshold)
+          .sort((a: any, b: any) => b._similarity - a._similarity)
+          .slice(0, limit);
 
-        // Filter by similarity threshold
-        const threshold = 0.0; // Include all positive similarities
-        const relevantResources = similarities.filter((r: any) => r._similarity > threshold);
+        total = resources.length;
+      } else {
+        // Fallback to text-based search
+        const where: any = {
+          user_id: userId
+        };
 
-        if (relevantResources.length > 0) {
-          // Use vector results
-          resources = relevantResources.slice(offset, offset + limit).map((r: any) => {
-            const { _similarity, ...resourceWithoutSimilarity } = r;
-            return resourceWithoutSimilarity;
-          });
-          total = relevantResources.length;
-        } else {
-          // Fallback to text search if no vector results
-          resources = await prisma.resource.findMany({
-            where,
-            include: {
-              tags: {
-                select: { name: true },
+        // Build search conditions based on database type
+        const isPostgres = process.env.DATABASE_URL?.startsWith('postgresql://') ||
+          process.env.DATABASE_URL?.startsWith('postgres://');
+
+        if (searchTerms.length > 0) {
+          if (isPostgres && process.env.NODE_ENV !== 'test') {
+            where.OR = searchTerms.flatMap(term => [
+              { title: { search: term } },
+              { content: { search: term } },
+              { description: { search: term } }
+            ]);
+          } else {
+            where.OR = searchTerms.flatMap(term => [
+              { title: { contains: term, mode: 'insensitive' } },
+              { content: { contains: term, mode: 'insensitive' } },
+              { description: { contains: term, mode: 'insensitive' } }
+            ]);
+          }
+        }
+
+        // Apply type filter (query param takes precedence over AI)
+        if (type) {
+          where.type = type;
+        } else if (aiFilters.type) {
+          // Handle multiple types separated by pipe or comma
+          // Filter to only valid ResourceType enum values
+          const validTypes = ['note', 'video', 'link', 'document'];
+          const types = aiFilters.type.split(/[|,]/)
+            .filter(t => t.trim())
+            .filter(t => validTypes.includes(t)); // Only include valid types
+
+          if (types.length === 1) {
+            where.type = types[0] as any; // Type assertion for Prisma enum
+          } else if (types.length > 1) {
+            where.OR = where.OR || [];
+            where.OR.push({
+              type: { in: types as any[] } // Type assertion for Prisma enum
+            });
+          }
+        }
+
+        // Apply tags filter (query param takes precedence over AI)
+        const tagNames = tagsParam ? tagsParam.split(',').map(t => t.trim()) : [];
+        if (tagNames.length > 0) {
+          where.tags = {
+            some: {
+              name: { in: tagNames }
+            }
+          };
+        } else if (aiFilters.tags && aiFilters.tags.length > 0) {
+          where.tags = {
+            some: {
+              name: {
+                in: aiFilters.tags,
               },
             },
-            orderBy: { created_at: 'desc' },
-            skip: offset,
-            take: limit,
-          });
-          total = await prisma.resource.count({ where });
+          };
         }
-      } else {
-        // Fallback to text search
+
         resources = await prisma.resource.findMany({
           where,
           include: {
@@ -477,6 +521,189 @@ router.get('/', [
         });
 
         total = await prisma.resource.count({ where });
+      }
+
+      // NEW: Search in Learning Content (Subjects and Modules)
+      // Uses vector search when embeddings are available, falls back to text search otherwise
+      if (searchTerms.length > 0 || queryEmbedding) {
+        console.log(`🎓 Searching learning content${queryEmbedding ? ' (vector search)' : ' (text search)'}`);
+        try {
+          let subjectResults: any[] = [];
+          let moduleResults: any[] = [];
+
+          if (queryEmbedding) {
+            // Vector search for semantic similarity
+            const allSubjects = await prisma.learningSubject.findMany({
+              where: {
+                user_id: userId,
+                is_active: true,
+                embedding: { not: null }
+              },
+              include: {
+                modules: {
+                  take: 3,
+                  orderBy: { order_index: 'asc' }
+                }
+              }
+            });
+
+            const allModules = await prisma.learningModule.findMany({
+              where: {
+                subject: { user_id: userId, is_active: true },
+                embedding: { not: null }
+              },
+              include: {
+                subject: {
+                  select: { name: true }
+                },
+                progress: {
+                  where: { user_id: userId },
+                  take: 1
+                }
+              }
+            });
+
+            // Calculate similarities for subjects
+            const subjectSimilarities = allSubjects.map((subject: any) => ({
+              ...subject,
+              _similarity: _cosineSimilarity(queryEmbedding!, JSON.parse(subject.embedding!))
+            }));
+
+            // Calculate similarities for modules
+            const moduleSimilarities = allModules.map((module: any) => ({
+              ...module,
+              _similarity: _cosineSimilarity(queryEmbedding!, JSON.parse(module.embedding!))
+            }));
+
+            // Filter and sort by similarity
+            const threshold = 0.3; // Minimum similarity threshold
+            subjectResults = subjectSimilarities
+              .filter((s: any) => s._similarity > threshold)
+              .sort((a: any, b: any) => b._similarity - a._similarity)
+              .slice(0, 5);
+
+            moduleResults = moduleSimilarities
+              .filter((m: any) => m._similarity > threshold)
+              .sort((a: any, b: any) => b._similarity - a._similarity)
+              .slice(0, 10);
+
+            console.log(`Vector search: ${subjectResults.length} subjects, ${moduleResults.length} modules`);
+          }
+
+          // Fallback to text search if no vector results or embeddings not available
+          if (subjectResults.length === 0 && moduleResults.length === 0 && searchTerms.length > 0) {
+            console.log('Falling back to text-based search for learning content');
+            const isPostgres = process.env.DATABASE_URL?.startsWith('postgresql://') ||
+              process.env.DATABASE_URL?.startsWith('postgres://');
+
+            // Build search conditions for learning subjects
+            const subjectWhere: any = {
+              user_id: userId,
+              is_active: true,
+            };
+
+            if (isPostgres && process.env.NODE_ENV !== 'test') {
+              subjectWhere.OR = searchTerms.flatMap(term => [
+                { name: { search: term } },
+                { description: { search: term } }
+              ]);
+            } else {
+              subjectWhere.OR = searchTerms.flatMap(term => [
+                { name: { contains: term, mode: 'insensitive' } },
+                { description: { contains: term, mode: 'insensitive' } }
+              ]);
+            }
+
+            subjectResults = await prisma.learningSubject.findMany({
+              where: subjectWhere,
+              include: {
+                modules: {
+                  take: 3,
+                  orderBy: { order_index: 'asc' }
+                }
+              },
+              take: 5
+            });
+
+            // Build search conditions for learning modules
+            const moduleWhere: any = {
+              subject: { user_id: userId, is_active: true },
+            };
+
+            if (isPostgres && process.env.NODE_ENV !== 'test') {
+              moduleWhere.OR = searchTerms.flatMap(term => [
+                { title: { search: term } },
+                { description: { search: term } },
+                { content: { search: term } }
+              ]);
+            } else {
+              moduleWhere.OR = searchTerms.flatMap(term => [
+                { title: { contains: term, mode: 'insensitive' } },
+                { description: { contains: term, mode: 'insensitive' } },
+                { content: { contains: term, mode: 'insensitive' } }
+              ]);
+            }
+
+            moduleResults = await prisma.learningModule.findMany({
+              where: moduleWhere,
+              include: {
+                subject: {
+                  select: { name: true }
+                },
+                progress: {
+                  where: { user_id: userId },
+                  take: 1
+                }
+              },
+              take: 10
+            });
+          }
+
+          // Format learning results
+          learningResults = [
+            ...subjectResults.map((subject: any) => {
+              const { _similarity, embedding, ...subjectData } = subject;
+              return {
+                id: subjectData.id,
+                type: 'learning_subject',
+                title: subjectData.name,
+                description: subjectData.description,
+                metadata: {
+                  current_level: subjectData.current_level,
+                  module_count: subjectData.modules.length,
+                  modules: subjectData.modules.map((m: any) => ({ id: m.id, title: m.title })),
+                  ...(queryEmbedding && { similarity: _similarity })
+                },
+                created_at: subjectData.created_at
+              };
+            }),
+            ...moduleResults.map((module: any) => {
+              const { _similarity, embedding, ...moduleData } = module;
+              return {
+                id: moduleData.id,
+                type: 'learning_module',
+                title: moduleData.title,
+                description: moduleData.description,
+                content: moduleData.content?.substring(0, 200),
+                metadata: {
+                  subject_name: moduleData.subject.name,
+                  subject_id: moduleData.subject_id,
+                  difficulty: moduleData.difficulty,
+                  estimated_time: moduleData.estimated_time,
+                  status: moduleData.progress[0]?.status || 'not_started',
+                  score: moduleData.progress[0]?.score,
+                  ...(queryEmbedding && { similarity: _similarity })
+                },
+                created_at: moduleData.created_at
+              };
+            })
+          ];
+
+          console.log(`Found ${learningResults.length} learning results (${subjectResults.length} subjects + ${moduleResults.length} modules)`);
+        } catch (learningError) {
+          console.warn('Failed to search learning content:', learningError);
+          // Continue with resource results only
+        }
       }
     }
 
@@ -509,6 +736,7 @@ router.get('/', [
       total,
       has_more: offset + limit < total,
       webResults: webResults.length > 0 ? webResults : undefined,
+      learningResults: learningResults.length > 0 ? learningResults : undefined,
     };
 
 
@@ -567,11 +795,12 @@ router.get('/', [
 
     // Generate AI summary for search results
     let aiSummary: string | null = null;
-    if (!isChat && searchQuery && (resources.length > 0 || webResults.length > 0 || forceWebSearch)) {
+    if (!isChat && searchQuery && (resources.length > 0 || webResults.length > 0 || learningResults.length > 0 || forceWebSearch)) {
       try {
         // Limit context to prevent token overflow
         const maxLocalResults = 2;
         const maxWebResults = 2;
+        const maxLearningResults = 2;
 
         const localContext = resources.length > 0
           ? `Local resources: ${resources.slice(0, maxLocalResults).map(r => {
@@ -587,7 +816,14 @@ router.get('/', [
           }).join('. ')}`
           : '';
 
-        const contextString = [localContext, webContext].filter(Boolean).join('. ');
+        const learningContext = learningResults.length > 0
+          ? `Learning content: ${learningResults.slice(0, maxLearningResults).map(r => {
+            const content = (r.description || '').substring(0, 100);
+            return `${r.title} (${r.type.replace('learning_', '')}): ${content}`;
+          }).join('. ')}`
+          : '';
+
+        const contextString = [localContext, webContext, learningContext].filter(Boolean).join('. ');
 
         // Limit total context length to prevent token overflow
         const maxContextLength = 1000;

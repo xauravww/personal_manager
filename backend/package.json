@@ -19,6 +19,18 @@
     "db:seed": "ts-node src/scripts/seed.ts",
     "db:studio": "npx prisma studio"
   },
+  "nodemonConfig": {
+    "ignore": [
+      "temp/*",
+      "whisper/*",
+      "*.log",
+      "node_modules/*"
+    ],
+    "watch": [
+      "src/**/*"
+    ],
+    "ext": "ts,json"
+  },
   "jest": {
     "preset": "ts-jest",
     "testEnvironment": "node",
@@ -50,6 +62,8 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@bull-board/api": "^6.14.2",
+    "@bull-board/express": "^6.14.2",
     "@modelcontextprotocol/sdk": "^1.22.0",
     "@prisma/client": "^6.19.0",
     "@types/multer": "^2.0.0",
@@ -57,6 +71,8 @@
     "@xenova/transformers": "^2.17.2",
     "axios": "^1.13.2",
     "bcryptjs": "^3.0.3",
+    "big-integer": "^1.6.52",
+    "bullmq": "^5.64.1",
     "cheerio": "^1.1.2",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
@@ -66,6 +82,7 @@
     "express-rate-limit": "^8.2.1",
     "express-validator": "^7.3.0",
     "helmet": "^8.1.0",
+    "ioredis": "^5.8.2",
     "joi": "^18.0.1",
     "jsonwebtoken": "^9.0.2",
     "mammoth": "^1.11.0",
@@ -74,6 +91,7 @@
     "node-cron": "^4.2.1",
     "node-fetch": "^3.3.2",
     "node-html-markdown": "^2.0.0",
+    "patchright": "^1.56.1",
     "pdf-parse": "^2.4.5",
     "pg": "^8.16.3",
     "prisma": "^6.19.0",

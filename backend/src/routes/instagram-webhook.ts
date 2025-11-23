@@ -1,13 +1,10 @@
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
-import { PrismaClient } from '@prisma/client';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
-import { aiService } from '../services/aiService';
-import embeddingService from '../services/embeddingService';
+import { transcriptionQueue } from '../queues/transcriptionQueue';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 /**
  * Verify Instagram webhook signature
@@ -98,76 +95,6 @@ async function scrapeInstagramPost(url: string) {
 }
 
 /**
- * Save Instagram content to resources
- */
-async function saveInstagramToResources(metadata: any) {
-    try {
-        const userId = process.env.INSTAGRAM_WEBHOOK_USER_ID;
-        if (!userId) {
-            throw new Error('INSTAGRAM_WEBHOOK_USER_ID not configured');
-        }
-
-        // Use AI to analyze and categorize
-        const aiResult = await aiService.analyzeAndCategorizeContent(
-            `${metadata.title}\n${metadata.description}`
-        );
-
-        // Generate embedding
-        const embedding = await embeddingService.generateEmbedding(aiResult.summary);
-
-        // Create or get tags
-        const tagRecords = await Promise.all(
-            aiResult.tags.map(async (tagName: string) => {
-                return await prisma.tag.upsert({
-                    where: {
-                        user_id_name: {
-                            user_id: userId,
-                            name: tagName.toLowerCase()
-                        }
-                    },
-                    update: {},
-                    create: {
-                        user_id: userId,
-                        name: tagName.toLowerCase()
-                    }
-                });
-            })
-        );
-
-        // Create resource
-        const resource = await prisma.resource.create({
-            data: {
-                user_id: userId,
-                title: aiResult.title || metadata.title || 'Instagram Post',
-                description: aiResult.description || metadata.description,
-                type: aiResult.category,
-                content: `${metadata.title}\n${metadata.description}`,
-                url: metadata.url,
-                metadata: {
-                    ...aiResult,
-                    source: 'instagram_webhook',
-                    thumbnail: metadata.thumbnail,
-                    video: metadata.video
-                },
-                embedding: JSON.stringify(embedding),
-                tags: {
-                    connect: tagRecords.map(tag => ({ id: tag.id }))
-                }
-            },
-            include: {
-                tags: true
-            }
-        });
-
-        console.log('✅ Instagram content saved to resources:', resource.id);
-        return resource;
-    } catch (error) {
-        console.error('Error saving Instagram to resources:', error);
-        throw error;
-    }
-}
-
-/**
  * GET /api/webhooks/instagram/webhook
  * Webhook verification endpoint (required by Meta)
  */
@@ -176,7 +103,7 @@ router.get('/instagram/webhook', (req: Request, res: Response) => {
     const token = req.query['hub.verify_token'];
     const challenge = req.query['hub.challenge'];
 
-    console.log('📱 Instagram webhook verification request:', { mode, token: token ? '***' : 'none' });
+    console.log('📱 Instagram webhook verification request');
 
     const verifyToken = process.env.INSTAGRAM_VERIFY_TOKEN;
 
@@ -191,36 +118,81 @@ router.get('/instagram/webhook', (req: Request, res: Response) => {
 
 /**
  * POST /api/webhooks/instagram/webhook
- * Webhook event receiver
+ * Webhook event receiver - adds jobs to queue for async processing
  */
+// Simple in-memory cache to store recent text messages
+// Map<senderId, { text: string, timestamp: number, language: string }>
+const lastTextCache = new Map<string, { text: string, timestamp: number, language?: string }>();
+
+// Buffer for video messages waiting for potential text
+// Map<senderId, { timeout: NodeJS.Timeout, data: any }>
+const pendingVideoCache = new Map<string, { timeout: NodeJS.Timeout, data: any }>();
+
+// Helper to extract language from text (e.g., ":en Rest of text")
+function extractLanguage(text: string): { language: string, cleanText: string } {
+    const langMatch = text.match(/^:([a-z]{2,4})\s+(.+)/i);
+    if (langMatch) {
+        return {
+            language: langMatch[1].toLowerCase(),
+            cleanText: langMatch[2]
+        };
+    }
+    return {
+        language: 'hi', // Default to Hindi for Hinglish support
+        cleanText: text
+    };
+}
+
+// Helper to process a video job
+async function processVideoJob(videoData: any, titleText: string | null, userId: string, language: string = 'hi') {
+    const { assetUrl, senderId } = videoData;
+
+    // Use message text as title if available, otherwise use timestamp
+    const title = titleText ?
+        (titleText.length > 50 ? titleText.substring(0, 50) + '...' : titleText) :
+        `DM Video - ${new Date().toLocaleString()}`;
+
+    console.log(`🎬 Processing Video Job for ${senderId} with title: "${title}"`);
+
+    const originalCaption = (videoData as any).originalCaption;
+    const metadata = {
+        title: title,
+        description: originalCaption || titleText || 'Video sent via DM', // Use reel's caption as description
+        thumbnail: '',
+        video: assetUrl,
+        url: assetUrl, // This is a temporary CDN URL
+        sourceType: 'dm_media',
+        language: language, // Pass language preference
+        original_caption: originalCaption || null // Store original reel caption
+    };
+
+    // Add to queue - worker will just transcribe the CDN URL
+    const job = await transcriptionQueue.add('transcribe-reel', {
+        videoUrl: assetUrl,
+        metadata,
+        userId,
+        isRealReel: false,
+        language: language // Pass to worker
+    });
+    console.log(`✅ Job ${job.id} added to queue (DM Media, language: ${language})`);
+}
+
 router.post('/instagram/webhook', async (req: Request, res: Response) => {
     try {
-        // Get raw body for signature verification
         const rawBody = (req as any).rawBody || JSON.stringify(req.body);
         const signature = req.headers['x-hub-signature-256'] as string;
 
-        console.log('📱 Webhook request received:', {
-            hasRawBody: !!(req as any).rawBody,
-            hasSignature: !!signature,
-            bodyPreview: rawBody.substring(0, 100)
-        });
+        console.log('📱 Webhook request received');
 
-        // TEMPORARILY SKIP SIGNATURE VERIFICATION FOR TESTING
-        // TODO: Fix signature verification once App Secret is confirmed
-        /*
-        if (!verifySignature(rawBody, signature)) {
-            console.error('❌ Invalid webhook signature');
-            return res.sendStatus(403);
-        }
-        */
+        // TEMPORARILY SKIP SIGNATURE VERIFICATION
         console.log('⚠️  Signature verification temporarily disabled');
 
-        console.log('📱 Received Instagram webhook:', JSON.stringify(req.body, null, 2));
+        console.log('📱 Received Instagram webhook');
 
-        // Quick response to Meta
+        // Quick response to Meta (MUST be < 20 seconds)
         res.sendStatus(200);
 
-        // Process webhook asynchronously
+        // Process webhook asynchronously via queue
         const webhookData = req.body;
 
         if (!webhookData.entry || !Array.isArray(webhookData.entry)) {
@@ -228,52 +200,136 @@ router.post('/instagram/webhook', async (req: Request, res: Response) => {
             return;
         }
 
+        const userId = process.env.INSTAGRAM_WEBHOOK_USER_ID;
+        if (!userId) {
+            console.error('INSTAGRAM_WEBHOOK_USER_ID not configured');
+            return;
+        }
+
         for (const entry of webhookData.entry) {
-            // Instagram uses "messaging" not "changes"
             if (!entry.messaging || !Array.isArray(entry.messaging)) {
-                console.warn('No messaging in entry');
                 continue;
             }
 
             for (const message of entry.messaging) {
                 try {
-                    // Check if message has attachments (reels/posts)
-                    if (message.message?.attachments && Array.isArray(message.message.attachments)) {
-                        for (const attachment of message.message.attachments) {
-                            if (attachment.type === 'ig_reel' && attachment.payload) {
-                                const payload = attachment.payload;
+                    console.log('📩 Processing message:', JSON.stringify(message.message, null, 2));
 
-                                console.log('🎬 Found Instagram reel:', {
-                                    id: payload.reel_video_id,
-                                    title: payload.title?.substring(0, 50)
+                    const senderId = message.sender?.id || 'unknown';
+                    const text = message.message?.text || "";
+                    const attachments = message.message?.attachments || [];
+                    const INSTAGRAM_URL_REGEX = /(https?:\/\/(www\.)?instagram\.com\/(reel|p|tv)\/[A-Za-z0-9\-_]+)/;
+
+                    // 1. Check for REAL Instagram link in text (Forwarded Reel)
+                    const match = text.match(INSTAGRAM_URL_REGEX);
+                    if (match) {
+                        const realUrl = match[0];
+                        console.log("🎬 REAL REEL FOUND (Forwarded):", realUrl);
+
+                        // For real reels, we want to scrape metadata + transcribe
+                        const metadata = {
+                            title: 'Instagram Reel', // Will be updated by scraper
+                            description: '',
+                            thumbnail: '',
+                            video: realUrl,
+                            url: realUrl,
+                            sourceType: 'real_reel'
+                        };
+
+                        // Add to queue - worker will handle scraping + transcription
+                        const job = await transcriptionQueue.add('transcribe-reel', {
+                            videoUrl: realUrl,
+                            metadata,
+                            userId,
+                            isRealReel: true
+                        });
+                        console.log(`✅ Job ${job.id} added to queue (Real Reel)`);
+                        continue; // Skip attachment check if we found a real reel
+                    }
+
+                    // 2. If text ONLY (no link, no attachments)
+                    if (text && attachments.length === 0) {
+                        const { language, cleanText } = extractLanguage(text);
+                        console.log(`📝 Text received from ${senderId}: "${cleanText}" (lang: ${language})`);
+
+                        // Check if there is a pending video waiting for this text
+                        if (pendingVideoCache.has(senderId)) {
+                            console.log(`🔗 Found pending video waiting for text! Linking...`);
+                            const pending = pendingVideoCache.get(senderId);
+                            clearTimeout(pending!.timeout); // Cancel the timeout
+                            pendingVideoCache.delete(senderId);
+
+                            // Process the video IMMEDIATELY with this text and language
+                            await processVideoJob(pending!.data, cleanText, userId, language);
+                        } else {
+                            // No pending video, cache text for future video (Text -> Video case)
+                            console.log(`📝 Caching text for potential future video`);
+                            lastTextCache.set(senderId, {
+                                text: cleanText,
+                                timestamp: Date.now(),
+                                language: language
+                            });
+                        }
+                        continue;
+                    }
+
+                    // 3. If no link -> check for DM media (CDN asset)
+                    if (attachments.length > 0) {
+                        const attachment = attachments[0];
+                        if (attachment.payload?.url) {
+                            const assetUrl = attachment.payload.url;
+                            const reelCaption = attachment.payload?.title; // Instagram's original caption as fallback
+
+                            console.log("📹 DM MEDIA ASSET FOUND:", assetUrl);
+                            if (reelCaption) {
+                                console.log(`📄 Reel has original caption: "${reelCaption.substring(0, 50)}..."`);
+                            }
+
+                            // Priority 1: Check cache for user's custom text (they sent text with video)
+                            const cached = lastTextCache.get(senderId);
+                            if (cached && (Date.now() - cached.timestamp < 10000)) {
+                                console.log(`🔗 Found user's custom text: "${cached.text}" (lang: ${cached.language || 'hi'})`);
+                                lastTextCache.delete(senderId);
+                                // Pass both custom text AND original caption
+                                await processVideoJob(
+                                    { assetUrl, senderId, originalCaption: reelCaption },
+                                    cached.text,
+                                    userId,
+                                    cached.language || 'hi'
+                                );
+                            } else {
+                                // Priority 2: Buffer video for 10 seconds to wait for user's text
+                                console.log(`⏳ Buffering video for 10s to wait for user's text...`);
+
+                                const timeout = setTimeout(() => {
+                                    console.log(`⏰ Timeout reached for ${senderId}`);
+                                    pendingVideoCache.delete(senderId);
+
+                                    // Use reel's caption as fallback for title
+                                    if (reelCaption && reelCaption.trim()) {
+                                        const cleanCaption = reelCaption.split('\n')[0].trim(); // First line only
+                                        console.log(`📋 Using reel's caption as fallback: "${cleanCaption}"`);
+                                        processVideoJob({ assetUrl, senderId, originalCaption: reelCaption }, cleanCaption, userId, 'hi');
+                                    } else {
+                                        console.log(`📅 No caption found, using timestamp`);
+                                        processVideoJob({ assetUrl, senderId }, null, userId, 'hi');
+                                    }
+                                }, 10000); // 10 seconds timeout
+
+                                pendingVideoCache.set(senderId, {
+                                    timeout,
+                                    data: { assetUrl, senderId, originalCaption: reelCaption }
                                 });
-
-                                // We have title and URL directly in the payload!
-                                const metadata = {
-                                    title: payload.title || 'Instagram Reel',
-                                    description: payload.title || '',
-                                    thumbnail: '', // Not provided in webhook
-                                    video: payload.url,
-                                    url: payload.url,
-                                    reel_id: payload.reel_video_id
-                                };
-
-                                // Save to resources
-                                await saveInstagramToResources(metadata);
-
-                                console.log('✅ Successfully processed Instagram reel');
                             }
                         }
                     }
                 } catch (error) {
                     console.error('Error processing message:', error);
-                    // Continue processing other messages
                 }
             }
         }
     } catch (error) {
         console.error('Error processing Instagram webhook:', error);
-        // Always return 200 to Meta to avoid retry storms
         if (!res.headersSent) {
             res.sendStatus(200);
         }
@@ -281,4 +337,3 @@ router.post('/instagram/webhook', async (req: Request, res: Response) => {
 });
 
 export default router;
-

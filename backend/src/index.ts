@@ -19,10 +19,12 @@ import deepResearchRoutes from './routes/deepResearch';
 import learningRoutes from './routes/learning';
 import captureRoutes from './routes/capture';
 import instagramWebhookRoutes from './routes/instagram-webhook';
+import instagramRoutes from './routes/instagram';
 import { errorHandler } from './middleware/errorHandler';
 import dashboardRoutes from './routes/dashboard';
 import conversationsRoutes from './routes/conversations';
 import prisma from './config/database';
+import './workers/transcriptionWorker'; // Start worker on server startup
 
 dotenv.config();
 
@@ -102,6 +104,23 @@ app.use('/api/capture', captureRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/conversations', conversationsRoutes);
 app.use('/api/webhooks', instagramWebhookRoutes);
+app.use('/api', instagramRoutes);
+
+// BullMQ Dashboard
+import { createBullBoard } from '@bull-board/api';
+import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
+import { ExpressAdapter } from '@bull-board/express';
+import { transcriptionQueue } from './queues/transcriptionQueue';
+
+const serverAdapter = new ExpressAdapter();
+serverAdapter.setBasePath('/admin/queues');
+
+createBullBoard({
+  queues: [new BullMQAdapter(transcriptionQueue)],
+  serverAdapter: serverAdapter,
+});
+
+app.use('/admin/queues', serverAdapter.getRouter());
 
 // Health check
 app.get('/health', async (req, res) => {

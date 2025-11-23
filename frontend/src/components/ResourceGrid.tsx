@@ -13,6 +13,7 @@ interface Resource {
   createdAt: string;
   updatedAt?: string;
   source?: string;
+  url?: string;
   fileUrl?: string;
   metadata?: Record<string, any>;
 }
@@ -99,12 +100,21 @@ const ResourceGrid: React.FC<ResourceGridProps> = React.memo(({
             createdAt: resource.created_at,
             updatedAt: resource.updated_at,
             source: resource.url,
+            url: resource.url,
             fileUrl: resource.file_path,
             metadata: resource.metadata,
           }));
 
           setResources(transformedResources);
-          const totalCount = searchQuery.trim() ? response.data.total : response.data.pagination.total;
+          
+          // Handle different response structures (SearchResponse vs standard list)
+          let totalCount = 0;
+          if ('total' in response.data) {
+            totalCount = response.data.total;
+          } else if ('pagination' in response.data) {
+            totalCount = response.data.pagination.total;
+          }
+          
           setTotal(totalCount);
           onTotalChange?.(totalCount);
         } else {
@@ -268,11 +278,11 @@ const ResourceGrid: React.FC<ResourceGridProps> = React.memo(({
     <>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {paginatedResources.map((resource) => (
-        <div
-          key={resource.id}
-          onClick={() => handleResourceClick(resource)}
-          className={`group bg-white rounded-xl border ${getTypeColor(resource.type)} shadow-sm hover:shadow-xl transition-all duration-300 p-6 cursor-pointer transform hover:-translate-y-1`}
-        >
+          <div
+            key={resource.id}
+            onClick={() => handleResourceClick(resource)}
+            className={`group bg-white rounded-xl border ${getTypeColor(resource.type)} shadow-sm hover:shadow-xl transition-all duration-300 p-6 cursor-pointer transform hover:-translate-y-1`}
+          >
             {/* Header */}
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center space-x-3">
@@ -283,15 +293,15 @@ const ResourceGrid: React.FC<ResourceGridProps> = React.memo(({
                   {resource.type}
                 </span>
               </div>
-             <button
-               onClick={(e) => {
-                 e.stopPropagation();
-                 handleResourceClick(resource);
-               }}
-               className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-600 transition-opacity duration-200 p-1 hover:bg-gray-100 rounded"
-             >
-                 <MoreVertical className="w-4 h-4" strokeWidth={1.5} />
-             </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleResourceClick(resource);
+                }}
+                className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-600 transition-opacity duration-200 p-1 hover:bg-gray-100 rounded"
+              >
+                <MoreVertical className="w-4 h-4" strokeWidth={1.5} />
+              </button>
             </div>
 
             {/* Title */}

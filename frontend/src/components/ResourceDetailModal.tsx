@@ -16,6 +16,7 @@ import {
   Loader2,
   Save
 } from 'lucide-react';
+import InstagramVideoPlayer from './InstagramVideoPlayer';
 
 interface Resource {
   id: string;
@@ -27,6 +28,7 @@ interface Resource {
   createdAt: string;
   updatedAt?: string;
   source?: string;
+  url?: string;
   fileUrl?: string;
   metadata?: Record<string, any>;
 }
@@ -51,6 +53,9 @@ const ResourceDetailModal: React.FC<ResourceDetailModalProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [editData, setEditData] = useState<Partial<Resource>>({});
   const [copied, setCopied] = useState(false);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoLoading, setVideoLoading] = useState(false);
+  const [videoError, setVideoError] = useState<string | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -167,14 +172,14 @@ const ResourceDetailModal: React.FC<ResourceDetailModalProps> = ({
 
     switch (resource.type) {
       case 'video':
-        return resource.fileUrl ? (
-          <video
-            src={resource.fileUrl}
-            controls
-            className="max-w-full max-h-96 rounded-lg"
+        return (
+          <InstagramVideoPlayer
+            resource={resource}
+            videoUrl={videoUrl}
+            videoLoading={videoLoading}
+            videoError={videoError}
+            onLoadVideo={handleLoadInstagramVideo}
           />
-        ) : (
-          <div className="text-gray-500 text-center py-8">Video not available</div>
         );
       case 'link':
         return (
@@ -218,6 +223,32 @@ const ResourceDetailModal: React.FC<ResourceDetailModalProps> = ({
             <pre className="whitespace-pre-wrap text-sm text-gray-800">{resource.content}</pre>
           </div>
         );
+    }
+  };
+
+  const isInstagramVideo = (url?: string) => {
+    return url && url.includes('instagram.com');
+  };
+
+  const handleLoadInstagramVideo = async () => {
+    if (!resource || videoUrl || videoLoading) return;
+
+    setVideoLoading(true);
+    setVideoError(null);
+
+    try {
+      const { apiClient } = await import('../api/client');
+      const response = await apiClient.getInstagramVideoUrl(resource.id);
+
+      if (response.success && response.data) {
+        setVideoUrl(response.data.videoUrl);
+      } else {
+        setVideoError(response.error || 'Failed to load video');
+      }
+    } catch (error: any) {
+      setVideoError(error.message || 'Failed to load video');
+    } finally {
+      setVideoLoading(false);
     }
   };
 

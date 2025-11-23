@@ -832,6 +832,15 @@ class ApiClient {
     });
   }
 
+  // Instagram methods
+  async getInstagramVideoUrl(resourceId: string): Promise<ApiResponse<{
+    videoUrl: string;
+    thumbnail: string;
+    expiresNote: string;
+  }>> {
+    return this.request(`/resources/${resourceId}/instagram/video-url`);
+  }
+
   async addMessage(conversationId: string, message: {
     role: 'user' | 'assistant';
     content: string;

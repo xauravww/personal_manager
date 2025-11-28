@@ -15,6 +15,7 @@ const Vault = React.lazy(() => import('./pages/Vault'));
 const DeepResearch = React.lazy(() => import('./pages/DeepResearch'));
 const Learning = React.lazy(() => import('./pages/Learning'));
 const ModuleReview = React.lazy(() => import('./pages/ModuleReview'));
+const NotFound = React.lazy(() => import('./pages/NotFound'));
 
 // Loading component for Suspense fallback
 const PageLoader = () => (
@@ -95,6 +96,7 @@ function App() {
                   </ProtectedRoute>
                 }
               />
+              <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
         </div>

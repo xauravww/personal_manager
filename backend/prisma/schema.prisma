@@ -306,7 +306,15 @@ model KnowledgeConnection {
   target_type String   // "subject", "module", "resource", "note"
   strength    Float    // 0-1 similarity score
   type        String   // "semantic", "prerequisite", "related", "user_defined"
+  
+  // Auto-connection fields
+  auto_generated Boolean @default(false)
+  reason         String? // AI explanation for the connection
+  confidence     Float?  // 0-1 confidence score
+  user_deleted   Boolean @default(false) // Prevents re-creation
+  
   created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
 
   // Relations
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)

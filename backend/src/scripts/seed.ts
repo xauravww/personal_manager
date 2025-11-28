@@ -65,16 +65,16 @@ async function seed() {
     console.log('📖 Creating learning modules...');
 
     // Python modules
-    await createModuleWithEmbedding(pythonSubject.id, {
+    const pythonBasicsModule = await createModuleWithEmbedding(pythonSubject.id, {
       title: 'Python Basics',
       description: 'Variables, data types, operators, and control flow',
-      content: 'Learn the fundamentals of Python programming including variables, data types, conditionals, and loops.',
+      content: 'Learn the fundamentals of programming with Python including variables, data types, operators, conditionals, loops, and basic algorithms.',
       order_index: 0,
       difficulty: 'easy',
       estimated_time: 120
     });
 
-    await createModuleWithEmbedding(pythonSubject.id, {
+    const pythonDataStructuresModule = await createModuleWithEmbedding(pythonSubject.id, {
       title: 'Data Structures in Python',
       description: 'Lists, tuples, dictionaries, and sets',
       content: 'Master Python data structures including lists, tuples, dictionaries, sets, and their common operations.',
@@ -102,10 +102,10 @@ async function seed() {
       estimated_time: 150
     });
 
-    await createModuleWithEmbedding(webDevSubject.id, {
+    const jsEssentialsModule = await createModuleWithEmbedding(webDevSubject.id, {
       title: 'JavaScript Essentials',
       description: 'Programming the web with JavaScript',
-      content: 'Master JavaScript fundamentals: variables, functions, DOM manipulation, events, and async programming.',
+      content: 'Master the fundamentals of programming with JavaScript: variables, functions, data types, operators, conditionals, loops, and basic algorithms.',
       order_index: 1,
       difficulty: 'medium',
       estimated_time: 200
@@ -121,10 +121,10 @@ async function seed() {
     });
 
     // ML modules
-    await createModuleWithEmbedding(mlSubject.id, {
+    const mlIntroModule = await createModuleWithEmbedding(mlSubject.id, {
       title: 'Introduction to Machine Learning',
       description: 'ML concepts and terminology',
-      content: 'Understand supervised vs unsupervised learning, regression, classification, and model evaluation.',
+      content: 'Understand machine learning fundamentals: supervised vs unsupervised learning, regression, classification, data structures for ML, and model evaluation.',
       order_index: 0,
       difficulty: 'medium',
       estimated_time: 180
@@ -181,6 +181,56 @@ async function seed() {
     });
 
     console.log('✅ Created 4 resources\n');
+
+    // Create learning progress to test auto-connections
+    console.log('📊 Creating learning progress for auto-connection testing...');
+
+    // Mark some modules as completed to trigger auto-connection analysis
+    await prisma.learningProgress.createMany({
+      data: [
+        {
+          user_id: user.id,
+          subject_id: pythonSubject.id,
+          module_id: pythonBasicsModule.id,
+          status: 'completed',
+          score: 95,
+          time_spent: 7200, // 2 hours
+          completed_at: new Date(Date.now() - 86400000), // 1 day ago
+          notes: 'Completed Python basics with high proficiency'
+        },
+        {
+          user_id: user.id,
+          subject_id: mlSubject.id,
+          module_id: mlIntroModule.id,
+          status: 'completed',
+          score: 88,
+          time_spent: 5400, // 1.5 hours
+          completed_at: new Date(Date.now() - 43200000), // 12 hours ago
+          notes: 'Good understanding of ML fundamentals'
+        },
+        {
+          user_id: user.id,
+          subject_id: webDevSubject.id,
+          module_id: jsEssentialsModule.id,
+          status: 'completed',
+          score: 92,
+          time_spent: 6000, // 1.67 hours
+          completed_at: new Date(Date.now() - 21600000), // 6 hours ago
+          notes: 'Strong grasp of JavaScript concepts'
+        },
+        {
+          user_id: user.id,
+          subject_id: pythonSubject.id,
+          module_id: pythonDataStructuresModule.id,
+          status: 'in_progress',
+          score: 75,
+          time_spent: 3600, // 1 hour
+          notes: 'Working on data structures mastery'
+        }
+      ]
+    });
+
+    console.log('✅ Created learning progress entries\n');
 
     console.log('🎉 Seed complete!\n');
     console.log('📝 Test credentials:');

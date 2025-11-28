@@ -13,8 +13,8 @@ router.get('/graph', async (req, res) => {
     try {
         const userId = (req as any).user.id;
 
-        // Fetch all relevant nodes
-        const [subjects, modules, resources, connections] = await Promise.all([
+        // Fetch all relevant nodes and progress data
+        const [subjects, modules, resources, connections, progressData] = await Promise.all([
             prisma.learningSubject.findMany({
                 where: { user_id: userId, is_active: true },
                 select: { id: true, name: true, description: true, current_level: true }
@@ -29,23 +29,91 @@ router.get('/graph', async (req, res) => {
             }),
             prisma.knowledgeConnection.findMany({
                 where: { user_id: userId }
+            }),
+            prisma.learningProgress.findMany({
+                where: { user_id: userId },
+                select: {
+                    module_id: true,
+                    subject_id: true,
+                    status: true,
+                    score: true,
+                    time_spent: true,
+                    completed_at: true,
+                    updated_at: true
+                }
             })
         ]);
 
-        // Format nodes for frontend
+        // Create progress map by module_id
+        const moduleProgressMap = new Map();
+        progressData.forEach((p: any) => {
+            moduleProgressMap.set(p.module_id, p);
+        });
+
+        // Calculate subject progress from modules
+        const subjectProgressMap = new Map();
+        progressData.forEach((p: any) => {
+            if (!subjectProgressMap.has(p.subject_id)) {
+                subjectProgressMap.set(p.subject_id, []);
+            }
+            subjectProgressMap.get(p.subject_id).push(p);
+        });
+
+        // Helper to calculate completion percentage
+        const getCompletion = (progress: any) => {
+            if (!progress) return 0;
+            if (progress.status === 'completed') return 100;
+            if (progress.score !== null && progress.score !== undefined) return Math.round(progress.score);
+            if (progress.status === 'in_progress') return 50;
+            return 0;
+        };
+
+        // Format nodes for frontend with progress data
         const nodes = [
-            ...subjects.map((s: any) => ({
-                id: s.id,
-                type: 'subject',
-                data: { label: s.name, ...s },
-                position: { x: 0, y: 0 } // Layout will be handled by frontend
-            })),
-            ...modules.map((m: any) => ({
-                id: m.id,
-                type: 'module',
-                data: { label: m.title, ...m },
-                position: { x: 0, y: 0 }
-            })),
+            ...subjects.map((s: any) => {
+                const subjectModules = subjectProgressMap.get(s.id) || [];
+                const avgCompletion = subjectModules.length > 0
+                    ? Math.round(subjectModules.reduce((acc: number, p: any) => acc + getCompletion(p), 0) / subjectModules.length)
+                    : 0;
+                const totalTime = subjectModules.reduce((acc: number, p: any) => acc + (p.time_spent || 0), 0);
+                const lastActivity = subjectModules.length > 0
+                    ? new Date(Math.max(...subjectModules.map((p: any) => new Date(p.updated_at).getTime())))
+                    : null;
+
+                return {
+                    id: s.id,
+                    type: 'subject',
+                    data: {
+                        label: s.name,
+                        ...s,
+                        completion: avgCompletion,
+                        status: avgCompletion >= 90 ? 'completed' : avgCompletion > 0 ? 'in_progress' : 'not_started',
+                        timeSpent: totalTime,
+                        lastActivity: lastActivity?.toISOString()
+                    },
+                    position: { x: 0, y: 0 }
+                };
+            }),
+            ...modules.map((m: any) => {
+                const progress = moduleProgressMap.get(m.id);
+                const completion = getCompletion(progress);
+
+                return {
+                    id: m.id,
+                    type: 'module',
+                    data: {
+                        label: m.title,
+                        ...m,
+                        completion,
+                        status: progress?.status || 'not_started',
+                        score: progress?.score || null,
+                        timeSpent: progress?.time_spent || 0,
+                        completedAt: progress?.completed_at?.toISOString(),
+                        lastActivity: progress?.updated_at?.toISOString()
+                    },
+                    position: { x: 0, y: 0 }
+                };
+            }),
             ...resources.map((r: any) => ({
                 id: r.id,
                 type: 'resource',

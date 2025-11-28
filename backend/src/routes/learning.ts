@@ -9,6 +9,7 @@ import {
   GenerateCourseRequest
 } from '../types';
 import { aiService } from '../services/aiService';
+import { analyzeModuleConnections } from '../services/connectionAnalyzer';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -311,6 +312,18 @@ router.post('/progress', async (req, res) => {
         notes
       }
     });
+
+    // Trigger automatic connection analysis if module was completed
+    if (status === 'completed') {
+      // Run in background, don't block response
+      analyzeModuleConnections(userId, module_id).then(count => {
+        if (count > 0) {
+          console.log(`✅ Created ${count} automatic connections for module ${module_id}`);
+        }
+      }).catch(error => {
+        console.error('Error analyzing connections:', error);
+      });
+    }
 
     res.json(progress);
   } catch (error) {
@@ -1745,6 +1758,15 @@ router.post('/modules/:id/complete', async (req, res) => {
         identified_weaknesses: identifiedWeaknesses ? JSON.stringify(identifiedWeaknesses) : null,
         code_snippets: codeSnippets ? JSON.stringify(codeSnippets) : null
       }
+    });
+
+    // Trigger automatic connection analysis in background
+    analyzeModuleConnections(userId, moduleId).then(count => {
+      if (count > 0) {
+        console.log(`✅ Created ${count} automatic connections for completed module ${moduleId}`);
+      }
+    }).catch(error => {
+      console.error('Error analyzing connections:', error);
     });
 
     res.json({ success: true });

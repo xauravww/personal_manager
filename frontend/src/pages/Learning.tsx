@@ -1023,7 +1023,17 @@ const Learning = () => {
               {step === 'module' && currentModule && (
                 <ModulePlayer
                   module={currentModule}
-                  onBack={() => setStep('curriculum')}
+                  onBack={() => {
+                    // Smart navigation: return to vault if opened from vault, otherwise to curriculum
+                    if (generatedCourse && generatedCourse.modules) {
+                      // Opened from study flow - return to curriculum
+                      setStep('curriculum');
+                    } else {
+                      // Opened from vault - return to vault view
+                      setViewMode('vault');
+                      setStep('input');
+                    }
+                  }}
                   onComplete={handleModuleComplete}
                 />
               )}

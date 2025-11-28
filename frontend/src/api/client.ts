@@ -221,6 +221,14 @@ class ApiClient {
     }
   }
 
+  // Generic GET method for flexibility
+  async get<T = any>(endpoint: string, config?: RequestInit): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, {
+      method: 'GET',
+      ...config
+    });
+  }
+
   // Generic POST method for flexibility
   async post<T = any>(endpoint: string, data?: any, config?: RequestInit): Promise<{ data: T, status: number }> {
     const url = `${API_BASE_URL}${endpoint}`;

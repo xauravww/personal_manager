@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useLocation } from 'react-router-dom';
 import {
   BookOpen, Brain, Target, Zap, ChevronRight, CheckCircle,
@@ -13,6 +13,7 @@ import ReactMarkdown from 'react-markdown';
 import VaultSidebar, { VaultItem } from '../components/vault/VaultSidebar';
 import VaultContent from '../components/vault/VaultContent';
 import VaultChat from '../components/vault/VaultChat';
+import KnowledgeGraph from '../components/learning/KnowledgeGraph';
 
 // --- Types ---
 interface Question {
@@ -71,7 +72,7 @@ const LoadingState = ({ message }: { message: string }) => (
         <Brain className="w-8 h-8 text-neon-blue animate-pulse" />
       </div>
     </div>
-    <h3 className="text-xl font-bold text-starlight-100 mb-2">{message}</h3>
+    <h3 className="text-xl font-semibold text-starlight-100 mb-2">{message}</h3>
     <p className="text-starlight-400 max-w-md">Our AI is analyzing your request and structuring your personalized learning path...</p>
   </div>
 );
@@ -87,8 +88,8 @@ const SkillInput = ({ onAnalyze }: { onAnalyze: (topic: string) => void }) => {
   return (
     <div className="max-w-3xl mx-auto py-8 px-4 md:py-12">
       <div className="text-center mb-8 md:mb-12">
-        <h1 className="text-3xl md:text-5xl font-bold text-starlight-100 mb-4 md:mb-6 tracking-tight font-display">
-          What do you want to <span className="text-transparent bg-clip-text bg-gradient-to-r from-neon-blue to-neon-purple">master today?</span>
+        <h1 className="text-3xl md:text-5xl font-extralight text-starlight-100 mb-4 md:mb-6 tracking-tight font-display">
+          What do you want to <span className="text-transparent bg-clip-text bg-gradient-to-r from-neon-blue to-neon-purple font-semibold">master today?</span>
         </h1>
         <p className="text-lg md:text-xl text-starlight-400 leading-relaxed">
           Your AI Study Partner will assess your current level, identify gaps, and build a custom curriculum just for you.
@@ -112,7 +113,7 @@ const SkillInput = ({ onAnalyze }: { onAnalyze: (topic: string) => void }) => {
           <button
             type="submit"
             disabled={!topic.trim()}
-            className="bg-neon-blue text-white px-4 md:px-8 py-2 md:py-3 rounded-xl font-medium hover:bg-neon-blue/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm md:text-base whitespace-nowrap shadow-lg shadow-neon-blue/20"
+            className="bg-neon-blue text-white px-4 md:px-8 py-2 md:py-3 rounded-xl font-semibold hover:bg-neon-blue/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm md:text-base whitespace-nowrap shadow-lg shadow-neon-blue/20"
           >
             Start
             <ArrowRight className="w-4 h-4 md:w-5 md:h-5" />
@@ -128,7 +129,7 @@ const SkillInput = ({ onAnalyze }: { onAnalyze: (topic: string) => void }) => {
             onClick={() => onAnalyze(suggestion)}
             className="p-3 md:p-4 bg-void-900 rounded-xl border border-starlight-100/10 hover:border-neon-blue/50 hover:bg-void-800 hover:shadow-lg hover:shadow-neon-blue/5 transition-all text-left group"
           >
-            <span className="text-sm font-medium text-starlight-400 group-hover:text-starlight-100">{suggestion}</span>
+            <span className="text-sm font-semibold text-starlight-400 group-hover:text-starlight-100">{suggestion}</span>
           </button>
         ))}
       </div>
@@ -168,11 +169,20 @@ const Assessment = ({ topic, questions, onComplete }: { topic: string, questions
 
   const progress = ((currentQuestion + 1) / questions.length) * 100;
 
+  if (!questions || questions.length === 0) {
+    return (
+      <div className="max-w-3xl mx-auto py-24 px-4 text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-neon-blue mx-auto mb-4"></div>
+        <p className="text-starlight-400">Loading assessment questions...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-3xl mx-auto py-8 px-4">
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold text-starlight-100 font-display">Skill Assessment: <span className="text-neon-blue">{topic}</span></h2>
+          <h2 className="text-2xl font-semibold text-starlight-100 font-display">Skill Assessment: <span className="text-neon-blue">{topic}</span></h2>
           <span className="text-sm font-medium text-starlight-500">Question {currentQuestion + 1} of {questions.length}</span>
         </div>
         <div className="h-2 bg-void-800 rounded-full overflow-hidden">
@@ -217,14 +227,14 @@ const Assessment = ({ topic, questions, onComplete }: { topic: string, questions
           <button
             onClick={handleSubmit}
             disabled={answers.includes(-1)}
-            className="bg-neon-blue text-white px-8 py-3 rounded-xl font-medium hover:bg-neon-blue/90 transition-all disabled:opacity-50 shadow-lg shadow-neon-blue/20"
+            className="bg-neon-blue text-white px-8 py-3 rounded-xl font-semibold hover:bg-neon-blue/90 transition-all disabled:opacity-50 shadow-lg shadow-neon-blue/20"
           >
             Complete Assessment
           </button>
         ) : (
           <button
             onClick={() => setCurrentQuestion(curr => Math.min(questions.length - 1, curr + 1))}
-            className="bg-starlight-100 text-void-950 px-8 py-3 rounded-xl font-medium hover:bg-white transition-all shadow-lg shadow-starlight-100/10"
+            className="bg-starlight-100 text-void-950 px-8 py-3 rounded-xl font-semibold hover:bg-white transition-all shadow-lg shadow-starlight-100/10"
           >
             Next Question
           </button>
@@ -253,12 +263,12 @@ const AssessmentResultView = ({
         <div className="inline-flex items-center justify-center w-20 h-20 bg-neon-blue/10 text-neon-blue rounded-full mb-6 border border-neon-blue/20 shadow-[0_0_20px_rgba(59,130,246,0.2)]">
           <Award className="w-10 h-10" />
         </div>
-        <h2 className="text-3xl font-bold text-starlight-100 mb-2 font-display">Assessment Complete!</h2>
-        <p className="text-starlight-400">You scored <span className="font-bold text-neon-blue text-xl">{result.score}%</span> on {topic}.</p>
+        <h2 className="text-3xl font-extralight text-starlight-100 mb-2 font-display tracking-tight">Assessment Complete!</h2>
+        <p className="text-starlight-400">You scored <span className="font-semibold text-neon-blue text-xl">{result.score}%</span> on {topic}.</p>
       </div>
 
       <div className="bg-void-900 rounded-2xl shadow-xl border border-starlight-100/10 p-8 mb-8 text-left">
-        <h3 className="font-bold text-starlight-100 mb-4">Analysis</h3>
+        <h3 className="font-semibold text-starlight-100 mb-4">Analysis</h3>
         {result.score > 80 ? (
           <p className="text-starlight-300 mb-4">You have a strong grasp of the fundamentals! We'll tailor the course to focus on advanced concepts and practical applications.</p>
         ) : result.score > 50 ? (
@@ -269,11 +279,11 @@ const AssessmentResultView = ({
 
         {result.weakAreas.length > 0 && (
           <div className="mt-6 pt-6 border-t border-starlight-100/10">
-            <h4 className="text-sm font-bold text-starlight-500 uppercase tracking-wider mb-3">Areas to Focus On</h4>
+            <h4 className="text-sm font-semibold text-starlight-500 uppercase tracking-wider mb-3">Areas to Focus On</h4>
             <div className="space-y-3">
               {result.weakAreas.map((area, i) => (
                 <div key={i} className="flex items-start gap-3 p-3 bg-amber-500/10 rounded-lg border border-amber-500/20">
-                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center text-xs font-bold mt-0.5">
+                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center text-xs font-semibold mt-0.5">
                     {i + 1}
                   </div>
                   <p className="text-sm text-starlight-200 leading-relaxed flex-1">{area}</p>
@@ -291,11 +301,11 @@ const AssessmentResultView = ({
               <BookOpen className="w-6 h-6" />
             </div>
             <div>
-              <h4 className="font-bold text-starlight-100 mb-1">Existing Course Found</h4>
+              <h4 className="font-semibold text-starlight-100 mb-1">Existing Course Found</h4>
               <p className="text-sm text-starlight-400 mb-3">You already have a course related to "{existingSubject.title}". Would you like to continue that instead?</p>
               <button
                 onClick={onContinue}
-                className="text-neon-blue font-bold text-sm hover:text-neon-blue/80 transition-colors"
+                className="text-neon-blue font-semibold text-sm hover:text-neon-blue/80 transition-colors"
               >
                 Continue "{existingSubject.title}"
               </button>
@@ -307,7 +317,7 @@ const AssessmentResultView = ({
       <div className="flex flex-col sm:flex-row gap-4 justify-center">
         <button
           onClick={onGenerate}
-          className="bg-neon-blue text-white px-8 py-3 rounded-xl font-bold hover:bg-neon-blue/90 transition-all shadow-lg shadow-neon-blue/20 flex items-center justify-center gap-2"
+          className="bg-neon-blue text-white px-8 py-3 rounded-xl font-semibold hover:bg-neon-blue/90 transition-all shadow-lg shadow-neon-blue/20 flex items-center justify-center gap-2"
         >
           <Sparkles className="w-5 h-5" />
           Generate Custom Course
@@ -315,7 +325,7 @@ const AssessmentResultView = ({
         {existingSubject && (
           <button
             onClick={onContinue}
-            className="px-8 py-3 rounded-xl font-bold border border-starlight-100/10 hover:bg-void-800 transition-all text-starlight-300"
+            className="px-8 py-3 rounded-xl font-semibold border border-starlight-100/10 hover:bg-void-800 transition-all text-starlight-300"
           >
             Continue Existing
           </button>
@@ -342,7 +352,7 @@ const CurriculumPreview = ({
         <div className="inline-flex items-center justify-center p-3 bg-neon-green/10 text-neon-green rounded-full mb-6 border border-neon-green/20 shadow-[0_0_15px_rgba(74,222,128,0.2)]">
           <Sparkles className="w-6 h-6" />
         </div>
-        <h2 className="text-3xl md:text-4xl font-bold text-starlight-100 mb-4 font-display">Your Custom Curriculum is Ready</h2>
+        <h2 className="text-3xl md:text-4xl font-extralight text-starlight-100 mb-4 font-display tracking-tight">Your Custom Curriculum is Ready</h2>
         <p className="text-xl text-starlight-400 max-w-2xl mx-auto">
           Based on your assessment, we've designed this path to take you from your current level to mastery.
         </p>
@@ -351,7 +361,7 @@ const CurriculumPreview = ({
       <div className="bg-void-900 rounded-2xl shadow-xl border border-starlight-100/10 overflow-hidden mb-8">
         <div className="p-8 border-b border-starlight-100/10 bg-void-900/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h3 className="text-2xl font-bold text-starlight-100 mb-2 font-display">{course.title}</h3>
+            <h3 className="text-2xl font-semibold text-starlight-100 mb-2 font-display">{course.title}</h3>
             <p className="text-starlight-400">{course.description}</p>
           </div>
           <div className="flex gap-2">
@@ -374,12 +384,12 @@ const CurriculumPreview = ({
         <div className="divide-y divide-starlight-100/5">
           {course.modules.map((module, idx) => (
             <div key={idx} className="p-6 hover:bg-void-800/50 transition-colors flex items-start gap-4">
-              <div className="flex-shrink-0 w-10 h-10 bg-neon-blue/10 text-neon-blue rounded-lg flex items-center justify-center font-bold border border-neon-blue/20">
+              <div className="flex-shrink-0 w-10 h-10 bg-neon-blue/10 text-neon-blue rounded-lg flex items-center justify-center font-semibold border border-neon-blue/20">
                 {idx + 1}
               </div>
               <div className="flex-1">
                 <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-lg font-bold text-starlight-100">{module.title}</h4>
+                  <h4 className="text-lg font-semibold text-starlight-100">{module.title}</h4>
                   <span className={`px-3 py-1 rounded-full text-xs font-medium ${module.difficulty === 'beginner' ? 'bg-neon-green/10 text-neon-green border border-neon-green/20' :
                     module.difficulty === 'intermediate' ? 'bg-yellow-400/10 text-yellow-400 border border-yellow-400/20' :
                       'bg-red-400/10 text-red-400 border border-red-400/20'
@@ -401,7 +411,7 @@ const CurriculumPreview = ({
       <div className="flex justify-center">
         <button
           onClick={onStart}
-          className="bg-neon-blue text-white px-10 py-4 rounded-xl font-bold text-lg hover:bg-neon-blue/90 transition-all shadow-lg shadow-neon-blue/20 transform hover:-translate-y-1 flex items-center gap-3"
+          className="bg-neon-blue text-white px-10 py-4 rounded-xl font-semibold text-lg hover:bg-neon-blue/90 transition-all shadow-lg shadow-neon-blue/20 transform hover:-translate-y-1 flex items-center gap-3"
         >
           Start Learning Now
           <ArrowRight className="w-6 h-6" />
@@ -456,7 +466,7 @@ const ModulePlayer = ({ module, onBack, onComplete }: { module: Module, onBack: 
     }
   }, [messages]);
 
-  const handleSend = async (textInput?: string) => {
+  const handleSend = useCallback(async (textInput?: string) => {
     let msgContent = textInput || input;
     if (!msgContent.trim()) return;
 
@@ -504,7 +514,8 @@ const ModulePlayer = ({ module, onBack, onComplete }: { module: Module, onBack: 
     } finally {
       setIsTyping(false);
     }
-  };
+  }, [input, isCodeMode, module.id, messages, currentCheckpointIndex, checkpoints]);
+
 
   const handleNextTopic = () => {
     setMessages(prev => {
@@ -579,14 +590,14 @@ const ModulePlayer = ({ module, onBack, onComplete }: { module: Module, onBack: 
         </div>
 
         <div className="mb-8">
-          <h3 className="font-bold text-starlight-100 text-lg mb-2">{module.title}</h3>
+          <h3 className="font-semibold text-starlight-100 text-lg mb-2">{module.title}</h3>
           <div className="flex items-center gap-2 text-sm text-starlight-500">
             <Clock className="w-4 h-4" /> {module.estimated_time} mins
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto custom-scrollbar">
-          <h4 className="text-xs font-bold text-starlight-600 uppercase tracking-wider mb-4">Checkpoints</h4>
+          <h4 className="text-xs font-semibold text-starlight-600 uppercase tracking-wider mb-4">Checkpoints</h4>
           <ul className="space-y-3">
             {checkpoints.length > 0 ? checkpoints.map((cp: any, i: number) => (
               <li key={i} className={`flex items-center gap-3 text-sm ${i === currentCheckpointIndex ? 'text-neon-blue font-medium' : 'text-starlight-400'}`}>
@@ -611,8 +622,9 @@ const ModulePlayer = ({ module, onBack, onComplete }: { module: Module, onBack: 
             <Menu className="w-5 h-5" />
             <span className="text-sm font-medium">Checkpoints</span>
           </button>
-          <span className="text-sm font-bold text-starlight-100 truncate max-w-[150px]">{module.title}</span>
+          <span className="text-sm font-semibold text-starlight-100 truncate max-w-[150px]">{module.title}</span>
         </div>
+
         <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar" ref={scrollRef}>
           {messages.map((msg, idx) => (
             <div key={idx} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
@@ -626,7 +638,7 @@ const ModulePlayer = ({ module, onBack, onComplete }: { module: Module, onBack: 
               </div>
               {msg.quiz && (
                 <div className="mt-4 max-w-2xl w-full bg-void-900 rounded-xl p-4 border border-starlight-100/10 shadow-lg">
-                  <div className="flex items-center gap-2 mb-3 text-neon-purple font-bold">
+                  <div className="flex items-center gap-2 mb-3 text-neon-purple font-semibold">
                     <div className="p-1 bg-neon-purple/10 rounded-lg"><Brain className="w-4 h-4" /></div>
                     Quiz Time
                   </div>
@@ -648,7 +660,7 @@ const ModulePlayer = ({ module, onBack, onComplete }: { module: Module, onBack: 
                 <div className="mt-4">
                   <button
                     onClick={handleNextTopic}
-                    className="w-full py-3 bg-neon-blue text-white font-bold rounded-xl hover:bg-neon-blue/90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-neon-blue/20"
+                    className="w-full py-3 bg-neon-blue text-white font-semibold rounded-xl hover:bg-neon-blue/90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-neon-blue/20"
                   >
                     <Unlock className="w-5 h-5" /> Proceed to Next Topic <ChevronRight className="w-5 h-5" />
                   </button>
@@ -658,7 +670,7 @@ const ModulePlayer = ({ module, onBack, onComplete }: { module: Module, onBack: 
                 <div className="mt-4">
                   <button
                     onClick={handleModuleComplete}
-                    className="w-full py-3 bg-neon-green text-void-950 font-bold rounded-xl hover:bg-neon-green/90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-neon-green/20"
+                    className="w-full py-3 bg-neon-green text-void-950 font-semibold rounded-xl hover:bg-neon-green/90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-neon-green/20"
                   >
                     <CheckCircle className="w-5 h-5" /> Complete Module
                   </button>
@@ -666,7 +678,20 @@ const ModulePlayer = ({ module, onBack, onComplete }: { module: Module, onBack: 
               )}
             </div>
           ))}
+
+          {isTyping && (
+            <div className="flex items-start">
+              <div className="max-w-xs rounded-2xl p-4 bg-void-800 text-starlight-200 border border-starlight-100/5">
+                <div className="flex space-x-1">
+                  <div className="w-2 h-2 bg-neon-blue rounded-full animate-bounce delay-100"></div>
+                  <div className="w-2 h-2 bg-neon-blue rounded-full animate-bounce delay-200"></div>
+                  <div className="w-2 h-2 bg-neon-blue rounded-full animate-bounce delay-300"></div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
+
         <div className="p-4 bg-void-900 border-t border-starlight-100/10">
           <div className="relative">
             <input
@@ -695,7 +720,7 @@ const ModulePlayer = ({ module, onBack, onComplete }: { module: Module, onBack: 
 
 const Learning = () => {
   // State for Vault/Hub Layout
-  const [viewMode, setViewMode] = useState<'study' | 'vault'>('study');
+  const [viewMode, setViewMode] = useState<'study' | 'vault' | 'graph'>('study');
   const [items, setItems] = useState<VaultItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<VaultItem | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -703,7 +728,7 @@ const Learning = () => {
   const [isLoading, setIsLoading] = useState(true);
 
   // State for Study Mode Logic
-  const [step, setStep] = useState<'input' | 'assessment' | 'result' | 'curriculum' | 'module'>('input');
+  const [step, setStep] = useState<'input' | 'assessment' | 'result' | 'curriculum' | 'module' | 'loading'>('input');
   const [topic, setTopic] = useState('');
   const [assessmentQuestions, setAssessmentQuestions] = useState<Question[]>([]);
   const [assessmentResult, setAssessmentResult] = useState<AssessmentResult | null>(null);
@@ -729,12 +754,13 @@ const Learning = () => {
   }, [location.state]);
 
   // Fetch Vault Data
-  const fetchVaultData = React.useCallback(async () => {
+  const fetchVaultData = useCallback(async () => {
     try {
-      // Only set loading on initial fetch if items are empty
       if (items.length === 0) setIsLoading(true);
+      console.log('Fetching vault data...');
 
       const subjectsRes = await apiClient.getLearningSubjects();
+      console.log('Subjects response:', subjectsRes);
 
       if (subjectsRes.success && subjectsRes.data) {
         const subjects = subjectsRes.data;
@@ -744,8 +770,6 @@ const Learning = () => {
           const modules = modulesRes.data?.modules || [];
 
           const children: VaultItem[] = modules.map((m: any) => {
-            // Initial state: Not loaded
-            // We create a placeholder note item that will be populated on demand
             const moduleNotes: VaultItem[] = [
               {
                 id: `${m.id}-practice`,
@@ -754,10 +778,10 @@ const Learning = () => {
                 data: {
                   id: m.id,
                   title: 'Learning Notes',
-                  content: 'Loading notes...', // Placeholder
+                  content: 'Loading notes...',
                   status: 'unknown',
                   notes: '',
-                  isLoaded: false // Flag to track if we need to fetch
+                  isLoaded: false
                 }
               }
             ];
@@ -780,7 +804,10 @@ const Learning = () => {
           };
         }));
 
+        console.log('Built vault tree:', tree);
         setItems(tree);
+      } else {
+        console.error('Failed to fetch subjects:', subjectsRes.error);
       }
     } catch (error) {
       console.error("Failed to fetch vault data", error);
@@ -798,10 +825,8 @@ const Learning = () => {
   const handleAnalyze = async (inputTopic: string) => {
     setTopic(inputTopic);
     setLoadingMessage(`Analyzing "${inputTopic}"...`);
-    setTopic(inputTopic); // Update topic state
-    setStep('assessment'); // We'll show loading state inside the conditional render if needed, or use a separate loading step
+    setStep('loading');
 
-    // Check if we already have a subject for this
     const match = items.find(item => item.title.toLowerCase().includes(inputTopic.toLowerCase()));
     if (match) {
       setExistingSubjectMatch(match);
@@ -810,14 +835,13 @@ const Learning = () => {
     }
 
     try {
-      // Generate assessment questions
       const response = await apiClient.assessSkill(inputTopic);
       if (response.success && response.data) {
         setAssessmentQuestions(response.data.questions);
+        setStep('assessment');
       }
     } catch (error) {
       console.error("Failed to generate assessment", error);
-      // Fallback or error state
     } finally {
       setLoadingMessage('');
     }
@@ -830,11 +854,11 @@ const Learning = () => {
 
   const handleGenerateCourse = async () => {
     setLoadingMessage('Designing your custom curriculum...');
-    // setStep('loading'); // Optional: explicit loading step
+    setStep('loading');
 
     try {
       const response = await apiClient.generateCurriculum(
-        inputTopic, // Use inputTopic or ensure topic state is updated
+        topic,
         {
           score: assessmentResult?.score || 0,
           weakAreas: assessmentResult?.weakAreas || []
@@ -855,37 +879,30 @@ const Learning = () => {
   const handleStartLearning = async () => {
     if (!generatedCourse) return;
 
+    // Validate required fields
+    if (!generatedCourse.title || !generatedCourse.description) {
+      console.error('Generated course is missing required fields:', generatedCourse);
+      setLoadingMessage('');
+      return;
+    }
+
     setLoadingMessage('Setting up your learning environment...');
+    setStep('loading');
 
     try {
-      // Create the subject and modules in the backend
       const response = await apiClient.createLearningPath({
         title: generatedCourse.title,
         description: generatedCourse.description,
-        modules: generatedCourse.modules
+        modules: generatedCourse.modules || []
       });
 
       if (response.success) {
-        // Refresh vault data to show new subject
         await fetchVaultData();
 
-        // Start the first module
-        if (generatedCourse.modules.length > 0) {
-          // We need the ID of the created module.
-          // The API should return the created structure.
-          // For now, let's assume we can just start playing the first module from the generated course
-          // But ideally we want to play the *persisted* module.
-
-          // Let's find the newly created subject in the refreshed items
-          // This might be tricky due to async state updates.
-          // For immediate UX, we can just play the local module object,
-          // but we need the ID for chat.
-          // Let's assume the API returns the created IDs.
-          const createdModules = response.data.modules;
-          if (createdModules && createdModules.length > 0) {
-            setCurrentModule(createdModules[0]);
-            setStep('module');
-          }
+        const createdModules = response.data.modules;
+        if (createdModules && createdModules.length > 0) {
+          setCurrentModule(createdModules[0]);
+          setStep('module');
         }
       }
     } catch (error) {
@@ -897,14 +914,13 @@ const Learning = () => {
 
   const handleContinueExisting = () => {
     if (existingSubjectMatch) {
-      // Switch to vault view and select the subject
       setViewMode('vault');
       setSelectedItem(existingSubjectMatch);
+      setStep('input');
     }
   };
 
   const handleModuleComplete = async (sessionData: any) => {
-    // Save progress, update backend
     if (currentModule?.id) {
       try {
         await apiClient.updateModuleProgress(currentModule.id, {
@@ -916,187 +932,236 @@ const Learning = () => {
       }
     }
 
-    // Move to next module or show course completion
-    // For now, just go back to curriculum or vault
     setViewMode('vault');
-    fetchVaultData(); // Refresh status
+    setStep('input');
+    fetchVaultData();
   };
 
   // --- Render ---
 
   return (
+    <div className="h-full flex flex-col gap-6">
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+        {/* Top Navigation Bar */}
+        <header className="h-16 border-b border-starlight-100/10 bg-void-900/50 backdrop-blur-sm flex items-center justify-between px-6 z-10">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="p-2 text-starlight-400 hover:text-starlight-100 hover:bg-void-800 rounded-lg transition-colors"
+            >
+              <PanelLeft className="w-5 h-5" />
+            </button>
+            <h1 className="text-xl font-semibold text-starlight-100 font-display">
+              {viewMode === 'study' ? 'Learning Center' : viewMode === 'graph' ? 'Knowledge Graph' : 'My Vault'}
+            </h1>
+          </div>
 
-    <div className="h-[calc(100vh-8rem)] flex flex-col gap-6">
-      {/* Header / Mode Switcher */}
-      <div className="flex items-center justify-between px-1">
-        <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold text-starlight-100 font-display">Learning Hub</h1>
-          <div className="flex bg-void-900 rounded-lg p-1 border border-starlight-100/10">
+          <div className="flex items-center gap-2 bg-void-950 p-1 rounded-lg border border-starlight-100/10">
             <button
               onClick={() => setViewMode('study')}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === 'study'
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'study'
                 ? 'bg-neon-blue text-white shadow-lg shadow-neon-blue/20'
-                : 'text-starlight-400 hover:text-starlight-100'
+                : 'text-starlight-400 hover:text-starlight-100 hover:bg-void-800'
                 }`}
             >
-              AI Study Path
+              Study
             </button>
             <button
               onClick={() => setViewMode('vault')}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === 'vault'
-                ? 'bg-neon-blue text-white shadow-lg shadow-neon-blue/20'
-                : 'text-starlight-400 hover:text-starlight-100'
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'vault'
+                ? 'bg-neon-purple text-white shadow-lg shadow-neon-purple/20'
+                : 'text-starlight-400 hover:text-starlight-100 hover:bg-void-800'
                 }`}
             >
-              My Vault
+              Vault
+            </button>
+            <button
+              onClick={() => setViewMode('graph')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${viewMode === 'graph'
+                ? 'bg-neon-green text-void-950 shadow-lg shadow-neon-green/20'
+                : 'text-starlight-400 hover:text-starlight-100 hover:bg-void-800'
+                }`}
+            >
+              Graph
             </button>
           </div>
-        </div>
-      </div>
+        </header>
 
-      {/* Main Content Area */}
-      <div className="flex-1 min-h-0">
-        {viewMode === 'study' ? (
-          <div className="h-full overflow-y-auto custom-scrollbar rounded-2xl bg-void-950 border border-starlight-100/5 shadow-inner">
-            {loadingMessage ? (
-              <LoadingState message={loadingMessage} />
-            ) : step === 'input' ? (
-              <SkillInput onAnalyze={handleAnalyze} />
-            ) : step === 'assessment' ? (
-              <Assessment
-                topic={topic}
-                questions={assessmentQuestions}
-                onComplete={handleAssessmentComplete}
+        {/* Content Body */}
+        <main className="flex-1 overflow-hidden relative">
+          {viewMode === 'study' ? (
+            <div className="h-full overflow-y-auto custom-scrollbar">
+              {step === 'input' && <SkillInput onAnalyze={handleAnalyze} />}
+              {step === 'assessment' && (
+                <Assessment
+                  topic={topic}
+                  questions={assessmentQuestions}
+                  onComplete={handleAssessmentComplete}
+                />
+              )}
+              {step === 'result' && assessmentResult && (
+                <AssessmentResultView
+                  result={assessmentResult}
+                  topic={topic}
+                  existingSubject={existingSubjectMatch}
+                  onGenerate={handleGenerateCourse}
+                  onContinue={handleContinueExisting}
+                />
+              )}
+              {step === 'curriculum' && generatedCourse && (
+                <CurriculumPreview
+                  course={generatedCourse}
+                  onStart={handleStartLearning}
+                  onRegenerate={() => handleAnalyze(topic)}
+                  onChat={() => {
+                    setIsChatOpen(true);
+                    setViewMode('vault');
+                  }}
+                />
+              )}
+              {step === 'module' && currentModule && (
+                <ModulePlayer
+                  module={currentModule}
+                  onBack={() => setStep('curriculum')}
+                  onComplete={handleModuleComplete}
+                />
+              )}
+
+              {/* Loading Overlay */}
+              {(step === 'loading' || (step === 'assessment' && assessmentQuestions.length === 0)) && (
+                <div className="absolute inset-0 bg-void-950/80 backdrop-blur-sm z-50 flex items-center justify-center">
+                  <LoadingState message={loadingMessage || "Preparing..."} />
+                </div>
+              )}
+            </div>
+          ) : viewMode === 'graph' ? (
+            <div className="h-full p-6">
+              <KnowledgeGraph
+                onNodeClick={(node) => console.log('Clicked node:', node)}
+                onNavigate={(node) => {
+                  console.log('Navigating to node:', node);
+                  if (node.type === 'subject') {
+                    const subjectItem = items.find(item => item.id === node.id && item.type === 'subject');
+                    if (subjectItem) {
+                      setViewMode('vault');
+                      setSelectedItem(subjectItem);
+                    } else {
+                      console.warn('Subject not found in items:', node.id);
+                    }
+                  } else if (node.type === 'module') {
+                    // Ensure node.data has necessary module fields
+                    if (node.data && node.data.title) {
+                      setCurrentModule(node.data);
+                      setViewMode('study');
+                      setStep('module');
+                    } else {
+                      console.warn('Module data incomplete:', node.data);
+                    }
+                  } else {
+                    console.log('Unknown node type for navigation:', node.type);
+                  }
+                }}
               />
-            ) : step === 'result' && assessmentResult ? (
-              <AssessmentResultView
-                result={assessmentResult}
-                topic={topic}
-                existingSubject={existingSubjectMatch}
-                onGenerate={handleGenerateCourse}
-                onContinue={handleContinueExisting}
-              />
-            ) : step === 'curriculum' && generatedCourse ? (
-              <CurriculumPreview
-                course={generatedCourse}
-                onStart={handleStartLearning}
-                onRegenerate={handleGenerateCourse}
-                onChat={() => { }}
-              />
-            ) : step === 'module' && currentModule ? (
-              <ModulePlayer
-                module={currentModule}
-                onBack={() => setStep('curriculum')}
-                onComplete={handleModuleComplete}
-              />
-            ) : null}
-          </div>
-        ) : (
-          <div className="flex h-full gap-6">
-            {/* Vault Sidebar */}
-            <div className={`
-                w-80 flex-shrink-0 bg-void-900 rounded-2xl border border-starlight-100/10 overflow-hidden flex flex-col
-                ${!isSidebarOpen && 'hidden'}
-              `}>
-              <div className="p-4 border-b border-starlight-100/10 flex items-center justify-between">
-                <h2 className="font-bold text-starlight-100 flex items-center gap-2">
-                  <Archive className="w-4 h-4 text-neon-blue" /> Library
-                </h2>
-                <button onClick={() => fetchVaultData()} className="p-1 text-starlight-500 hover:text-starlight-100">
-                  <RefreshCw className="w-4 h-4" />
-                </button>
-              </div>
-              <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
+            </div>
+          ) : (
+            <div className="h-full flex relative">
+              {/* Vault Sidebar */}
+              <div className={`
+                  ${isSidebarOpen ? 'w-80' : 'w-0'} flex-shrink-0 bg-void-900 border-r border-starlight-100/10 overflow-hidden transition-all duration-300 ease-in-out flex flex-col
+                `}>
                 <VaultSidebar
                   items={items}
                   onSelect={setSelectedItem}
                   selectedItem={selectedItem}
                 />
               </div>
-            </div>
 
-            {/* Toggle Sidebar Button (when closed) */}
-            {!isSidebarOpen && (
-              <button
-                onClick={() => setIsSidebarOpen(true)}
-                className="h-full w-8 bg-void-900 rounded-l-none rounded-r-2xl border-y border-r border-starlight-100/10 flex items-center justify-center text-starlight-500 hover:text-neon-blue hover:bg-void-800 transition-colors"
-              >
-                <PanelLeft className="w-4 h-4" />
-              </button>
-            )}
+              {/* Sidebar Toggle Button (when closed) */}
+              {!isSidebarOpen && (
+                <div className="absolute left-0 top-6 z-20">
+                  <button
+                    onClick={() => setIsSidebarOpen(true)}
+                    className="p-2 bg-void-900 rounded-r-lg border-y border-r border-starlight-100/10 text-starlight-500 hover:text-neon-blue hover:bg-void-800 transition-colors shadow-lg"
+                    title="Open Sidebar"
+                  >
+                    <PanelLeft className="w-5 h-5" />
+                  </button>
+                </div>
+              )}
 
-            {/* Vault Content / Chat */}
-            <div className="flex-1 bg-void-900 rounded-2xl border border-starlight-100/10 overflow-hidden flex flex-col relative">
-              {selectedItem ? (
-                <>
-                  <div className="h-14 border-b border-starlight-100/10 flex items-center justify-between px-6 bg-void-900/50">
-                    <div className="flex items-center gap-3">
-                      {isSidebarOpen && (
-                        <button onClick={() => setIsSidebarOpen(false)} className="mr-2 text-starlight-500 hover:text-starlight-100">
-                          <PanelLeft className="w-4 h-4" />
-                        </button>
-                      )}
-                      <span className="font-bold text-starlight-100">{selectedItem.title}</span>
-                      {selectedItem.type === 'module' && (
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${selectedItem.data.status === 'completed' ? 'bg-neon-green/10 text-neon-green' : 'bg-neon-blue/10 text-neon-blue'}`}>
-                          {selectedItem.data.status}
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
+              {/* Vault Content / Chat */}
+              <div className="flex-1 bg-void-900 overflow-hidden flex flex-col relative">
+                <div className="h-14 border-b border-starlight-100/10 flex items-center justify-between px-6 bg-void-900/50">
+                  <div className="flex items-center gap-3">
+                    {isSidebarOpen && (
+                      <button onClick={() => setIsSidebarOpen(false)} className="mr-2 text-starlight-500 hover:text-starlight-100" title="Close Sidebar">
+                        <PanelLeft className="w-4 h-4" />
+                      </button>
+                    )}
+                    <h3 className="font-semibold text-starlight-100">
+                      {selectedItem ? selectedItem.title : 'Vault Browser'}
+                    </h3>
+                  </div>
+                  {selectedItem && (
+                    <div className="flex gap-2">
                       <button
-                        onClick={() => setIsChatOpen(!isChatOpen)}
-                        className={`p-2 rounded-lg transition-colors ${isChatOpen ? 'bg-neon-blue/10 text-neon-blue' : 'text-starlight-400 hover:text-starlight-100 hover:bg-void-800'}`}
+                        onClick={() => setIsChatOpen(prev => !prev)}
+                        className={`p-2 rounded-lg transition-colors ${isChatOpen ? 'bg-neon-blue text-white' : 'text-starlight-500 hover:text-starlight-100 hover:bg-void-800'}`}
                       >
                         <MessageSquare className="w-5 h-5" />
                       </button>
+                      <button
+                        onClick={() => setSelectedItem(null)}
+                        className="p-2 text-starlight-500 hover:text-red-400 hover:bg-void-800 rounded-lg transition-colors"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
                     </div>
-                  </div>
+                  )}
+                </div>
 
-                  <div className="flex-1 flex overflow-hidden">
-                    {/* Main Content View */}
-                    <div className={`flex-1 overflow-y-auto custom-scrollbar p-8 ${isChatOpen ? 'w-1/2' : 'w-full'}`}>
+                <div className="flex-1 flex overflow-hidden">
+                  {/* Content View */}
+                  <div className={`flex-1 overflow-y-auto custom-scrollbar transition-all duration-300 ${isChatOpen ? 'w-1/2 md:w-2/3' : 'w-full'}`}>
+                    {selectedItem ? (
                       <VaultContent
                         selectedItem={selectedItem}
-                        viewMode="vault"
-                        onSelect={setSelectedItem}
-                        onAction={async (action, data) => {
-                          if (action === 'update_note') {
-                            try {
-                              await apiClient.updateResource(data.id, { content: data.content });
-                              // Refresh vault data to show updated content
-                              await fetchVaultData();
-                            } catch (error) {
-                              console.error("Failed to update note", error);
-                            }
+                        viewMode={viewMode}
+                        onAction={(action, data) => {
+                          if (action === 'start_module') {
+                            // Handle start module
+                            setCurrentModule(data);
+                            setViewMode('study');
+                            setStep('module');
+                          } else if (action === 'update_note') {
+                            // Handle note update if needed
+                            console.log('Update note:', data);
                           }
                         }}
                       />
-                    </div>
-
-                    {/* Chat Sidebar */}
-                    {isChatOpen && (
-                      <div className="w-[400px] border-l border-starlight-100/10 bg-void-950 flex flex-col">
-                        <VaultChat
-                          contextItem={selectedItem}
-                          isOpen={isChatOpen}
-                          onClose={() => setIsChatOpen(false)}
-                        />
+                    ) : (
+                      <div className="flex-1 flex flex-col items-center justify-center text-starlight-500 p-8 h-full">
+                        <div className="w-16 h-16 bg-void-800 rounded-full flex items-center justify-center mb-4 border border-starlight-100/10">
+                          <Archive className="w-8 h-8 text-starlight-600" />
+                        </div>
+                        <p className="font-medium">Select an item from the library to view</p>
+                        <p className="text-sm text-starlight-600 mt-1">Courses, Modules, and Notes are stored here.</p>
                       </div>
                     )}
                   </div>
-                </>
-              ) : (
-                <div className="flex-1 flex flex-col items-center justify-center text-starlight-500">
-                  <div className="w-16 h-16 bg-void-800 rounded-full flex items-center justify-center mb-4">
-                    <Archive className="w-8 h-8 text-starlight-600" />
-                  </div>
-                  <p>Select an item from the library to view</p>
+
+                  {/* Chat Sidebar */}
+                  {isChatOpen && selectedItem && (
+                    <div className="w-full md:w-1/3 border-l border-starlight-100/10 flex-shrink-0 bg-void-950/50">
+                      <VaultChat initialQuery={`Chat about ${selectedItem.title}`} />
+                    </div>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </main>
       </div>
     </div>
   );

@@ -23,6 +23,7 @@ import instagramRoutes from './routes/instagram';
 import { errorHandler } from './middleware/errorHandler';
 import dashboardRoutes from './routes/dashboard';
 import conversationsRoutes from './routes/conversations';
+import knowledgeGraphRoutes from './routes/knowledgeGraph';
 import prisma from './config/database';
 import './workers/transcriptionWorker'; // Start worker on server startup
 
@@ -103,6 +104,7 @@ app.use('/api/learning', learningRoutes);
 app.use('/api/capture', captureRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/conversations', conversationsRoutes);
+app.use('/api/knowledge-graph', knowledgeGraphRoutes);
 app.use('/api/webhooks', instagramWebhookRoutes);
 app.use('/api', instagramRoutes);
 

@@ -139,19 +139,26 @@ const VaultSidebar: React.FC<VaultSidebarProps> = ({ items, onSelect, selectedIt
 
             {/* Tree */}
             <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
-                {filteredItems.map((item) => (
-                    <VaultTreeItem
-                        key={item.id}
-                        item={item}
-                        level={0}
-                        onSelect={(i) => {
-                            onSelect(i);
-                            // if (window.innerWidth < 768) onClose(); // onClose is not a prop
-                        }}
-                        selectedId={selectedItem?.id}
-                        viewMode="vault"
-                    />
-                ))}
+                {filteredItems.length > 0 ? (
+                    filteredItems.map((item) => (
+                        <VaultTreeItem
+                            key={item.id}
+                            item={item}
+                            level={0}
+                            onSelect={(i) => {
+                                onSelect(i);
+                                // if (window.innerWidth < 768) onClose(); // onClose is not a prop
+                            }}
+                            selectedId={selectedItem?.id}
+                            viewMode="vault"
+                        />
+                    ))
+                ) : (
+                    <div className="p-4 text-center text-starlight-500 text-sm">
+                        <p>No learning subjects found.</p>
+                        <p className="mt-2 text-xs">Start a new study topic to create your first course!</p>
+                    </div>
+                )}
             </div>
         </div>
     );

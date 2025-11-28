@@ -2,6 +2,7 @@ import React, { Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import Layout from './components/Layout';
 
 // Lazy load pages for code splitting
 const Landing = React.lazy(() => import('./pages/Landing'));
@@ -44,7 +45,9 @@ function App() {
                 path="/dashboard"
                 element={
                   <ProtectedRoute>
-                    <Dashboard />
+                    <Layout>
+                      <Dashboard />
+                    </Layout>
                   </ProtectedRoute>
                 }
               />
@@ -52,7 +55,9 @@ function App() {
                 path="/resources"
                 element={
                   <ProtectedRoute>
-                    <Resources />
+                    <Layout>
+                      <Resources />
+                    </Layout>
                   </ProtectedRoute>
                 }
               />
@@ -60,7 +65,9 @@ function App() {
                 path="/search"
                 element={
                   <ProtectedRoute>
-                    <Search />
+                    <Layout>
+                      <Search />
+                    </Layout>
                   </ProtectedRoute>
                 }
               />
@@ -68,7 +75,9 @@ function App() {
                 path="/upload"
                 element={
                   <ProtectedRoute>
-                    <Upload />
+                    <Layout>
+                      <Upload />
+                    </Layout>
                   </ProtectedRoute>
                 }
               />
@@ -76,7 +85,9 @@ function App() {
                 path="/deep-research"
                 element={
                   <ProtectedRoute>
-                    <DeepResearch />
+                    <Layout>
+                      <DeepResearch />
+                    </Layout>
                   </ProtectedRoute>
                 }
               />
@@ -84,7 +95,9 @@ function App() {
                 path="/learning"
                 element={
                   <ProtectedRoute>
-                    <Learning />
+                    <Layout>
+                      <Learning />
+                    </Layout>
                   </ProtectedRoute>
                 }
               />
@@ -92,7 +105,9 @@ function App() {
                 path="/learning/review/:moduleId"
                 element={
                   <ProtectedRoute>
-                    <ModuleReview />
+                    <Layout>
+                      <ModuleReview />
+                    </Layout>
                   </ProtectedRoute>
                 }
               />

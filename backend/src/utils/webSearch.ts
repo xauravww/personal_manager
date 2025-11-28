@@ -42,37 +42,41 @@ export async function performWebSearch(
   query: string,
   options: WebSearchOptions = {}
 ): Promise<WebSearchResponse> {
-  // Try multiple search engines in order of reliability
-  const searchUrls = [
-    process.env.WEB_SEARCH_URL || 'https://search.canine.tools/search',
-    'https://searx.org/search',
-    'https://search.brave.com/search'
-  ];
+  // Use a public SearXNG instance that doesn't have aggressive bot protection
+  const searchUrl = process.env.WEB_SEARCH_URL || 'https://searx.tiekoetter.com/search';
 
+  const defaultOptions = {
+    format: 'json',
+    pageno: 1,
+    time_range: 'month',
+    categories: 'it,news',
+    engines: 'duckduckgo,bing',
+    enabled_engines: 'duckduckgo,wikipedia',
+    disabled_engines: '',
+    language: 'en',
+    safesearch: 1,
+    autocomplete: 'duckduckgo',
+    image_proxy: 'True',
+    results_on_new_tab: 0,
+    theme: 'simple',
+    enabled_plugins: 'Hash_plugin,Self_Information,Tracker_URL_remover,Ahmia_blacklist',
+    disabled_plugins: '',
+    ...options
+  };
+
+  // Retry logic with exponential backoff
+  const maxRetries = 2;
   let lastError: any = null;
 
-  for (const searchUrl of searchUrls) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const defaultOptions: WebSearchOptions = {
-        format: 'json',
-        pageno: 1,
-        time_range: 'month',
-        categories: 'it,news',
-        engines: 'duckduckgo,bing',
-        enabled_engines: 'duckduckgo,wikipedia',
-        disabled_engines: '',
-        language: 'en',
-        safesearch: 1,
-        autocomplete: 'duckduckgo',
-        image_proxy: true,
-        results_on_new_tab: 0,
-        theme: 'simple',
-        enabled_plugins: 'Hash_plugin,Self_Information,Tracker_URL_remover,Ahmia_blacklist',
-        disabled_plugins: '',
-        ...options
-      };
+      if (attempt > 0) {
+        const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 3000); // 1s, 2s max 3s
+        console.log(`⏳ Waiting ${delayMs}ms before retry attempt ${attempt}...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
 
-      console.log(`Trying web search with ${searchUrl} for query: "${query}"`);
+      console.log(`🔍 ${attempt > 0 ? `Retry ${attempt}:` : 'Trying'} web search for: "${query}"`);
 
       const response = await axios.get(searchUrl, {
         params: {
@@ -80,11 +84,14 @@ export async function performWebSearch(
           ...defaultOptions
         },
         headers: {
-          'User-Agent': 'curl/7.68.0',
-          'Accept': '*/*',
+          'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:142.0) Gecko/20100101 Firefox/142.0',
+          'Accept': 'application/json, text/html, */*',
+          'Accept-Language': 'en-US,en;q=0.5',
         },
-        timeout: 10000, // 10 seconds timeout per attempt
+        timeout: 15000,
       });
+
+      console.log(`📊 Response status: ${response.status}, Results: ${response.data?.results?.length || 0}`);
 
       if (response.status !== 200) {
         throw new Error(`Web search API returned status ${response.status}`);
@@ -92,26 +99,34 @@ export async function performWebSearch(
 
       const data: WebSearchResponse = response.data;
 
-      // Validate response structure
       if (!data.results || !Array.isArray(data.results)) {
+        console.error('Invalid response structure:', JSON.stringify(data).substring(0, 200));
         throw new Error('Invalid response format from web search API');
       }
 
-      console.log(`Web search successful with ${searchUrl}, found ${data.results.length} results`);
+      console.log(`✅ Web search successful, found ${data.results.length} results`);
       return data;
 
     } catch (error: any) {
-      console.error(`Web search failed with ${searchUrl}:`, error.message);
       lastError = error;
+      const isRateLimit = error.response?.status === 429;
 
-      // Continue to next search URL
-      continue;
+      console.error(`❌ Web search attempt ${attempt + 1}/${maxRetries + 1} failed:`, error.message);
+
+      // If it's a rate limit and we have retries left, continue
+      if (isRateLimit && attempt < maxRetries) {
+        console.log('⚠️ Rate limited, will retry...');
+        continue;
+      }
+
+      // If not a rate limit or no retries left, throw immediately
+      if (!isRateLimit || attempt === maxRetries) {
+        break;
+      }
     }
   }
 
-  // If all search URLs failed, throw the last error
-  console.error('All web search URLs failed');
-  throw new Error(`Web search failed: ${lastError?.message || 'All search engines unavailable'}`);
+  throw new Error(`Web search failed after ${maxRetries + 1} attempts: ${lastError?.response?.status === 429 ? 'Rate limited (429)' : lastError?.message}`);
 }
 
 export function formatWebSearchResults(searchResponse: WebSearchResponse): string {

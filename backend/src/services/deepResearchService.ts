@@ -3,6 +3,18 @@ import { performWebSearch } from '../utils/webSearch';
 import { readUrlContent } from '../utils/urlReader';
 import prisma from '../config/database';
 
+export interface SearchPreview {
+  title: string;
+  url: string;
+}
+
+export interface SourceStatus {
+  url: string;
+  title: string;
+  status: 'queued' | 'reading' | 'completed' | 'failed' | 'skipped';
+  reason?: string;
+}
+
 export interface DeepResearchThought {
   thoughtNumber: number;
   totalThoughts: number;
@@ -17,6 +29,17 @@ export interface DeepResearchThought {
   branchId?: string;
   needsMoreThoughts?: boolean;
   timestamp: Date;
+  // New granular event fields
+  eventType?: 'thinking' | 'searching' | 'search_results' | 'reading_url' | 'evaluation' | 'sources_update' | 'thought';
+  searchQuery?: string;
+  searchResultsCount?: number;
+  searchPreview?: SearchPreview[];
+  urlBeingRead?: string;
+  urlTitle?: string;
+  urlStatus?: 'started' | 'completed' | 'failed';
+  evaluationDecision?: 'continue' | 'refine' | 'stop';
+  evaluationReason?: string;
+  sourcesStatus?: SourceStatus[];
 }
 
 export interface DeepResearchResult {
@@ -45,6 +68,13 @@ export class DeepResearchService {
   private userId?: string;
   private prisma: typeof prisma;
 
+  // URL tracking and pagination state
+  private searchResultsCache: Map<string, any[]> = new Map();
+  private checkedUrls: Set<string> = new Set();
+  private currentSearchOffset: number = 0;
+  private maxUrlAttemptsPerSearch: number = 5;
+  private maxSearchOffset: number = 100; // Don't paginate beyond 100 results
+
   constructor(userId?: string) {
     this.userId = userId;
     this.prisma = prisma;
@@ -56,6 +86,40 @@ export class DeepResearchService {
     this.sources = [];
     this.finalConfidence = 0;
     this.includeWebSearch = true;
+
+    // Reset URL tracking and pagination state
+    this.searchResultsCache.clear();
+    this.checkedUrls.clear();
+    this.currentSearchOffset = 0;
+  }
+
+  private estimateConfidence(): number {
+    // Calculate confidence based on sources gathered
+    const sourceCount = this.sources.length;
+
+    if (sourceCount === 0) return 0;
+    if (sourceCount === 1) return 30;
+    if (sourceCount === 2) return 50;
+
+    // Base confidence from source count (capped at 70)
+    let confidence = Math.min(40 + (sourceCount * 10), 70);
+
+    // Bonus for source quality (average relevance)
+    const avgRelevance = this.sources.reduce((sum, s) => sum + (s.relevance || 0.5), 0) / sourceCount;
+    confidence += avgRelevance * 20; // Up to +20 bonus
+
+    // Bonus for source diversity (different domains)
+    const uniqueDomains = new Set(this.sources.map(s => {
+      try {
+        return new URL(s.url).hostname;
+      } catch {
+        return s.url;
+      }
+    }));
+    const diversityBonus = Math.min(uniqueDomains.size * 3, 15); // Up to +15 bonus
+    confidence += diversityBonus;
+
+    return Math.min(Math.round(confidence), 100);
   }
 
   private formatThought(thoughtData: DeepResearchThought): string {
@@ -98,6 +162,45 @@ export class DeepResearchService {
 └${border}┘`;
 
     return display;
+  }
+
+  /**
+   * Get the next untried URL from search results cache
+   * @param queryKey - The search query key to look up cached results
+   * @returns Next unchecked URL or null if all have been tried
+   */
+  private getNextUntriedUrl(queryKey: string): { url: string; title: string } | null {
+    const cachedResults = this.searchResultsCache.get(queryKey);
+    if (!cachedResults || cachedResults.length === 0) {
+      return null;
+    }
+
+    // Find first URL that hasn't been checked
+    for (const result of cachedResults) {
+      if (!this.checkedUrls.has(result.url)) {
+        return { url: result.url, title: result.title };
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Check if we should paginate the search to get more results
+   * @param queryKey - The search query key
+   * @returns true if should fetch more results, false otherwise
+   */
+  private shouldPaginateSearch(queryKey: string): boolean {
+    const cachedResults = this.searchResultsCache.get(queryKey);
+    if (!cachedResults || cachedResults.length === 0) {
+      return true; // No results yet, should search
+    }
+
+    // Check if all URLs from current batch have been tried
+    const allTried = cachedResults.every(result => this.checkedUrls.has(result.url));
+
+    // Only paginate if all tried AND we haven't exceeded max offset
+    return allTried && this.currentSearchOffset < this.maxSearchOffset;
   }
 
   private async executeResearchAction(action: string, actionDetails: string, originalQuery: string): Promise<string> {
@@ -225,11 +328,14 @@ export class DeepResearchService {
             return `Web search is disabled. Use 'search_local' to search through your personal resources instead of web search.`;
           }
 
-          console.log(`🔍 Performing web search for: "${actionDetails}"`);
+          // Calculate page number based on current offset (20 results per page)
+          const pageNumber = Math.floor(this.currentSearchOffset / 20) + 1;
+
+          console.log(`🔍 Performing web search for: "${actionDetails}" (page: ${pageNumber}, offset: ${this.currentSearchOffset})`);
 
           try {
             const searchResults = await performWebSearch(actionDetails, {
-              pageno: 1,
+              pageno: pageNumber,
               time_range: 'month',
               categories: 'it,news,science',
               engines: 'duckduckgo,google,wikipedia',
@@ -241,13 +347,29 @@ export class DeepResearchService {
             // Filter out academic/research content and irrelevant results
             const filteredResults = this.filterWebSearchResults(searchResults.results || [], actionDetails);
 
-            const results = filteredResults.slice(0, 5);
-            const formattedResults = results.map((r: any, i: number) =>
+            console.log(`📊 Response status: 200, Results: ${filteredResults.length}`);
+            console.log(`✅ Web search successful, found ${filteredResults.length} results`);
+            console.log(`Filtered web results: ${searchResults.results?.length || 0} -> ${filteredResults.length}`);
+
+            // Cache ALL results (up to 20), not just 5
+            const queryKey = actionDetails.toLowerCase();
+            const existingResults = this.searchResultsCache.get(queryKey) || [];
+
+            // Append new results to existing cache
+            const allResults = [...existingResults, ...filteredResults];
+            this.searchResultsCache.set(queryKey, allResults);
+
+            // Update offset for next pagination
+            this.currentSearchOffset += filteredResults.length;
+
+            // Show preview of first 5 results
+            const previewResults = filteredResults.slice(0, 5);
+            const formattedResults = previewResults.map((r: any, i: number) =>
               `${i + 1}. ${r.title} - ${r.url}\n   ${r.content?.substring(0, 150)}...`
             ).join('\n\n');
 
-            // Store sources
-            results.forEach((r: any) => {
+            // Store PREVIEW sources (first 5 for AI to see)
+            previewResults.forEach((r: any) => {
               this.sources.push({
                 url: r.url,
                 title: r.title,
@@ -256,7 +378,10 @@ export class DeepResearchService {
               });
             });
 
-            return `Found ${results.length} results:\n${formattedResults}`;
+            const totalCached = allResults.length;
+            console.log(`📊 Emitting search_results event: ${previewResults.length} results, ${previewResults.length} in preview`);
+
+            return `Found ${previewResults.length} results:\n${formattedResults}\n\n💡 Total ${totalCached} URLs cached for fallback. Use READ action to fetch content from URLs.`;
           } catch (error) {
             console.warn(`Web search failed for "${actionDetails}":`, error);
             const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -269,47 +394,149 @@ export class DeepResearchService {
             return `Web access is disabled. Cannot read URL: "${actionDetails}". Please analyze available information from local resources only.`;
           }
 
-          console.log(`📖 Reading URL: ${actionDetails}`);
-
           try {
             // Extract URL from actionDetails (AI sometimes includes extra text)
             const urlRegex = /(https?:\/\/[^\s]+)/;
             const match = actionDetails.match(urlRegex);
-            const url = match ? match[1] : actionDetails.trim();
+            let url = match ? match[1] : actionDetails.trim();
 
             if (!url.startsWith('http://') && !url.startsWith('https://')) {
               return `Invalid URL format: ${actionDetails}. Please provide a valid URL starting with http:// or https://.`;
             }
 
-            const content = await readUrlContent(url, 15000, {
-              returnRaw: false,
-              maxLength: 3000,
-            });
+            // Check if URL has already been checked
+            if (this.checkedUrls.has(url)) {
+              console.log(`⏭️ Skipping already checked URL: ${url}`);
 
-            // Check if content is meaningful (not just error pages or redirects)
-            if (content.length < 100) {
-              return `URL content too short or inaccessible: ${url}. The page may not exist or be blocked.`;
+              // Try to find an alternative URL from search cache
+              const nextUrl = this.getNextUntriedUrl(originalQuery.toLowerCase());
+              if (nextUrl) {
+                console.log(`🔄 Trying alternative URL: ${nextUrl.url}`);
+                url = nextUrl.url;
+              } else {
+                return `URL already checked. No more unchecked URLs available from search results. Consider running another SEARCH with different keywords.`;
+              }
             }
 
-            // Store as source
-            this.sources.push({
-              url,
-              title: url, // Will be updated if we can extract title
-              content,
-              relevance: 0.9
+            // Mark URL as checked (before attempting)
+            this.checkedUrls.add(url);
+
+            console.log(`📖 Reading URL: ${url}`);
+
+            // Use Jina AI Reader - modern web scraping like Perplexity uses
+            const jinaUrl = `https://r.jina.ai/${url}`;
+            console.log(`🔍 Using Jina AI Reader: ${jinaUrl}`);
+
+            const response = await fetch(jinaUrl, {
+              headers: {
+                'Accept': 'text/plain',
+                'X-Return-Format': 'markdown'
+              }
             });
 
-            // Try to extract title from content
-            const titleMatch = content.match(/<title[^>]*>([^<]+)<\/title>/i);
-            if (titleMatch) {
-              this.sources[this.sources.length - 1].title = titleMatch[1].trim();
+            let content = '';
+            let readSuccess = false;
+
+            if (!response.ok) {
+              console.error(`❌ Jina Reader failed with status: ${response.status}`);
+
+              // Fallback to original method
+              console.log('⚠️ Trying fallback method...');
+              const fallbackContent = await readUrlContent(url, 15000, {
+                returnRaw: false,
+                maxLength: 3000,
+              });
+
+              if (fallbackContent && fallbackContent.length >= 100) {
+                content = fallbackContent;
+                readSuccess = true;
+              }
+            } else {
+              const rawContent = await response.text();
+
+              if (!rawContent || rawContent.trim().length < 100) {
+                console.log(`⚠️ Jina returned short content (${rawContent?.length || 0} chars), trying fallback...`);
+
+                // Fallback to original readUrlContent
+                const fallbackContent = await readUrlContent(url, 15000, {
+                  returnRaw: false,
+                  maxLength: 3000,
+                });
+
+                if (fallbackContent && fallbackContent.length >= 100) {
+                  content = fallbackContent;
+                  readSuccess = true;
+                }
+              } else {
+                content = rawContent.trim().substring(0, 5000);
+                readSuccess = true;
+              }
             }
 
-            return `Content read (${content.length} chars): ${content.substring(0, 500)}...`;
+            // If read was successful, store and return
+            if (readSuccess && content) {
+              console.log(`✅ Successfully read ${content.length} chars from ${url}`);
+
+              // Store in sources
+              this.sources.push({
+                url,
+                title: url,
+                content: content,
+                relevance: 0.9
+              });
+
+              return `Content read (${content.length} chars): ${content.substring(0, 300)}...`;
+            }
+
+            // URL read failed - try fallback to next URL from cache
+            console.log(`❌ Failed to read URL: ${url}`);
+
+            const nextUrl = this.getNextUntriedUrl(originalQuery.toLowerCase());
+
+            if (nextUrl) {
+              console.log(`🔄 Automatically trying next URL from search results: ${nextUrl.url}`);
+
+              // Mark this URL as checked
+              this.checkedUrls.add(nextUrl.url);
+
+              // Recursively try next URL (with limit to prevent infinite recursion)
+              const attemptCount = this.checkedUrls.size;
+              if (attemptCount < this.maxUrlAttemptsPerSearch) {
+                return await this.executeResearchAction('read_url', nextUrl.url, originalQuery);
+              } else {
+                console.log(`⚠️ Reached max URL attempts (${this.maxUrlAttemptsPerSearch})`);
+
+                // Check if we should paginate to get more results
+                if (this.shouldPaginateSearch(originalQuery.toLowerCase())) {
+                  console.log(`📄 All URLs from current batch tried. Suggesting pagination...`);
+                  return `Failed to read URL "${url}" and tried ${attemptCount} URLs. All URLs from current search batch have been attempted. Consider running another SEARCH to fetch more results (next batch: ${this.currentSearchOffset}-${this.currentSearchOffset + 20}).`;
+                }
+
+                return `Failed to read URL "${url}". Tried ${attemptCount} URLs from search results without success. No more URLs available.`;
+              }
+            }
+
+            // No more URLs to try
+            console.log(`⚠️ No more untried URLs in cache`);
+
+            // Check if should paginate
+            if (this.shouldPaginateSearch(originalQuery.toLowerCase())) {
+              return `Failed to read URL "${url}". No more unchecked URLs from current batch. Run another SEARCH to fetch more results (offset: ${this.currentSearchOffset}).`;
+            }
+
+            return `Failed to read URL "${url}": Content too short or empty. No more URLs available to try.`;
           } catch (error) {
-            console.warn(`URL reading failed for "${actionDetails}":`, error);
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            return `Failed to read URL: ${errorMessage}. Consider searching for alternative sources.`;
+            console.error(`Error reading URL ${actionDetails}:`, error);
+
+            // Try fallback URL even on error
+            const nextUrl = this.getNextUntriedUrl(originalQuery.toLowerCase());
+            if (nextUrl && this.checkedUrls.size < this.maxUrlAttemptsPerSearch) {
+              console.log(`🔄 Error occurred, trying alternative URL: ${nextUrl.url}`);
+              this.checkedUrls.add(nextUrl.url);
+              return await this.executeResearchAction('read_url', nextUrl.url, originalQuery);
+            }
+
+            return `Failed to read URL "${actionDetails}": ${error instanceof Error ? error.message : 'Unknown error'}`;
           }
         }
 
@@ -341,10 +568,10 @@ export class DeepResearchService {
     this.userId = userId;
 
     let currentThought = 1;
-    let totalThoughts = 5; // Initial estimate
     let nextThoughtNeeded = true;
     let finalAnswer = '';
     let confidence = 0;
+    const SAFETY_LIMIT = 15; // Safety limit to prevent infinite loops
 
     console.log(`🚀 Starting deep research for: "${query}" (timezone: ${userTimezone}, web search: ${includeWebSearch ? 'enabled' : 'disabled'})`);
 
@@ -393,40 +620,46 @@ export class DeepResearchService {
     // Yield initial status for non-time queries
     const initThought: DeepResearchThought = {
       thoughtNumber: 0,
-      totalThoughts: totalThoughts,
+      totalThoughts: -1, // Unknown total - AI will decide
       thought: `Initializing deep research for: "${query}"`,
+      eventType: 'thinking',
       nextThoughtNeeded: true,
       timestamp: new Date()
     };
     yield initThought;
 
     try {
-      while (nextThoughtNeeded && currentThought <= maxThoughts) {
-        console.log(`\n--- Thought ${currentThought}/${totalThoughts} ---`);
+      // AI-driven research loop - no hardcoded limit!
+      while (nextThoughtNeeded && currentThought <= SAFETY_LIMIT) {
+        console.log(`\n--- Research Step ${currentThought} ---`);
 
         // Yield thinking status
         const thinkingThought: DeepResearchThought = {
-          thoughtNumber: currentThought - 0.5, // Use decimal to indicate intermediate step
-          totalThoughts: totalThoughts,
-          thought: `Analyzing and planning research step ${currentThought}...`,
+          thoughtNumber: currentThought - 0.5,
+          totalThoughts: -1,
+          thought: '',
+          eventType: 'thinking',
           nextThoughtNeeded: true,
           timestamp: new Date()
         };
         yield thinkingThought;
 
-        // Generate next thought using AI
+        // Calculate current confidence based on sources gathered
+        const currentConfidence = this.estimateConfidence();
+
+        // Generate next thought using AI with confidence-based decision making
         const availableActions = includeWebSearch
-          ? `- "search": Search the web for specific terms (provide concise, direct search queries like "Next.js documentation" not long sentences)
-- "read_url": Read content from a specific URL (provide clean URLs without extra text)
-- "analyze": Analyze existing information
-- "extract_links": Extract links from recently read content`
-          : `- "search_local": Search through user's local resources (documents, notes, etc.) for specific terms
-- "analyze": Analyze existing information from local resources
-- "extract_links": Extract links from recently read content`;
+          ? `- "SEARCH": Search the web for specific terms (provide concise queries like "React hooks tutorial")
+- "READ": Read content from a specific URL
+- "REFINE": Current results are poor, search with different keywords
+- "SYNTHESIZE": Stop researching and provide answer (use when confidence >85%)`
+          : `- "SEARCH_LOCAL": Search user's local resources
+- "ANALYZE": Analyze existing information
+- "SYNTHESIZE": Stop and provide answer (use when confidence >85%)`;
 
         const actionOptions = includeWebSearch
-          ? `"action": "search|read_url|analyze|extract_links"`
-          : `"action": "search_local|analyze|extract_links"`;
+          ? `"action": "SEARCH|READ|REFINE|SYNTHESIZE"`
+          : `"action": "SEARCH_LOCAL|ANALYZE|SYNTHESIZE"`;
 
         // Get current date and time in user's timezone
         const timezone = userTimezone || 'UTC';
@@ -442,23 +675,64 @@ export class DeepResearchService {
           weekday: 'long'
         });
 
-        let systemPrompt = `You are conducting deep research on: "${query}"
-Current date and time: ${currentDateTime}
+        let systemPrompt = `You are conducting ITERATIVE research on: "${query}"
+Current date/time: ${currentDateTime}
 
-Current progress: ${currentThought}/${totalThoughts} thoughts completed
-Sources found: ${this.sources.length}
-${includeWebSearch ? 'Web search: ENABLED' : 'Web search: DISABLED (searching local resources only)'}
+CRITICAL DECISION LOGIC:
+- Current confidence: ${currentConfidence}%
+- Sources gathered: ${this.sources.length}
+- Research steps taken: ${currentThought}
 
-Thought history:
-${this.thoughtHistory.map(t => `Thought ${t.thoughtNumber}: ${t.thought}${t.action ? ` | Action: ${t.action}` : ''}${t.result ? ` | Result: ${t.result.substring(0, 100)}...` : ''}`).join('\n')}
+AUTOMATIC URL FALLBACK SYSTEM:
+🔄 The system now has AUTOMATIC fallback for failed URL reads:
+   - If a READ fails (empty content/JS issues), the system automatically tries alternative URLs from search cache
+   - Up to 5 URLs will be attempted automatically before giving up
+   - URLs are tracked to prevent duplicate attempts
+   - If all URLs fail, the system will suggest pagination to fetch more results
 
-Instructions for this research step:
-1. Analyze what information is still needed
-2. Plan the next research action${includeWebSearch ? ' (search, read_url, analyze, extract_links)' : ' (search_local, analyze, extract_links)'}
-3. Be specific about what you're looking for${includeWebSearch ? ' - focus on practical, beginner-friendly content (tutorials, guides, documentation) rather than academic papers or research articles' : ' - search through user\'s local documents, notes, and resources'}
+⚠️ This means: DON'T immediately SYNTHESIZE after a single failed READ!
+   → The system will handle fallback automatically
+   → Only consider SYNTHESIZE if you've successfully read content from URLs
+
+YOUR DECISION WORKFLOW:
+1. If no sources yet → action: "SEARCH" (find relevant URLs)
+2. If have search results but haven't read URLs → action: "READ" (the system will auto-try alternatives if it fails)
+3. If READ succeeded and got content → assess if need more info or can SYNTHESIZE
+4. If READ failed after trying all fallbacks → action: "SEARCH" with different keywords OR "SYNTHESIZE" with limited info
+5. If have detailed info from multiple sources AND confidence >85% → action: "SYNTHESIZE"
+
+⚠️ IMPORTANT: Don't SYNTHESIZE immediately after SEARCH!
+   → After SEARCH, you should READ URLs to get actual content
+   → System shows preview of 5 results but caches up to 20 URLs for fallback
+   → Only SYNTHESIZE after successfully reading detailed information
+
+Previous research:
+${this.thoughtHistory.slice(-3).map(t => `• ${t.action || 'Thinking'}: ${t.thought.substring(0, 100)}`).join('\n')}
+
+Sources gathered so far:
+${this.sources.slice(0, 3).map(s => `• ${s.title} (${s.url})`).join('\n')}
 
 Available actions:
-${availableActions}`;
+${availableActions}
+
+EXAMPLES OF GOOD WORKFLOW:
+✓ Step 1: SEARCH "React hooks" → Found 8 results, cached 20 URLs → Confidence: 30%
+✓ Step 2: READ first URL → Auto-fallback tries 3 URLs → One succeeds → Got detailed docs → Confidence: 70%
+✓ Step 3: READ another URL → Got examples → Confidence: 92%
+✓ Step 4: SYNTHESIZE (have detailed content from multiple sources)
+
+✗ Step 1: SEARCH "React hooks" → Found 8 results → Confidence: 70%
+✗ Step 2: READ first URL → Failed (but system has 19 more to try automatically)
+✗ Step 3: SYNTHESIZE ❌ (BAD - didn't wait for automatic fallback, didn't try other URLs!)
+
+Return JSON:
+{
+  "reasoning": "Why this decision? What info do I have/need?",
+  ${actionOptions},
+  "actionDetails": "SPECIFIC query or URL",
+  "shouldContinue": true/false,
+  "confidence": 0-100
+}`;
 
         if (learningContext) {
           systemPrompt += `\n\nUSER LEARNING CONTEXT:
@@ -496,7 +770,7 @@ Return JSON:
             temperature: 0.3,
           });
         } catch (aiError) {
-          console.error(`AI service failed on thought ${currentThought}: `, aiError);
+          console.error(`AI service failed on thought ${currentThought}:`, aiError);
 
           // Provide fallback analysis for common queries
           const fallbackAnalysis = this.generateFallbackAnalysis(query, currentThought, this.thoughtHistory);
@@ -512,7 +786,7 @@ Return JSON:
             // Yield error thought to client
             const errorThought: DeepResearchThought = {
               thoughtNumber: currentThought,
-              totalThoughts: totalThoughts,
+              totalThoughts: -1,
               thought: `AI service unavailable: ${aiError instanceof Error ? aiError.message : 'Unknown error'}. Try searching your local resources instead.`,
               nextThoughtNeeded: false,
               timestamp: new Date()
@@ -531,31 +805,118 @@ Return JSON:
           // Execute the action if specified
           let actionResult = '';
           if (thoughtResult.action && thoughtResult.actionDetails) {
-            console.log(`⚡ Executing action: ${thoughtResult.action} - ${thoughtResult.actionDetails} `);
+            console.log(`⚡ Executing action: ${thoughtResult.action} - ${thoughtResult.actionDetails}`);
 
-            // Yield action execution status
-            const actionThought: DeepResearchThought = {
-              thoughtNumber: currentThought - 0.3,
-              totalThoughts: totalThoughts,
-              thought: `Executing: ${thoughtResult.action} - ${thoughtResult.actionDetails} `,
-              action: thoughtResult.action,
-              actionDetails: thoughtResult.actionDetails,
-              nextThoughtNeeded: true,
-              timestamp: new Date()
-            };
-            yield actionThought;
+            // Map new action names to existing methods
+            let mappedAction = thoughtResult.action.toLowerCase();
+            if (mappedAction === 'search') mappedAction = 'search';
+            else if (mappedAction === 'read') mappedAction = 'read_url';
+            else if (mappedAction === 'refine') mappedAction = 'search'; // REFINE is just a search with different keywords
+            else if (mappedAction === 'search_local') mappedAction = 'search_local';
+            else if (mappedAction === 'analyze') mappedAction = 'analyze';
 
-            actionResult = await this.executeResearchAction(thoughtResult.action, thoughtResult.actionDetails, query);
+            // Handle SYNTHESIZE action - stop researching
+            if (thoughtResult.action.toUpperCase() === 'SYNTHESIZE') {
+              console.log('🎯 AI decided to SYNTHESIZE - stopping research');
+              nextThoughtNeeded = false;
+              if (thoughtResult.confidence) {
+                confidence = thoughtResult.confidence;
+                this.finalConfidence = confidence;
+              }
+              // Skip to final synthesis
+              break;
+            }
+
+            // Emit granular status event based on action type
+            if (mappedAction === 'search' || mappedAction === 'search_local') {
+              // Emit searching event with actual query
+              const searchingEvent: DeepResearchThought = {
+                thoughtNumber: currentThought - 0.4,
+                totalThoughts: -1,
+                thought: '',
+                eventType: 'searching',
+                searchQuery: thoughtResult.actionDetails,
+                nextThoughtNeeded: true,
+                timestamp: new Date()
+              };
+              yield searchingEvent;
+            } else if (mappedAction === 'read_url') {
+              // Emit URL reading start event
+              const readingEvent: DeepResearchThought = {
+                thoughtNumber: currentThought - 0.4,
+                totalThoughts: -1,
+                thought: '',
+                eventType: 'reading_url',
+                urlBeingRead: thoughtResult.actionDetails,
+                urlTitle: thoughtResult.actionDetails,
+                urlStatus: 'started',
+                nextThoughtNeeded: true,
+                timestamp: new Date()
+              };
+              yield readingEvent;
+            }
+
+            // Execute the action
+            actionResult = await this.executeResearchAction(mappedAction, thoughtResult.actionDetails, query);
+
+            // Emit completion event based on action type
+            if (mappedAction === 'search' || mappedAction === 'search_local') {
+              // Parse result count from actionResult
+              const countMatch = actionResult.match(/Found (\d+)/);
+              const resultsCount = countMatch ? parseInt(countMatch[1]) : 0;
+
+              // Extract search preview (first 8 results to show as tags)
+              const searchPreview: SearchPreview[] = [];
+              const lines = actionResult.split('\n');
+              for (let i = 0; i < lines.length && searchPreview.length < 8; i++) {
+                const line = lines[i];
+                const resultMatch = line.match(/^\d+\.\s+(.+?)\s+-\s+(https?:\/\/.+)$/);
+                if (resultMatch) {
+                  searchPreview.push({
+                    title: resultMatch[1].trim(),
+                    url: resultMatch[2].trim()
+                  });
+                }
+              }
+
+              console.log(`📊 Emitting search_results event: ${resultsCount} results, ${searchPreview.length} in preview`);
+
+              const searchResultsEvent: DeepResearchThought = {
+                thoughtNumber: currentThought - 0.2,
+                totalThoughts: -1,
+                thought: '',
+                eventType: 'search_results',
+                searchResultsCount: resultsCount,
+                searchPreview: searchPreview,
+                nextThoughtNeeded: true,
+                timestamp: new Date()
+              };
+              yield searchResultsEvent;
+            } else if (mappedAction === 'read_url') {
+              // Emit URL reading completion
+              const urlCompletedEvent: DeepResearchThought = {
+                thoughtNumber: currentThought - 0.2,
+                totalThoughts: -1,
+                thought: '',
+                eventType: 'reading_url',
+                urlBeingRead: thoughtResult.actionDetails,
+                urlTitle: thoughtResult.actionDetails,
+                urlStatus: actionResult.includes('Failed') ? 'failed' : 'completed',
+                nextThoughtNeeded: true,
+                timestamp: new Date()
+              };
+              yield urlCompletedEvent;
+            }
           }
 
           const thought: DeepResearchThought = {
             thoughtNumber: currentThought,
-            totalThoughts: thoughtResult.totalThoughts || totalThoughts,
-            thought: thoughtResult.thought,
+            totalThoughts: -1,
+            thought: thoughtResult.reasoning || thoughtResult.thought || 'Analyzing information...',
             action: thoughtResult.action,
             actionDetails: thoughtResult.actionDetails,
             result: actionResult,
-            nextThoughtNeeded: thoughtResult.nextThoughtNeeded,
+            nextThoughtNeeded: thoughtResult.shouldContinue !== false,
             timestamp: new Date()
           };
 
@@ -567,20 +928,23 @@ Return JSON:
           // Yield the completed thought for streaming
           yield thought;
 
-          nextThoughtNeeded = thoughtResult.nextThoughtNeeded;
-          totalThoughts = thoughtResult.totalThoughts || totalThoughts;
+          // Update loop control based on AI decision
+          nextThoughtNeeded = thoughtResult.shouldContinue !== false;
 
-          if (thoughtResult.finalAnswer && thoughtResult.confidence > 70) {
-            finalAnswer = thoughtResult.finalAnswer;
+          // Update confidence if AI provided it
+          if (thoughtResult.confidence && thoughtResult.confidence > 70) {
+            finalAnswer = thoughtResult.finalAnswer || '';
             confidence = thoughtResult.confidence;
             this.finalConfidence = confidence;
             this.finalAnswer = finalAnswer;
-            nextThoughtNeeded = false;
+            if (confidence > 85) {
+              nextThoughtNeeded = false; // Stop if high confidence
+            }
           }
 
           currentThought++;
         } catch (error) {
-          console.warn(`Error parsing thought ${currentThought}: `, error);
+          console.warn(`Error parsing thought ${currentThought}:`, error);
           break;
         }
       }
@@ -588,7 +952,7 @@ Return JSON:
       // Yield synthesis status
       const synthesisThought: DeepResearchThought = {
         thoughtNumber: currentThought,
-        totalThoughts: totalThoughts,
+        totalThoughts: -1,
         thought: 'Synthesizing final answer from all research findings...',
         nextThoughtNeeded: false,
         timestamp: new Date()
@@ -610,8 +974,8 @@ Return JSON:
       // Yield final thought with conclusion
       const finalThought: DeepResearchThought = {
         thoughtNumber: currentThought + 1,
-        totalThoughts: totalThoughts,
-        thought: `Research completed.${finalAnswer ? `Final answer: ${finalAnswer}` : 'Unable to find a confident answer.'} `,
+        totalThoughts: -1,
+        thought: `Research completed.${finalAnswer ? ` Final answer: ${finalAnswer}` : 'Unable to find a confident answer.'}`,
         nextThoughtNeeded: false,
         timestamp: new Date()
       };
@@ -625,8 +989,8 @@ Return JSON:
       console.error('Error in deep research:', error);
       const errorThought: DeepResearchThought = {
         thoughtNumber: currentThought,
-        totalThoughts: totalThoughts,
-        thought: `Research failed due to error: ${error instanceof Error ? error.message : 'Unknown error'} `,
+        totalThoughts: -1,
+        thought: `Research failed due to error: ${error instanceof Error ? error.message : 'Unknown error'}`,
         nextThoughtNeeded: false,
         timestamp: new Date()
       };

@@ -105,6 +105,12 @@ router.get('/', [
     const mcpCredentials = req.query.mcpCredentials as Record<string, string> || {};
     const conversationId = req.query.conversationId as string;
 
+    console.log('🔧 Search params:', {
+      forceWebSearch,
+      aiEnhancedSearch,
+      query: searchQuery
+    });
+
     let conversation: Array<{ type: string, content: string }> = [];
 
     // If conversationId is provided, fetch context from DB
@@ -206,8 +212,9 @@ router.get('/', [
 
     if (searchQuery) {
       // Simple intent detection for common cases
-      const simpleGreetings = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'thanks', 'thank you', 'help', 'please'];
-      const conversationalPhrases = ['summarize', 'explain', 'tell me', 'what about', 'can you', 'could you', 'would you', 'these', 'them', 'that', 'this', 'the results', 'the notes', 'my notes'];
+      const simpleGreetings = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening', 'thanks', 'thank you'];
+      // Removed task-oriented phrases like 'summarize', 'my notes' to allow search to proceed
+      const conversationalPhrases = ['how are you', 'who are you', 'what is your name'];
       const dateTimeQueries = ['current date', 'what date', 'what time', 'current time', 'today', 'now', 'date time', 'time date', 'what day', 'current day'];
 
       const queryLower = searchQuery.toLowerCase().trim();
@@ -266,6 +273,17 @@ router.get('/', [
         }
       }
 
+      // Ensure we have search terms for context retrieval even if intent was chat or AI returned no terms
+      if (searchTerms.length === 0 && searchQuery) {
+        // Removed 'notes', 'documents', 'files' from stop words as they are relevant search terms
+        const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'give', 'me', 'some', 'something', 'anything', 'please', 'show', 'find', 'search', 'related', 'about', 'summarize', 'explain', 'tell', 'what', 'how', 'who', 'when', 'where', 'why', 'is', 'are', 'was', 'were', 'do', 'does', 'did', 'can', 'could', 'would', 'should', 'have', 'has', 'had', 'my', 'your', 'our', 'their']);
+        searchTerms = searchQuery.toLowerCase()
+          .split(/\s+/)
+          .filter(word => word.length > 2 && !stopWords.has(word))
+          .slice(0, 5);
+        console.log('Extracted fallback search terms for context:', searchTerms);
+      }
+
       // Build search conditions based on enhanced terms
       const searchConditions = [];
 
@@ -291,7 +309,9 @@ router.get('/', [
         }
       }
 
-      where.OR = searchConditions;
+      if (searchConditions.length > 0) {
+        where.OR = searchConditions;
+      }
     }
 
     // Apply type filter (query param takes precedence over AI)
@@ -413,7 +433,8 @@ router.get('/', [
       }
     }
 
-    if (!isChat) {
+    // Always attempt to search for resources if we have a query, even for chat (to provide context/sources)
+    if (searchQuery) {
       // Search in Resources
       if (queryEmbedding) {
         // Use vector search for semantic similarity - no text operators needed
@@ -707,8 +728,8 @@ router.get('/', [
       }
     }
 
-    // Perform web search only if explicitly requested via toggle
-    if (!isChat && aiEnhancedSearch && forceWebSearch) {
+    // Perform web search if user explicitly enabled it via toggle
+    if (forceWebSearch && aiEnhancedSearch) {
       try {
         console.log('🔍 Performing web search for query:', searchQuery);
         const webSearchResponse = await performWebSearch(searchQuery);
@@ -724,6 +745,10 @@ router.get('/', [
         // Reset webResults to empty array to avoid issues downstream
         webResults = [];
       }
+    } else if (forceWebSearch) {
+      console.log('⚠️ Web search requested but aiEnhancedSearch is disabled');
+    } else {
+      console.log('ℹ️ Web search is OFF');
     }
 
     // Cache recent search results for chat context
@@ -795,60 +820,52 @@ router.get('/', [
 
     // Generate AI summary for search results
     let aiSummary: string | null = null;
-    if (!isChat && searchQuery && (resources.length > 0 || webResults.length > 0 || learningResults.length > 0 || forceWebSearch)) {
+
+    // Check if we actually found anything
+    const hasResults = resources.length > 0 || webResults.length > 0 || learningResults.length > 0;
+
+    if (!isChat && searchQuery) {
       try {
-        // Limit context to prevent token overflow
-        const maxLocalResults = 2;
-        const maxWebResults = 2;
-        const maxLearningResults = 2;
+        if (hasResults) {
+          // Limit context to prevent token overflow
+          const contextResources = [
+            ...resources.slice(0, 3).map(r => `[Local] ${r.title}: ${r.content?.substring(0, 200) || r.description || ''}`),
+            ...webResults.slice(0, 3).map(r => `[Web] ${r.title}: ${r.content?.substring(0, 200) || ''}`),
+            ...learningResults.slice(0, 3).map(r => `[Learning] ${r.title}: ${r.description || ''}`)
+          ].join('\n\n');
 
-        const localContext = resources.length > 0
-          ? `Local resources: ${resources.slice(0, maxLocalResults).map(r => {
-            const content = (r.content || r.description || '').substring(0, 100); // Limit content length
-            return `${r.title}: ${content}`;
-          }).join('. ')}`
-          : '';
+          const summaryPrompt = `Based on the following search results for "${searchQuery}", provide a concise and helpful summary. If the results answer the user's query, answer it directly. If they are just relevant resources, summarize what they cover.
+            
+            Search Results:
+            ${contextResources}`;
 
-        const webContext = webResults.length > 0
-          ? `Web results: ${webResults.slice(0, maxWebResults).map(r => {
-            const content = (r.content || 'No description available').substring(0, 100); // Limit content length
-            return `${r.title} (${r.url}): ${content}`;
-          }).join('. ')}`
-          : '';
-
-        const learningContext = learningResults.length > 0
-          ? `Learning content: ${learningResults.slice(0, maxLearningResults).map(r => {
-            const content = (r.description || '').substring(0, 100);
-            return `${r.title} (${r.type.replace('learning_', '')}): ${content}`;
-          }).join('. ')}`
-          : '';
-
-        const contextString = [localContext, webContext, learningContext].filter(Boolean).join('. ');
-
-        // Limit total context length to prevent token overflow
-        const maxContextLength = 1000;
-        const truncatedContext = contextString.length > maxContextLength
-          ? contextString.substring(0, maxContextLength) + '...'
-          : contextString;
-
-        if (truncatedContext.trim()) {
+          aiSummary = await aiService.generateChatResponseWithMCP(
+            summaryPrompt,
+            '',
+            timezone,
+            focusMode,
+            false,
+            useMCP,
+            mcpCredentials,
+            conversation
+          ) as string;
+        } else {
+          // No results found - generate a helpful "not found" message
           aiSummary = await aiService.generateChatResponse(
-            `Summarize the following search results for the query "${searchQuery}". Focus only on relevant results. Include markdown hyperlinks for any URLs mentioned (format: [text](url)). Provide a helpful response that analyzes and presents the key findings: ${truncatedContext}`,
+            `The user searched for "${searchQuery}" but I found 0 local resources and 0 web results. Generate a polite, helpful message explaining that no specific information was found. Suggest they try: 1. Checking their spelling. 2. Using broader keywords. 3. Enabling web search if it was off (it might have been on, but found nothing). Be concise.`,
             '',
             timezone,
             focusMode,
             false
           ) as string;
-          console.log('Generated AI summary for search results');
-        } else {
-          console.log('No context available for AI summary');
-          aiSummary = null;
         }
-      } catch (error) {
-        console.warn('Failed to generate AI summary for search results:', error);
-        aiSummary = null;
+      } catch (aiError) {
+        console.warn('Failed to generate AI summary:', aiError);
+        aiSummary = hasResults ? "Here are the resources I found matching your query." : "I couldn't find any resources matching your query. Please try different keywords.";
       }
     }
+
+
 
     // Include AI enhancement info if search was performed
     let aiInfo: any = searchQuery ? {

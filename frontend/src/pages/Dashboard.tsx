@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, TrendingUp, Search, Eye } from 'lucide-react';
-import DashboardLayout from '../components/layout/DashboardLayout';
+import { BookOpen, TrendingUp, Search, Eye, Plus, ArrowUpRight, Clock, Zap } from 'lucide-react';
 import ResourceGrid from '../components/ResourceGrid';
 import NewResourceModal from '../components/NewResourceModal';
 import { apiClient } from '../api/client';
+import { useAuth } from '../contexts/AuthContext';
+import Card from '../components/ui/Card';
+import Button from '../components/ui/Button';
 
 interface DashboardStats {
   totalResources: number;
@@ -14,6 +16,7 @@ interface DashboardStats {
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [isNewResourceModalOpen, setIsNewResourceModalOpen] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [stats, setStats] = useState<DashboardStats>({
@@ -32,14 +35,12 @@ const Dashboard: React.FC = () => {
         setStats(response.data);
       } else {
         console.error('Failed to fetch dashboard stats:', response.error);
-        // If authentication fails, redirect to login
         if (response.error?.includes('401') || response.error?.includes('Unauthorized')) {
           navigate('/login');
         }
       }
     } catch (error: any) {
       console.error('Failed to fetch dashboard stats:', error);
-      // If authentication fails, redirect to login
       if (error.message?.includes('401') || error.message?.includes('Unauthorized')) {
         navigate('/login');
       }
@@ -52,123 +53,175 @@ const Dashboard: React.FC = () => {
     fetchStats();
   }, []);
 
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
+  };
+
   return (
-    <DashboardLayout>
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-          {/* Welcome Section */}
-          <div className="mb-12 bg-gradient-to-r from-primary-50 to-blue-50 rounded-2xl p-8 border border-primary-100">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
-              <div className="mb-6 lg:mb-0">
-                <div className="flex items-center space-x-4 mb-3">
-                  <div className="p-3 bg-primary-100 rounded-xl">
-                    <BookOpen className="w-8 h-8 text-primary-600" strokeWidth={1.5} />
-                  </div>
-                  <h1 className="text-4xl lg:text-5xl font-bold text-gray-900 tracking-tight">Dashboard</h1>
-                </div>
-                <p className="text-gray-700 text-xl font-medium leading-relaxed">Welcome back! Here's what's happening with your resources today.</p>
-              </div>
-              <button
-                onClick={() => setIsNewResourceModalOpen(true)}
-                className="inline-flex items-center px-8 py-4 bg-primary-600 text-white font-semibold text-lg rounded-xl hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-              >
-                Add Resource
-              </button>
-            </div>
-          </div>
-
-          {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
-            <div className="group bg-white rounded-2xl shadow-sm border border-gray-200 p-8 hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
-              <div className="flex items-center">
-                <div className="p-4 bg-gradient-to-br from-blue-100 to-blue-200 rounded-2xl">
-                  <BookOpen className="w-8 h-8 text-blue-600" strokeWidth={1.5} />
-                </div>
-                <div className="ml-6">
-                  <p className="text-base font-semibold text-gray-700 mb-2 uppercase tracking-wide">Total Resources</p>
-                  <div className="text-4xl font-bold text-gray-900">
-                    {statsLoading ? (
-                      <div className="animate-pulse bg-gray-200 h-10 w-20 rounded"></div>
-                    ) : (
-                      stats.totalResources
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="group bg-white rounded-2xl shadow-sm border border-gray-200 p-8 hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
-              <div className="flex items-center">
-                <div className="p-4 bg-gradient-to-br from-green-100 to-green-200 rounded-2xl">
-                  <TrendingUp className="w-8 h-8 text-green-600" strokeWidth={1.5} />
-                </div>
-                <div className="ml-6">
-                  <p className="text-base font-semibold text-gray-700 mb-2 uppercase tracking-wide">Added This Week</p>
-                  <div className="text-4xl font-bold text-gray-900">
-                    {statsLoading ? (
-                      <div className="animate-pulse bg-gray-200 h-10 w-20 rounded"></div>
-                    ) : (
-                      stats.addedThisWeek
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="group bg-white rounded-2xl shadow-sm border border-gray-200 p-8 hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
-              <div className="flex items-center">
-                <div className="p-4 bg-gradient-to-br from-orange-100 to-orange-200 rounded-2xl">
-                  <Search className="w-8 h-8 text-orange-600" strokeWidth={1.5} />
-                </div>
-                <div className="ml-6">
-                  <p className="text-base font-semibold text-gray-700 mb-2 uppercase tracking-wide">Searches Today</p>
-                  <div className="text-4xl font-bold text-gray-900">
-                    {statsLoading ? (
-                      <div className="animate-pulse bg-gray-200 h-10 w-20 rounded"></div>
-                    ) : (
-                      stats.searchesToday
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Recent Resources */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 mb-8">
-            <div className="flex items-center justify-between mb-8">
-              <div className="flex items-center space-x-4">
-                <div className="p-3 bg-gradient-to-br from-gray-100 to-gray-200 rounded-xl">
-                  <Eye className="w-6 h-6 text-gray-600" strokeWidth={1.5} />
-                </div>
-                <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Recent Resources</h2>
-              </div>
-              <button
-                onClick={() => navigate('/resources')}
-                className="inline-flex items-center px-4 py-2 bg-primary-50 text-primary-700 hover:bg-primary-100 text-sm font-semibold rounded-lg transition-all duration-200 hover:shadow-sm"
-              >
-                View all →
-              </button>
-            </div>
-            <ResourceGrid key={refreshKey} currentPage={1} itemsPerPage={6} sortBy="recent" />
-          </div>
-
-          {/* New Resource Modal */}
-          <NewResourceModal
-            isOpen={isNewResourceModalOpen}
-            onClose={() => setIsNewResourceModalOpen(false)}
-            onSubmit={(resourceData) => {
-              console.log('New resource created:', resourceData);
-              setIsNewResourceModalOpen(false);
-              // Refresh stats and resource grid
-              setRefreshKey(prev => prev + 1);
-              // Re-fetch stats
-              fetchStats();
-            }}
-          />
+    <div className="space-y-8">
+      {/* Header Section */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-display font-bold text-starlight-100 mb-1">
+            {getGreeting()}, <span className="text-transparent bg-clip-text bg-gradient-to-r from-neon-blue to-neon-purple">{user?.name?.split(' ')[0] || 'Explorer'}</span>
+          </h1>
+          <p className="text-starlight-400">Here's what's happening in your second brain today.</p>
+        </div>
+        <div className="flex gap-3">
+          <Button
+            variant="secondary"
+            leftIcon={<Search className="w-4 h-4" />}
+            onClick={() => navigate('/search')}
+          >
+            Search
+          </Button>
+          <Button
+            leftIcon={<Plus className="w-4 h-4" />}
+            onClick={() => setIsNewResourceModalOpen(true)}
+          >
+            Add Resource
+          </Button>
         </div>
       </div>
-    </DashboardLayout>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card glass className="p-6 relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+            <BookOpen className="w-24 h-24 text-neon-blue" />
+          </div>
+          <div className="relative z-10">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-lg bg-neon-blue/20 flex items-center justify-center text-neon-blue">
+                <BookOpen className="w-5 h-5" />
+              </div>
+              <span className="text-sm font-medium text-starlight-400 uppercase tracking-wider">Total Resources</span>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-4xl font-display font-bold text-starlight-100">
+                {statsLoading ? '...' : stats.totalResources}
+              </span>
+              <span className="text-xs text-neon-green flex items-center gap-0.5">
+                <ArrowUpRight className="w-3 h-3" /> +12%
+              </span>
+            </div>
+          </div>
+        </Card>
+
+        <Card glass className="p-6 relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+            <TrendingUp className="w-24 h-24 text-neon-purple" />
+          </div>
+          <div className="relative z-10">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-lg bg-neon-purple/20 flex items-center justify-center text-neon-purple">
+                <TrendingUp className="w-5 h-5" />
+              </div>
+              <span className="text-sm font-medium text-starlight-400 uppercase tracking-wider">Added This Week</span>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-4xl font-display font-bold text-starlight-100">
+                {statsLoading ? '...' : stats.addedThisWeek}
+              </span>
+              <span className="text-xs text-starlight-500">items</span>
+            </div>
+          </div>
+        </Card>
+
+        <Card glass className="p-6 relative overflow-hidden group">
+          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+            <Zap className="w-24 h-24 text-neon-yellow" />
+          </div>
+          <div className="relative z-10">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-lg bg-neon-yellow/20 flex items-center justify-center text-neon-yellow">
+                <Zap className="w-5 h-5" />
+              </div>
+              <span className="text-sm font-medium text-starlight-400 uppercase tracking-wider">Brain Activity</span>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-4xl font-display font-bold text-starlight-100">
+                {statsLoading ? '...' : stats.searchesToday}
+              </span>
+              <span className="text-xs text-starlight-500">searches today</span>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Main Content Grid */}
+      <div className="grid lg:grid-cols-3 gap-8">
+        {/* Recent Resources - Takes up 2 columns */}
+        <div className="lg:col-span-2 space-y-6">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-bold text-starlight-100 flex items-center gap-2">
+              <Clock className="w-5 h-5 text-neon-blue" />
+              Recent Activity
+            </h2>
+            <button
+              onClick={() => navigate('/resources')}
+              className="text-sm text-starlight-400 hover:text-neon-blue transition-colors"
+            >
+              View all
+            </button>
+          </div>
+
+          <div className="bg-void-900/50 border border-starlight-100/5 rounded-2xl p-6 min-h-[400px]">
+            <ResourceGrid key={refreshKey} currentPage={1} itemsPerPage={6} sortBy="recent" />
+          </div>
+        </div>
+
+        {/* Sidebar Widgets - Takes up 1 column */}
+        <div className="space-y-6">
+          {/* AI Insight Widget */}
+          <Card glass className="p-6 border-neon-purple/20 bg-gradient-to-br from-void-900 to-neon-purple/5">
+            <div className="flex items-center gap-2 mb-4 text-neon-purple">
+              <Zap className="w-5 h-5" />
+              <span className="font-bold text-sm uppercase tracking-wider">Daily Insight</span>
+            </div>
+            <p className="text-starlight-200 italic leading-relaxed mb-4">
+              "You've been focusing a lot on React patterns lately. Consider reviewing the 'Advanced Hooks' module to solidify your knowledge."
+            </p>
+            <Button variant="outline" size="sm" fullWidth className="border-neon-purple/30 text-neon-purple hover:bg-neon-purple/10">
+              View Recommendation
+            </Button>
+          </Card>
+
+          {/* Quick Actions */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-bold text-starlight-400 uppercase tracking-wider">Quick Actions</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <button className="p-4 rounded-xl bg-void-900 border border-starlight-100/5 hover:border-neon-blue/30 hover:bg-void-800 transition-all text-left group">
+                <div className="w-8 h-8 rounded-lg bg-neon-blue/10 flex items-center justify-center text-neon-blue mb-3 group-hover:scale-110 transition-transform">
+                  <Plus className="w-4 h-4" />
+                </div>
+                <span className="text-sm font-medium text-starlight-200">New Note</span>
+              </button>
+              <button className="p-4 rounded-xl bg-void-900 border border-starlight-100/5 hover:border-neon-green/30 hover:bg-void-800 transition-all text-left group">
+                <div className="w-8 h-8 rounded-lg bg-neon-green/10 flex items-center justify-center text-neon-green mb-3 group-hover:scale-110 transition-transform">
+                  <BookOpen className="w-4 h-4" />
+                </div>
+                <span className="text-sm font-medium text-starlight-200">Capture URL</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <NewResourceModal
+        isOpen={isNewResourceModalOpen}
+        onClose={() => setIsNewResourceModalOpen(false)}
+        onSubmit={(resourceData) => {
+          console.log('New resource created:', resourceData);
+          setIsNewResourceModalOpen(false);
+          setRefreshKey(prev => prev + 1);
+          fetchStats();
+        }}
+      />
+    </div>
   );
 };
 

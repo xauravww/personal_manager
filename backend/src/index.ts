@@ -173,6 +173,13 @@ if (process.env.NODE_ENV !== 'test') {
   // Run every minute
   cron.schedule('* * * * *', selfPing);
 
+  // Temp file cleanup job (every hour)
+  const { cleanupOldTempFiles } = require('./utils/cleanupTemp');
+  cron.schedule('0 * * * *', async () => {
+    console.log('🧹 Running scheduled temp file cleanup...');
+    await cleanupOldTempFiles();
+  });
+
   // Initial ping after server starts
   setTimeout(selfPing, 5000);
 

@@ -33,12 +33,12 @@ const Pagination: React.FC<PaginationProps> = ({
   const visiblePages = getVisiblePages();
 
   return (
-    <nav className="flex items-center justify-between px-6 py-4 bg-white border border-gray-200 rounded-lg shadow-sm sm:px-8" aria-label="Pagination">
+    <nav className="flex items-center justify-between px-4 py-2 bg-void-900 border border-starlight-100/10 rounded-xl shadow-lg sm:px-6" aria-label="Pagination">
       <div className="flex justify-between flex-1 sm:hidden">
         {currentPage > 1 && (
           <button
             onClick={() => onPageChange(currentPage - 1)}
-            className="relative inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+            className="relative inline-flex items-center px-4 py-2 text-sm font-medium text-starlight-300 bg-void-950 border border-starlight-100/10 rounded-lg hover:bg-void-800 transition-colors"
           >
             Previous
           </button>
@@ -46,36 +46,29 @@ const Pagination: React.FC<PaginationProps> = ({
         {currentPage < totalPages && (
           <button
             onClick={() => onPageChange(currentPage + 1)}
-            className="relative ml-3 inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+            className="relative ml-3 inline-flex items-center px-4 py-2 text-sm font-medium text-starlight-300 bg-void-950 border border-starlight-100/10 rounded-lg hover:bg-void-800 transition-colors"
           >
             Next
           </button>
         )}
       </div>
 
-      <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
-        <div>
-          <p className="text-sm text-gray-700">
-            Showing page <span className="font-medium">{currentPage}</span> of{' '}
-            <span className="font-medium">{totalPages}</span>
-          </p>
-        </div>
-
-        <div>
-          <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+       <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-end">
+         <div>
+          <nav className="relative z-0 inline-flex rounded-lg shadow-sm -space-x-px" aria-label="Pagination">
             {/* First page */}
             {showFirstLast && currentPage > maxVisiblePages / 2 + 1 && (
               <>
                 <button
                   onClick={() => onPageChange(1)}
-                  className="relative inline-flex items-center px-2 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-l-md hover:bg-gray-50"
+                  className="relative inline-flex items-center px-2 py-2 text-sm font-medium text-starlight-400 bg-void-950 border border-starlight-100/10 rounded-l-lg hover:bg-void-800 hover:text-starlight-100 transition-colors"
                 >
                   <span className="sr-only">First</span>
                   <ChevronLeft className="w-4 h-4" />
                   <ChevronLeft className="w-4 h-4 -ml-2" />
                 </button>
                 {visiblePages[0] > 2 && (
-                  <span className="relative inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300">
+                  <span className="relative inline-flex items-center px-4 py-2 text-sm font-medium text-starlight-400 bg-void-950 border border-starlight-100/10">
                     <MoreHorizontal className="w-4 h-4" />
                   </span>
                 )}
@@ -86,7 +79,7 @@ const Pagination: React.FC<PaginationProps> = ({
             {currentPage > 1 && (
               <button
                 onClick={() => onPageChange(currentPage - 1)}
-                className="relative inline-flex items-center px-2 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 hover:bg-gray-50"
+                className="relative inline-flex items-center px-2 py-2 text-sm font-medium text-starlight-400 bg-void-950 border border-starlight-100/10 hover:bg-void-800 hover:text-starlight-100 transition-colors"
               >
                 <span className="sr-only">Previous</span>
                 <ChevronLeft className="w-4 h-4" />
@@ -98,11 +91,10 @@ const Pagination: React.FC<PaginationProps> = ({
               <button
                 key={page}
                 onClick={() => onPageChange(page)}
-                className={`relative inline-flex items-center px-4 py-2 text-sm font-medium border ${
-                  page === currentPage
-                    ? 'z-10 bg-blue-50 border-blue-500 text-blue-600'
-                    : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
-                }`}
+                className={`relative inline-flex items-center px-4 py-2 text-sm font-medium border transition-colors ${page === currentPage
+                  ? 'z-10 bg-neon-blue/10 border-neon-blue/50 text-neon-blue'
+                  : 'bg-void-950 border-starlight-100/10 text-starlight-400 hover:bg-void-800 hover:text-starlight-100'
+                  }`}
               >
                 {page}
               </button>
@@ -112,7 +104,7 @@ const Pagination: React.FC<PaginationProps> = ({
             {currentPage < totalPages && (
               <button
                 onClick={() => onPageChange(currentPage + 1)}
-                className="relative inline-flex items-center px-2 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 hover:bg-gray-50"
+                className="relative inline-flex items-center px-2 py-2 text-sm font-medium text-starlight-400 bg-void-950 border border-starlight-100/10 hover:bg-void-800 hover:text-starlight-100 transition-colors"
               >
                 <span className="sr-only">Next</span>
                 <ChevronRight className="w-4 h-4" />
@@ -123,13 +115,13 @@ const Pagination: React.FC<PaginationProps> = ({
             {showFirstLast && currentPage < totalPages - maxVisiblePages / 2 && (
               <>
                 {visiblePages[visiblePages.length - 1] < totalPages - 1 && (
-                  <span className="relative inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300">
+                  <span className="relative inline-flex items-center px-4 py-2 text-sm font-medium text-starlight-400 bg-void-950 border border-starlight-100/10">
                     <MoreHorizontal className="w-4 h-4" />
                   </span>
                 )}
                 <button
                   onClick={() => onPageChange(totalPages)}
-                  className="relative inline-flex items-center px-2 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-r-md hover:bg-gray-50"
+                  className="relative inline-flex items-center px-2 py-2 text-sm font-medium text-starlight-400 bg-void-950 border border-starlight-100/10 rounded-r-lg hover:bg-void-800 hover:text-starlight-100 transition-colors"
                 >
                   <span className="sr-only">Last</span>
                   <ChevronRight className="w-4 h-4" />

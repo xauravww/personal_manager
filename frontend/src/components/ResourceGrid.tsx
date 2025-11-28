@@ -106,7 +106,7 @@ const ResourceGrid: React.FC<ResourceGridProps> = React.memo(({
           }));
 
           setResources(transformedResources);
-          
+
           // Handle different response structures (SearchResponse vs standard list)
           let totalCount = 0;
           if ('total' in response.data) {
@@ -114,7 +114,7 @@ const ResourceGrid: React.FC<ResourceGridProps> = React.memo(({
           } else if ('pagination' in response.data) {
             totalCount = response.data.pagination.total;
           }
-          
+
           setTotal(totalCount);
           onTotalChange?.(totalCount);
         } else {
@@ -198,28 +198,28 @@ const ResourceGrid: React.FC<ResourceGridProps> = React.memo(({
   const getTypeIcon = (type: Resource['type']) => {
     switch (type) {
       case 'video':
-        return <Video className="w-5 h-5 text-red-500" strokeWidth={1.5} />;
+        return <Video className="w-5 h-5 text-red-400" strokeWidth={1.5} />;
       case 'link':
-        return <Link className="w-5 h-5 text-blue-500" strokeWidth={1.5} />;
+        return <Link className="w-5 h-5 text-neon-blue" strokeWidth={1.5} />;
       case 'document':
-        return <FileText className="w-5 h-5 text-green-500" strokeWidth={1.5} />;
+        return <FileText className="w-5 h-5 text-neon-green" strokeWidth={1.5} />;
       case 'note':
       default:
-        return <FileText className="w-5 h-5 text-gray-500" strokeWidth={1.5} />;
+        return <FileText className="w-5 h-5 text-starlight-400" strokeWidth={1.5} />;
     }
   };
 
   const getTypeColor = (type: Resource['type']) => {
     switch (type) {
       case 'video':
-        return 'bg-gradient-to-br from-red-50 to-red-100 border-red-200 hover:from-red-100 hover:to-red-150';
+        return 'bg-void-900 border-red-500/10 hover:border-red-500/30 shadow-lg shadow-red-500/5 hover:shadow-red-500/10';
       case 'link':
-        return 'bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200 hover:from-blue-100 hover:to-blue-150';
+        return 'bg-void-900 border-neon-blue/10 hover:border-neon-blue/30 shadow-lg shadow-neon-blue/5 hover:shadow-neon-blue/10';
       case 'document':
-        return 'bg-gradient-to-br from-green-50 to-green-100 border-green-200 hover:from-green-100 hover:to-green-150';
+        return 'bg-void-900 border-neon-green/10 hover:border-neon-green/30 shadow-lg shadow-neon-green/5 hover:shadow-neon-green/10';
       case 'note':
       default:
-        return 'bg-gradient-to-br from-gray-50 to-gray-100 border-gray-200 hover:from-gray-100 hover:to-gray-150';
+        return 'bg-void-900 border-starlight-100/5 hover:border-starlight-100/20 shadow-lg shadow-void-950/50';
     }
   };
 
@@ -227,11 +227,11 @@ const ResourceGrid: React.FC<ResourceGridProps> = React.memo(({
     return (
       <div className="flex flex-col items-center justify-center py-16">
         <div className="relative">
-          <Loader2 className="w-12 h-12 animate-spin text-primary-600" strokeWidth={1.5} />
-          <div className="absolute inset-0 rounded-full border-2 border-primary-100 animate-pulse"></div>
+          <Loader2 className="w-12 h-12 animate-spin text-neon-blue" strokeWidth={1.5} />
+          <div className="absolute inset-0 rounded-full border-2 border-neon-blue/20 animate-pulse"></div>
         </div>
-        <span className="mt-4 text-gray-600 font-medium">Loading your resources...</span>
-        <p className="mt-1 text-sm text-gray-500">Please wait while we fetch your content</p>
+        <span className="mt-4 text-starlight-400 font-medium">Loading your resources...</span>
+        <p className="mt-1 text-sm text-starlight-500">Please wait while we fetch your content</p>
       </div>
     );
   }
@@ -239,16 +239,16 @@ const ResourceGrid: React.FC<ResourceGridProps> = React.memo(({
   if (error) {
     return (
       <div className="text-center py-16">
-        <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-6">
-          <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="mx-auto w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mb-6 border border-red-500/20">
+          <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
           </svg>
         </div>
-        <h3 className="text-xl font-semibold text-gray-900 mb-2">Unable to load resources</h3>
-        <p className="text-gray-600 mb-6 max-w-md mx-auto">{error}</p>
+        <h3 className="text-xl font-semibold text-starlight-100 mb-2">Unable to load resources</h3>
+        <p className="text-starlight-400 mb-6 max-w-md mx-auto">{error}</p>
         <button
           onClick={() => window.location.reload()}
-          className="inline-flex items-center px-4 py-2 bg-red-600 text-white font-medium rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition-colors duration-200"
+          className="inline-flex items-center px-4 py-2 bg-red-500/10 text-red-500 border border-red-500/20 font-medium rounded-lg hover:bg-red-500/20 transition-colors duration-200"
         >
           Try Again
         </button>
@@ -259,11 +259,11 @@ const ResourceGrid: React.FC<ResourceGridProps> = React.memo(({
   if (resources.length === 0) {
     return (
       <div className="text-center py-16">
-        <div className="mx-auto w-24 h-24 bg-gray-100 rounded-full flex items-center justify-center mb-6">
-          <FileText className="w-12 h-12 text-gray-400" strokeWidth={1.5} />
+        <div className="mx-auto w-24 h-24 bg-void-900 rounded-full flex items-center justify-center mb-6 border border-starlight-100/10">
+          <FileText className="w-12 h-12 text-starlight-600" strokeWidth={1.5} />
         </div>
-        <h3 className="text-xl font-semibold text-gray-900 mb-2">No resources found</h3>
-        <p className="text-gray-600 mb-6 max-w-md mx-auto">
+        <h3 className="text-xl font-semibold text-starlight-100 mb-2">No resources found</h3>
+        <p className="text-starlight-400 mb-6 max-w-md mx-auto">
           {searchQuery || typeFilter !== 'all' || tagFilter !== 'all'
             ? "Try adjusting your search or filters to find what you're looking for."
             : "Start building your knowledge base by adding your first resource."
@@ -281,15 +281,17 @@ const ResourceGrid: React.FC<ResourceGridProps> = React.memo(({
           <div
             key={resource.id}
             onClick={() => handleResourceClick(resource)}
-            className={`group bg-white rounded-xl border ${getTypeColor(resource.type)} shadow-sm hover:shadow-xl transition-all duration-300 p-6 cursor-pointer transform hover:-translate-y-1`}
+            className={`group rounded-2xl border shadow-lg hover:shadow-2xl transition-all duration-300 p-6 cursor-pointer transform hover:-translate-y-1 relative overflow-hidden ${getTypeColor(resource.type)}`}
           >
+            <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+
             {/* Header */}
-            <div className="flex items-start justify-between mb-4">
+            <div className="relative flex items-start justify-between mb-4">
               <div className="flex items-center space-x-3">
-                <div className="p-2 bg-white rounded-lg shadow-sm">
+                <div className="p-2.5 bg-void-950/50 rounded-xl shadow-inner border border-starlight-100/5 group-hover:scale-110 transition-transform duration-300">
                   {getTypeIcon(resource.type)}
                 </div>
-                <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
+                <span className="text-xs font-bold text-starlight-400 uppercase tracking-wider">
                   {resource.type}
                 </span>
               </div>
@@ -298,44 +300,44 @@ const ResourceGrid: React.FC<ResourceGridProps> = React.memo(({
                   e.stopPropagation();
                   handleResourceClick(resource);
                 }}
-                className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-600 transition-opacity duration-200 p-1 hover:bg-gray-100 rounded"
+                className="opacity-0 group-hover:opacity-100 text-starlight-400 hover:text-starlight-100 transition-all duration-200 p-1.5 hover:bg-void-800 rounded-lg"
               >
                 <MoreVertical className="w-4 h-4" strokeWidth={1.5} />
               </button>
             </div>
 
             {/* Title */}
-            <h3 className="text-lg font-semibold text-gray-900 mb-3 line-clamp-2 leading-tight">
+            <h3 className="relative text-lg font-bold text-starlight-100 mb-3 line-clamp-2 leading-tight group-hover:text-neon-blue transition-colors font-display">
               {resource.title}
             </h3>
 
             {/* Content Preview */}
-            <p className="text-gray-600 text-sm mb-4 line-clamp-3 leading-relaxed">
+            <p className="relative text-starlight-400 text-sm mb-5 line-clamp-3 leading-relaxed">
               {resource.content}
             </p>
 
             {/* Tags */}
-            <div className="flex flex-wrap gap-2 mb-4">
+            <div className="relative flex flex-wrap gap-2 mb-5">
               {resource.tags.slice(0, 3).map((tag) => (
                 <span
                   key={tag}
-                  className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-white text-gray-700 border border-gray-200 shadow-sm"
+                  className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium bg-void-950/50 text-starlight-300 border border-starlight-100/5 group-hover:border-starlight-100/10 transition-colors"
                 >
-                  <Tag className="w-3 h-3 mr-1" strokeWidth={1.5} />
+                  <Tag className="w-3 h-3 mr-1.5 opacity-70" strokeWidth={1.5} />
                   {tag}
                 </span>
               ))}
               {resource.tags.length > 3 && (
-                <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600 border border-gray-200">
+                <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium bg-void-950/50 text-starlight-500 border border-starlight-100/5">
                   +{resource.tags.length - 3}
                 </span>
               )}
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-between text-xs text-gray-500 pt-3 border-t border-gray-100">
+            <div className="relative flex items-center justify-between text-xs text-starlight-500 pt-4 border-t border-starlight-100/5">
               <div className="flex items-center">
-                <Calendar className="w-4 h-4 mr-1" strokeWidth={1.5} />
+                <Calendar className="w-3.5 h-3.5 mr-1.5" strokeWidth={1.5} />
                 {new Date(resource.createdAt).toLocaleDateString('en-US', {
                   month: 'short',
                   day: 'numeric',
@@ -343,8 +345,8 @@ const ResourceGrid: React.FC<ResourceGridProps> = React.memo(({
                 })}
               </div>
               {resource.source && (
-                <span className="text-gray-400 truncate max-w-24" title={resource.source}>
-                  {resource.source}
+                <span className="text-starlight-600 truncate max-w-[100px] hover:text-neon-blue transition-colors" title={resource.source}>
+                  {new URL(resource.source).hostname.replace('www.', '')}
                 </span>
               )}
             </div>
@@ -352,19 +354,7 @@ const ResourceGrid: React.FC<ResourceGridProps> = React.memo(({
         ))}
       </div>
 
-      {/* Results Summary */}
-      <div className="mt-8 text-center">
-        <p className="text-sm text-gray-600">
-          Showing <span className="font-medium text-gray-900">{paginatedResources.length}</span> of{' '}
-          <span className="font-medium text-gray-900">{total}</span> resources
-          {total > itemsPerPage && (
-            <span className="ml-1">
-              • Page <span className="font-medium text-gray-900">{currentPage}</span> of{' '}
-              <span className="font-medium text-gray-900">{totalPages}</span>
-            </span>
-          )}
-        </p>
-      </div>
+
 
       {/* Resource Detail Modal */}
       <ResourceDetailModal

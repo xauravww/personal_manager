@@ -8,14 +8,13 @@ import {
   Archive, Trash2, AlertTriangle, X, Menu, PanelLeft
 } from 'lucide-react';
 import { apiClient } from '../api/client';
-import DashboardLayout from '../components/layout/DashboardLayout';
+import LayoutComponent from '../components/Layout';
 import ReactMarkdown from 'react-markdown';
 import VaultSidebar, { VaultItem } from '../components/vault/VaultSidebar';
 import VaultContent from '../components/vault/VaultContent';
 import VaultChat from '../components/vault/VaultChat';
 
 // --- Types ---
-// (Keep existing types)
 interface Question {
   id: string;
   question: string;
@@ -61,19 +60,19 @@ interface ChatMessage {
   action?: 'next_topic' | 'complete_module';
 }
 
-// --- Components (Keep existing logic components) ---
+// --- Components ---
 
 const LoadingState = ({ message }: { message: string }) => (
   <div className="flex flex-col items-center justify-center py-24 text-center">
     <div className="relative w-24 h-24 mb-8">
-      <div className="absolute inset-0 border-4 border-slate-200 rounded-full"></div>
-      <div className="absolute inset-0 border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
+      <div className="absolute inset-0 border-4 border-starlight-100/10 rounded-full"></div>
+      <div className="absolute inset-0 border-4 border-neon-blue rounded-full border-t-transparent animate-spin"></div>
       <div className="absolute inset-0 flex items-center justify-center">
-        <Brain className="w-8 h-8 text-blue-600 animate-pulse" />
+        <Brain className="w-8 h-8 text-neon-blue animate-pulse" />
       </div>
     </div>
-    <h3 className="text-xl font-bold text-slate-900 mb-2">{message}</h3>
-    <p className="text-slate-500 max-w-md">Our AI is analyzing your request and structuring your personalized learning path...</p>
+    <h3 className="text-xl font-bold text-starlight-100 mb-2">{message}</h3>
+    <p className="text-starlight-400 max-w-md">Our AI is analyzing your request and structuring your personalized learning path...</p>
   </div>
 );
 
@@ -88,32 +87,32 @@ const SkillInput = ({ onAnalyze }: { onAnalyze: (topic: string) => void }) => {
   return (
     <div className="max-w-3xl mx-auto py-8 px-4 md:py-12">
       <div className="text-center mb-8 md:mb-12">
-        <h1 className="text-3xl md:text-5xl font-bold text-slate-900 mb-4 md:mb-6 tracking-tight">
-          What do you want to <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">master today?</span>
+        <h1 className="text-3xl md:text-5xl font-bold text-starlight-100 mb-4 md:mb-6 tracking-tight font-display">
+          What do you want to <span className="text-transparent bg-clip-text bg-gradient-to-r from-neon-blue to-neon-purple">master today?</span>
         </h1>
-        <p className="text-lg md:text-xl text-slate-600 leading-relaxed">
+        <p className="text-lg md:text-xl text-starlight-400 leading-relaxed">
           Your AI Study Partner will assess your current level, identify gaps, and build a custom curriculum just for you.
         </p>
       </div>
 
       <form onSubmit={handleSubmit} className="relative group">
-        <div className="absolute -inset-1 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-200"></div>
-        <div className="relative flex items-center bg-white rounded-2xl p-2 shadow-xl border border-slate-100">
+        <div className="absolute -inset-1 bg-gradient-to-r from-neon-blue to-neon-purple rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-200"></div>
+        <div className="relative flex items-center bg-void-900 rounded-2xl p-2 shadow-xl border border-starlight-100/10">
           <div className="pl-4 md:pl-6 pr-2 md:pr-4">
-            <Search className="w-5 h-5 md:w-6 md:h-6 text-slate-400" />
+            <Search className="w-5 h-5 md:w-6 md:h-6 text-starlight-500" />
           </div>
           <input
             type="text"
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
             placeholder="e.g., React Hooks, Astrophysics..."
-            className="flex-1 py-3 md:py-4 text-base md:text-xl text-slate-900 placeholder-slate-400 bg-transparent border-none focus:ring-0 focus:outline-none min-w-0"
+            className="flex-1 py-3 md:py-4 text-base md:text-xl text-starlight-100 placeholder-starlight-600 bg-transparent border-none focus:ring-0 focus:outline-none min-w-0"
             autoFocus
           />
           <button
             type="submit"
             disabled={!topic.trim()}
-            className="bg-slate-900 text-white px-4 md:px-8 py-2 md:py-3 rounded-xl font-medium hover:bg-slate-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm md:text-base whitespace-nowrap"
+            className="bg-neon-blue text-white px-4 md:px-8 py-2 md:py-3 rounded-xl font-medium hover:bg-neon-blue/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 text-sm md:text-base whitespace-nowrap shadow-lg shadow-neon-blue/20"
           >
             Start
             <ArrowRight className="w-4 h-4 md:w-5 md:h-5" />
@@ -127,23 +126,15 @@ const SkillInput = ({ onAnalyze }: { onAnalyze: (topic: string) => void }) => {
           <button
             key={suggestion}
             onClick={() => onAnalyze(suggestion)}
-            className="p-3 md:p-4 bg-white rounded-xl border border-slate-200 hover:border-blue-300 hover:shadow-md transition-all text-left group"
+            className="p-3 md:p-4 bg-void-900 rounded-xl border border-starlight-100/10 hover:border-neon-blue/50 hover:bg-void-800 hover:shadow-lg hover:shadow-neon-blue/5 transition-all text-left group"
           >
-            <span className="text-sm font-medium text-slate-600 group-hover:text-blue-600">{suggestion}</span>
+            <span className="text-sm font-medium text-starlight-400 group-hover:text-starlight-100">{suggestion}</span>
           </button>
         ))}
       </div>
     </div>
   );
 };
-
-// ... (Rest of file)
-
-// In the main component render:
-//      <div className="flex h-[calc(100dvh-120px)] md:h-[calc(100vh-100px)] overflow-hidden bg-white rounded-lg shadow-sm border border-slate-200">
-
-// ... (Assessment, CurriculumPreview, ModulePlayer components - I will include them fully in the file write, but for brevity in this prompt I'm skipping their full definition if I was just showing a snippet. Since I'm writing the whole file, I need to include them.)
-// To ensure I don't lose the logic, I will copy the logic from the previous read.
 
 const Assessment = ({ topic, questions, onComplete }: { topic: string, questions: Question[], onComplete: (result: AssessmentResult) => void }) => {
   const [answers, setAnswers] = useState<number[]>(new Array(questions.length).fill(-1));
@@ -167,7 +158,6 @@ const Assessment = ({ topic, questions, onComplete }: { topic: string, questions
       if (answers[idx] === q.correctAnswer) {
         correct++;
       } else {
-        // Store the full question text for weak areas
         weakAreas.push(q.question);
       }
     });
@@ -182,16 +172,16 @@ const Assessment = ({ topic, questions, onComplete }: { topic: string, questions
     <div className="max-w-3xl mx-auto py-8 px-4">
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-2xl font-bold text-slate-900">Skill Assessment: {topic}</h2>
-          <span className="text-sm font-medium text-slate-500">Question {currentQuestion + 1} of {questions.length}</span>
+          <h2 className="text-2xl font-bold text-starlight-100 font-display">Skill Assessment: <span className="text-neon-blue">{topic}</span></h2>
+          <span className="text-sm font-medium text-starlight-500">Question {currentQuestion + 1} of {questions.length}</span>
         </div>
-        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-          <div className="h-full bg-blue-600 transition-all duration-500" style={{ width: `${progress}%` }}></div>
+        <div className="h-2 bg-void-800 rounded-full overflow-hidden">
+          <div className="h-full bg-neon-blue transition-all duration-500 shadow-[0_0_10px_rgba(59,130,246,0.5)]" style={{ width: `${progress}%` }}></div>
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-lg border border-slate-100 p-8 mb-8">
-        <h3 className="text-xl font-medium text-slate-900 mb-8 leading-relaxed">
+      <div className="bg-void-900 rounded-2xl shadow-xl border border-starlight-100/10 p-8 mb-8">
+        <h3 className="text-xl font-medium text-starlight-100 mb-8 leading-relaxed">
           {questions[currentQuestion].question}
         </h3>
 
@@ -200,14 +190,14 @@ const Assessment = ({ topic, questions, onComplete }: { topic: string, questions
             <button
               key={idx}
               onClick={() => handleAnswer(idx)}
-              className={`w-full p-5 rounded-xl text-left border-2 transition-all flex items-center justify-between group ${answers[currentQuestion] === idx
-                ? 'border-blue-600 bg-blue-50 text-blue-700'
-                : 'border-slate-100 hover:border-blue-200 hover:bg-slate-50 text-slate-700'
+              className={`w-full p-5 rounded-xl text-left border transition-all flex items-center justify-between group ${answers[currentQuestion] === idx
+                ? 'border-neon-blue bg-neon-blue/10 text-neon-blue shadow-[0_0_15px_rgba(59,130,246,0.1)]'
+                : 'border-starlight-100/10 hover:border-starlight-100/30 hover:bg-void-800 text-starlight-300'
                 }`}
             >
               <span className="font-medium">{option}</span>
               {answers[currentQuestion] === idx && (
-                <CheckCircle className="w-5 h-5 text-blue-600" />
+                <CheckCircle className="w-5 h-5 text-neon-blue" />
               )}
             </button>
           ))}
@@ -218,7 +208,7 @@ const Assessment = ({ topic, questions, onComplete }: { topic: string, questions
         <button
           onClick={() => setCurrentQuestion(curr => Math.max(0, curr - 1))}
           disabled={currentQuestion === 0}
-          className="text-slate-500 hover:text-slate-900 font-medium disabled:opacity-50"
+          className="text-starlight-500 hover:text-starlight-100 font-medium disabled:opacity-30 transition-colors"
         >
           Previous
         </button>
@@ -227,14 +217,14 @@ const Assessment = ({ topic, questions, onComplete }: { topic: string, questions
           <button
             onClick={handleSubmit}
             disabled={answers.includes(-1)}
-            className="bg-slate-900 text-white px-8 py-3 rounded-xl font-medium hover:bg-slate-800 transition-all disabled:opacity-50"
+            className="bg-neon-blue text-white px-8 py-3 rounded-xl font-medium hover:bg-neon-blue/90 transition-all disabled:opacity-50 shadow-lg shadow-neon-blue/20"
           >
             Complete Assessment
           </button>
         ) : (
           <button
             onClick={() => setCurrentQuestion(curr => Math.min(questions.length - 1, curr + 1))}
-            className="bg-blue-600 text-white px-8 py-3 rounded-xl font-medium hover:bg-blue-700 transition-all"
+            className="bg-starlight-100 text-void-950 px-8 py-3 rounded-xl font-medium hover:bg-white transition-all shadow-lg shadow-starlight-100/10"
           >
             Next Question
           </button>
@@ -244,7 +234,6 @@ const Assessment = ({ topic, questions, onComplete }: { topic: string, questions
   );
 };
 
-// --- New Component: Assessment Result View ---
 const AssessmentResultView = ({
   result,
   topic,
@@ -261,33 +250,33 @@ const AssessmentResultView = ({
   return (
     <div className="max-w-2xl mx-auto py-12 px-4 text-center">
       <div className="mb-8">
-        <div className="inline-flex items-center justify-center w-20 h-20 bg-blue-100 text-blue-600 rounded-full mb-6">
+        <div className="inline-flex items-center justify-center w-20 h-20 bg-neon-blue/10 text-neon-blue rounded-full mb-6 border border-neon-blue/20 shadow-[0_0_20px_rgba(59,130,246,0.2)]">
           <Award className="w-10 h-10" />
         </div>
-        <h2 className="text-3xl font-bold text-slate-900 mb-2">Assessment Complete!</h2>
-        <p className="text-slate-600">You scored <span className="font-bold text-blue-600 text-xl">{result.score}%</span> on {topic}.</p>
+        <h2 className="text-3xl font-bold text-starlight-100 mb-2 font-display">Assessment Complete!</h2>
+        <p className="text-starlight-400">You scored <span className="font-bold text-neon-blue text-xl">{result.score}%</span> on {topic}.</p>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 mb-8 text-left">
-        <h3 className="font-bold text-slate-900 mb-4">Analysis</h3>
+      <div className="bg-void-900 rounded-2xl shadow-xl border border-starlight-100/10 p-8 mb-8 text-left">
+        <h3 className="font-bold text-starlight-100 mb-4">Analysis</h3>
         {result.score > 80 ? (
-          <p className="text-slate-600 mb-4">You have a strong grasp of the fundamentals! We'll tailor the course to focus on advanced concepts and practical applications.</p>
+          <p className="text-starlight-300 mb-4">You have a strong grasp of the fundamentals! We'll tailor the course to focus on advanced concepts and practical applications.</p>
         ) : result.score > 50 ? (
-          <p className="text-slate-600 mb-4">You have a good foundation. We'll reinforce core concepts while introducing new material to help you master the subject.</p>
+          <p className="text-starlight-300 mb-4">You have a good foundation. We'll reinforce core concepts while introducing new material to help you master the subject.</p>
         ) : (
-          <p className="text-slate-600 mb-4">This is a great starting point! We'll build your knowledge from the ground up with clear explanations and hands-on practice.</p>
+          <p className="text-starlight-300 mb-4">This is a great starting point! We'll build your knowledge from the ground up with clear explanations and hands-on practice.</p>
         )}
 
         {result.weakAreas.length > 0 && (
-          <div className="mt-6 pt-6 border-t border-slate-200">
-            <h4 className="text-sm font-bold text-slate-700 uppercase tracking-wider mb-3">Areas to Focus On</h4>
+          <div className="mt-6 pt-6 border-t border-starlight-100/10">
+            <h4 className="text-sm font-bold text-starlight-500 uppercase tracking-wider mb-3">Areas to Focus On</h4>
             <div className="space-y-3">
               {result.weakAreas.map((area, i) => (
-                <div key={i} className="flex items-start gap-3 p-3 bg-amber-50 rounded-lg border border-amber-200">
-                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-200 text-amber-700 flex items-center justify-center text-xs font-bold mt-0.5">
+                <div key={i} className="flex items-start gap-3 p-3 bg-amber-500/10 rounded-lg border border-amber-500/20">
+                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center text-xs font-bold mt-0.5">
                     {i + 1}
                   </div>
-                  <p className="text-sm text-slate-700 leading-relaxed flex-1">{area}</p>
+                  <p className="text-sm text-starlight-200 leading-relaxed flex-1">{area}</p>
                 </div>
               ))}
             </div>
@@ -296,17 +285,17 @@ const AssessmentResultView = ({
       </div>
 
       {existingSubject && (
-        <div className="bg-blue-50 rounded-xl p-6 mb-8 border border-blue-100">
+        <div className="bg-neon-blue/10 rounded-xl p-6 mb-8 border border-neon-blue/20">
           <div className="flex items-start gap-4 text-left">
-            <div className="p-2 bg-blue-100 rounded-lg text-blue-600">
+            <div className="p-2 bg-neon-blue/20 rounded-lg text-neon-blue">
               <BookOpen className="w-6 h-6" />
             </div>
             <div>
-              <h4 className="font-bold text-slate-900 mb-1">Existing Course Found</h4>
-              <p className="text-sm text-slate-600 mb-3">You already have a course related to "{existingSubject.title}". Would you like to continue that instead?</p>
+              <h4 className="font-bold text-starlight-100 mb-1">Existing Course Found</h4>
+              <p className="text-sm text-starlight-400 mb-3">You already have a course related to "{existingSubject.title}". Would you like to continue that instead?</p>
               <button
                 onClick={onContinue}
-                className="text-blue-700 font-bold text-sm hover:underline"
+                className="text-neon-blue font-bold text-sm hover:text-neon-blue/80 transition-colors"
               >
                 Continue "{existingSubject.title}"
               </button>
@@ -318,7 +307,7 @@ const AssessmentResultView = ({
       <div className="flex flex-col sm:flex-row gap-4 justify-center">
         <button
           onClick={onGenerate}
-          className="bg-slate-900 text-white px-8 py-3 rounded-xl font-bold hover:bg-slate-800 transition-all shadow-lg hover:shadow-xl flex items-center justify-center gap-2"
+          className="bg-neon-blue text-white px-8 py-3 rounded-xl font-bold hover:bg-neon-blue/90 transition-all shadow-lg shadow-neon-blue/20 flex items-center justify-center gap-2"
         >
           <Sparkles className="w-5 h-5" />
           Generate Custom Course
@@ -326,7 +315,7 @@ const AssessmentResultView = ({
         {existingSubject && (
           <button
             onClick={onContinue}
-            className="px-8 py-3 rounded-xl font-bold border border-slate-200 hover:bg-slate-50 transition-all text-slate-700"
+            className="px-8 py-3 rounded-xl font-bold border border-starlight-100/10 hover:bg-void-800 transition-all text-starlight-300"
           >
             Continue Existing
           </button>
@@ -350,56 +339,56 @@ const CurriculumPreview = ({
   return (
     <div className="max-w-5xl mx-auto py-8 px-4">
       <div className="text-center mb-12">
-        <div className="inline-flex items-center justify-center p-3 bg-green-100 text-green-700 rounded-full mb-6">
+        <div className="inline-flex items-center justify-center p-3 bg-neon-green/10 text-neon-green rounded-full mb-6 border border-neon-green/20 shadow-[0_0_15px_rgba(74,222,128,0.2)]">
           <Sparkles className="w-6 h-6" />
         </div>
-        <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">Your Custom Curriculum is Ready</h2>
-        <p className="text-xl text-slate-600 max-w-2xl mx-auto">
+        <h2 className="text-3xl md:text-4xl font-bold text-starlight-100 mb-4 font-display">Your Custom Curriculum is Ready</h2>
+        <p className="text-xl text-starlight-400 max-w-2xl mx-auto">
           Based on your assessment, we've designed this path to take you from your current level to mastery.
         </p>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden mb-8">
-        <div className="p-8 border-b border-slate-100 bg-slate-50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div className="bg-void-900 rounded-2xl shadow-xl border border-starlight-100/10 overflow-hidden mb-8">
+        <div className="p-8 border-b border-starlight-100/10 bg-void-900/50 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h3 className="text-2xl font-bold text-slate-900 mb-2">{course.title}</h3>
-            <p className="text-slate-600">{course.description}</p>
+            <h3 className="text-2xl font-bold text-starlight-100 mb-2 font-display">{course.title}</h3>
+            <p className="text-starlight-400">{course.description}</p>
           </div>
           <div className="flex gap-2">
             <button
               onClick={onRegenerate}
-              className="p-2 text-slate-500 hover:bg-slate-200 rounded-lg transition-colors tooltip"
+              className="p-2 text-starlight-500 hover:bg-void-800 hover:text-starlight-100 rounded-lg transition-colors tooltip"
               title="Regenerate Curriculum"
             >
               <RefreshCw className="w-5 h-5" />
             </button>
             <button
               onClick={onChat}
-              className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors tooltip"
+              className="p-2 text-neon-blue hover:bg-neon-blue/10 rounded-lg transition-colors tooltip"
               title="Chat about this course"
             >
               <MessageSquare className="w-5 h-5" />
             </button>
           </div>
         </div>
-        <div className="divide-y divide-slate-100">
+        <div className="divide-y divide-starlight-100/5">
           {course.modules.map((module, idx) => (
-            <div key={idx} className="p-6 hover:bg-slate-50 transition-colors flex items-start gap-4">
-              <div className="flex-shrink-0 w-10 h-10 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center font-bold">
+            <div key={idx} className="p-6 hover:bg-void-800/50 transition-colors flex items-start gap-4">
+              <div className="flex-shrink-0 w-10 h-10 bg-neon-blue/10 text-neon-blue rounded-lg flex items-center justify-center font-bold border border-neon-blue/20">
                 {idx + 1}
               </div>
               <div className="flex-1">
                 <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-lg font-bold text-slate-900">{module.title}</h4>
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${module.difficulty === 'beginner' ? 'bg-green-100 text-green-700' :
-                    module.difficulty === 'intermediate' ? 'bg-yellow-100 text-yellow-700' :
-                      'bg-red-100 text-red-700'
+                  <h4 className="text-lg font-bold text-starlight-100">{module.title}</h4>
+                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${module.difficulty === 'beginner' ? 'bg-neon-green/10 text-neon-green border border-neon-green/20' :
+                    module.difficulty === 'intermediate' ? 'bg-yellow-400/10 text-yellow-400 border border-yellow-400/20' :
+                      'bg-red-400/10 text-red-400 border border-red-400/20'
                     }`}>
                     {module.difficulty}
                   </span>
                 </div>
-                <p className="text-slate-600 text-sm mb-3">{module.description}</p>
-                <div className="flex items-center gap-4 text-xs text-slate-500">
+                <p className="text-starlight-400 text-sm mb-3">{module.description}</p>
+                <div className="flex items-center gap-4 text-xs text-starlight-500">
                   <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {module.estimated_time} mins</span>
                   <span className="flex items-center gap-1"><BookOpen className="w-3 h-3" /> 3 Topics</span>
                 </div>
@@ -412,7 +401,7 @@ const CurriculumPreview = ({
       <div className="flex justify-center">
         <button
           onClick={onStart}
-          className="bg-slate-900 text-white px-10 py-4 rounded-xl font-bold text-lg hover:bg-slate-800 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-1 flex items-center gap-3"
+          className="bg-neon-blue text-white px-10 py-4 rounded-xl font-bold text-lg hover:bg-neon-blue/90 transition-all shadow-lg shadow-neon-blue/20 transform hover:-translate-y-1 flex items-center gap-3"
         >
           Start Learning Now
           <ArrowRight className="w-6 h-6" />
@@ -562,92 +551,92 @@ const ModulePlayer = ({ module, onBack, onComplete }: { module: Module, onBack: 
   };
 
   return (
-    <div className="flex h-full bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200 relative">
+    <div className="flex h-full bg-void-900 rounded-2xl shadow-xl overflow-hidden border border-starlight-100/10 relative">
       {/* Mobile Sidebar Overlay */}
       {showMobileSidebar && (
         <div
-          className="absolute inset-0 bg-black/50 z-40 md:hidden"
+          className="absolute inset-0 bg-void-950/80 backdrop-blur-sm z-40 md:hidden"
           onClick={() => setShowMobileSidebar(false)}
         />
       )}
 
       {/* Sidebar */}
       <div className={`
-        absolute inset-y-0 left-0 z-50 w-80 bg-slate-50 border-r border-slate-200 p-6 flex flex-col transition-transform duration-300
+        absolute inset-y-0 left-0 z-50 w-80 bg-void-900 border-r border-starlight-100/10 p-6 flex flex-col transition-transform duration-300
         md:relative md:translate-x-0
         ${showMobileSidebar ? 'translate-x-0' : '-translate-x-full'}
       `}>
         <div className="flex items-center justify-between mb-8">
-          <button onClick={onBack} className="flex items-center text-slate-500 hover:text-slate-900 transition-colors">
+          <button onClick={onBack} className="flex items-center text-starlight-500 hover:text-starlight-100 transition-colors">
             <ChevronLeft className="w-5 h-5 mr-1" /> Back
           </button>
           <button
             onClick={() => setShowMobileSidebar(false)}
-            className="md:hidden p-2 text-slate-500 hover:bg-slate-200 rounded-lg"
+            className="md:hidden p-2 text-starlight-500 hover:bg-void-800 rounded-lg"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         <div className="mb-8">
-          <h3 className="font-bold text-slate-900 text-lg mb-2">{module.title}</h3>
-          <div className="flex items-center gap-2 text-sm text-slate-500">
+          <h3 className="font-bold text-starlight-100 text-lg mb-2">{module.title}</h3>
+          <div className="flex items-center gap-2 text-sm text-starlight-500">
             <Clock className="w-4 h-4" /> {module.estimated_time} mins
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
-          <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Checkpoints</h4>
+        <div className="flex-1 overflow-y-auto custom-scrollbar">
+          <h4 className="text-xs font-bold text-starlight-600 uppercase tracking-wider mb-4">Checkpoints</h4>
           <ul className="space-y-3">
             {checkpoints.length > 0 ? checkpoints.map((cp: any, i: number) => (
-              <li key={i} className={`flex items-center gap-3 text-sm ${i === currentCheckpointIndex ? 'text-blue-600 font-medium' : 'text-slate-600'}`}>
-                <div className={`w-2 h-2 rounded-full ${i === currentCheckpointIndex ? 'bg-blue-600' : i < currentCheckpointIndex ? 'bg-green-500' : 'bg-slate-300'}`}></div>
+              <li key={i} className={`flex items-center gap-3 text-sm ${i === currentCheckpointIndex ? 'text-neon-blue font-medium' : 'text-starlight-400'}`}>
+                <div className={`w-2 h-2 rounded-full ${i === currentCheckpointIndex ? 'bg-neon-blue shadow-[0_0_8px_rgba(59,130,246,0.5)]' : i < currentCheckpointIndex ? 'bg-neon-green' : 'bg-void-700'}`}></div>
                 {cp.title}
-                {i === currentCheckpointIndex && masteryAchieved && <CheckCircle className="w-4 h-4 text-green-500 ml-auto" />}
+                {i === currentCheckpointIndex && masteryAchieved && <CheckCircle className="w-4 h-4 text-neon-green ml-auto" />}
               </li>
             )) : (
-              <li className="text-slate-400 italic">No checkpoints defined</li>
+              <li className="text-starlight-600 italic">No checkpoints defined</li>
             )}
           </ul>
         </div>
       </div>
 
       {/* Chat Area */}
-      <div className="flex-1 flex flex-col">
-        <div className="md:hidden p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+      <div className="flex-1 flex flex-col bg-void-900/50">
+        <div className="md:hidden p-4 border-b border-starlight-100/10 flex items-center justify-between bg-void-900">
           <button
             onClick={() => setShowMobileSidebar(true)}
-            className="p-2 -ml-2 text-slate-600 hover:bg-slate-200 rounded-lg flex items-center gap-2"
+            className="p-2 -ml-2 text-starlight-400 hover:bg-void-800 rounded-lg flex items-center gap-2"
           >
             <Menu className="w-5 h-5" />
             <span className="text-sm font-medium">Checkpoints</span>
           </button>
-          <span className="text-sm font-bold text-slate-900 truncate max-w-[150px]">{module.title}</span>
+          <span className="text-sm font-bold text-starlight-100 truncate max-w-[150px]">{module.title}</span>
         </div>
-        <div className="flex-1 overflow-y-auto p-6 space-y-6" ref={scrollRef}>
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar" ref={scrollRef}>
           {messages.map((msg, idx) => (
             <div key={idx} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
               <div className={`max-w-2xl rounded-2xl p-5 ${msg.role === 'user'
-                ? 'bg-blue-600 text-white'
-                : 'bg-slate-100 text-slate-800'
+                ? 'bg-neon-blue/10 text-starlight-100 border border-neon-blue/20'
+                : 'bg-void-800 text-starlight-200 border border-starlight-100/5'
                 }`}>
-                <div className={`prose prose-sm max-w-none ${msg.role === 'user' ? 'text-white' : 'text-slate-700'}`}>
+                <div className={`prose prose-invert prose-sm max-w-none ${msg.role === 'user' ? 'text-starlight-100' : 'text-starlight-300'}`}>
                   <ReactMarkdown>{msg.content}</ReactMarkdown>
                 </div>
               </div>
               {msg.quiz && (
-                <div className="mt-4 max-w-2xl w-full bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
-                  <div className="flex items-center gap-2 mb-3 text-purple-600 font-bold">
-                    <div className="p-1 bg-purple-100 rounded-lg"><Brain className="w-4 h-4" /></div>
+                <div className="mt-4 max-w-2xl w-full bg-void-900 rounded-xl p-4 border border-starlight-100/10 shadow-lg">
+                  <div className="flex items-center gap-2 mb-3 text-neon-purple font-bold">
+                    <div className="p-1 bg-neon-purple/10 rounded-lg"><Brain className="w-4 h-4" /></div>
                     Quiz Time
                   </div>
-                  <p className="text-slate-800 font-medium mb-4">{msg.quiz.question}</p>
+                  <p className="text-starlight-100 font-medium mb-4">{msg.quiz.question}</p>
                   <div className="space-y-2">
                     {msg.quiz.options.map((option, idx) => (
                       <button
                         key={idx}
                         onClick={() => handleSend(`I choose: ${option}`)}
-                        className="w-full text-left p-3 rounded-lg border border-slate-200 hover:border-purple-300 hover:bg-purple-50 transition-all text-sm text-slate-600"
+                        className="w-full text-left p-3 rounded-lg border border-starlight-100/10 hover:border-neon-purple/50 hover:bg-neon-purple/5 transition-all text-sm text-starlight-300 hover:text-starlight-100"
                       >
                         {option}
                       </button>
@@ -659,7 +648,7 @@ const ModulePlayer = ({ module, onBack, onComplete }: { module: Module, onBack: 
                 <div className="mt-4">
                   <button
                     onClick={handleNextTopic}
-                    className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-200"
+                    className="w-full py-3 bg-neon-blue text-white font-bold rounded-xl hover:bg-neon-blue/90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-neon-blue/20"
                   >
                     <Unlock className="w-5 h-5" /> Proceed to Next Topic <ChevronRight className="w-5 h-5" />
                   </button>
@@ -669,7 +658,7 @@ const ModulePlayer = ({ module, onBack, onComplete }: { module: Module, onBack: 
                 <div className="mt-4">
                   <button
                     onClick={handleModuleComplete}
-                    className="w-full py-3 bg-green-600 text-white font-bold rounded-xl hover:bg-green-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-green-200"
+                    className="w-full py-3 bg-neon-green text-void-950 font-bold rounded-xl hover:bg-neon-green/90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-neon-green/20"
                   >
                     <CheckCircle className="w-5 h-5" /> Complete Module
                   </button>
@@ -678,7 +667,7 @@ const ModulePlayer = ({ module, onBack, onComplete }: { module: Module, onBack: 
             </div>
           ))}
         </div>
-        <div className="p-4 bg-white border-t border-slate-200">
+        <div className="p-4 bg-void-900 border-t border-starlight-100/10">
           <div className="relative">
             <input
               type="text"
@@ -686,12 +675,12 @@ const ModulePlayer = ({ module, onBack, onComplete }: { module: Module, onBack: 
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSend()}
               placeholder="Type your answer or ask a question..."
-              className="w-full pl-4 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+              className="w-full pl-4 pr-12 py-3 bg-void-950 border border-starlight-100/10 rounded-xl focus:outline-none focus:border-neon-blue/50 text-starlight-100 placeholder-starlight-600 transition-all"
             />
             <button
               onClick={() => handleSend()}
               disabled={!input.trim() || isTyping}
-              className="absolute right-2 top-2 p-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              className="absolute right-2 top-2 p-1.5 bg-neon-blue text-white rounded-lg hover:bg-neon-blue/90 disabled:opacity-50 transition-colors shadow-lg shadow-neon-blue/20"
             >
               <Send className="w-4 h-4" />
             </button>
@@ -798,414 +787,318 @@ const Learning = () => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [items.length]);
 
   useEffect(() => {
     fetchVaultData();
-  }, [fetchVaultData]);
-
-  // Function to load module data on demand
-  const loadModuleData = async (moduleId: string) => {
-    try {
-      // Find the module in the items tree to check if already loaded
-      // This is a bit complex with the nested structure, so we'll just fetch and update
-      // Optimization: In a real app with Redux/Context, check state first.
-
-      const progressRes = await apiClient.getProgressOverview();
-      let progressNotes = '# Learning Progress\n\n*No notes saved yet. Use the AI Assistant to save your learnings!*';
-      let moduleStatus = 'not_started';
-
-      if (progressRes.success && progressRes.data) {
-        const moduleProgress = progressRes.data.find((p: any) => p.module_id === moduleId);
-        if (moduleProgress) {
-          if (moduleProgress.notes) progressNotes = moduleProgress.notes;
-          if (moduleProgress.status) moduleStatus = moduleProgress.status;
-        }
-      }
-
-      // Update the items state with the fetched data
-      setItems(prevItems => {
-        return prevItems.map(subject => {
-          if (!subject.children) return subject;
-
-          const updatedModules = subject.children.map(module => {
-            if (module.id === moduleId) {
-              // Update this module
-              const updatedModule: VaultItem = {
-                ...module,
-                data: { ...module.data, status: moduleStatus, notes: progressNotes, isLoaded: true },
-                children: [
-                  {
-                    id: `${moduleId}-practice`,
-                    title: 'Learning Notes.md',
-                    type: 'note',
-                    data: {
-                      id: moduleId,
-                      title: 'Learning Notes',
-                      content: progressNotes,
-                      status: moduleStatus,
-                      notes: progressNotes,
-                      created_at: new Date().toISOString(),
-                      isLoaded: true
-                    }
-                  }
-                ]
-              };
-              return updatedModule;
-            }
-            return module;
-          });
-
-          return { ...subject, children: updatedModules };
-        });
-      });
-
-      // Return the updated data for immediate use if needed
-      return { status: moduleStatus, notes: progressNotes };
-
-    } catch (error) {
-      console.error('Failed to load module data:', error);
-      return null;
-    }
-  };
-
-  // Mobile responsive check
-  useEffect(() => {
-    if (window.innerWidth < 768) {
-      setIsSidebarOpen(false);
-    }
   }, []);
 
-  // --- Study Mode Handlers ---
+  // --- Handlers ---
 
-  const handleAnalyze = async (selectedTopic: string) => {
-    // Clear previous state
-    setAssessmentQuestions([]);
-    setAssessmentResult(null);
-    setGeneratedCourse(null);
-    setExistingSubjectMatch(undefined);
+  const handleAnalyze = async (inputTopic: string) => {
+    setTopic(inputTopic);
+    setLoadingMessage(`Analyzing "${inputTopic}"...`);
+    setTopic(inputTopic); // Update topic state
+    setStep('assessment'); // We'll show loading state inside the conditional render if needed, or use a separate loading step
 
-    setTopic(selectedTopic);
-    setLoadingMessage(`Analyzing your knowledge of ${selectedTopic}...`);
-    setStep('assessment');
-
-    // Check for existing subject
-    const match = items.find(item => item.title.toLowerCase().includes(selectedTopic.toLowerCase()) || selectedTopic.toLowerCase().includes(item.title.toLowerCase()));
+    // Check if we already have a subject for this
+    const match = items.find(item => item.title.toLowerCase().includes(inputTopic.toLowerCase()));
     if (match) {
       setExistingSubjectMatch(match);
+    } else {
+      setExistingSubjectMatch(undefined);
     }
 
     try {
-      const res = await apiClient.assessSkill(selectedTopic, chatHistory.length > 0 ? chatHistory : undefined);
-      if (res.success && res.data) {
-        setAssessmentQuestions(res.data.questions);
+      // Generate assessment questions
+      const response = await apiClient.assessSkill(inputTopic);
+      if (response.success && response.data) {
+        setAssessmentQuestions(response.data.questions);
       }
-    } catch (e) {
-      console.error(e);
+    } catch (error) {
+      console.error("Failed to generate assessment", error);
+      // Fallback or error state
+    } finally {
+      setLoadingMessage('');
     }
   };
 
-  const handleAssessmentComplete = async (result: AssessmentResult) => {
+  const handleAssessmentComplete = (result: AssessmentResult) => {
     setAssessmentResult(result);
     setStep('result');
   };
 
   const handleGenerateCourse = async () => {
-    if (!assessmentResult) return;
-
     setLoadingMessage('Designing your custom curriculum...');
-    // Show loading state temporarily if needed, but we can just use the loading message in a loading component
-    // For now, let's switch to a loading view or just show loading overlay
-    // We'll reuse the LoadingState component by temporarily setting step to a loading state if we had one, 
-    // or just conditionally rendering. 
-    // Let's add a 'loading' step to the type or just use a flag.
-    // For simplicity, I'll add a 'loading' step to the state type in the next refactor, 
-    // but here I'll just set step to 'curriculum' and let it show loading if generatedCourse is null.
-    setGeneratedCourse(null);
-    setStep('curriculum');
+    // setStep('loading'); // Optional: explicit loading step
 
     try {
-      const res = await apiClient.generateCurriculum(topic, { score: assessmentResult.score, weakAreas: assessmentResult.weakAreas }, chatHistory.length > 0 ? chatHistory : undefined);
-      if (res.success && res.data) {
-        const courseData: Course = {
-          title: res.data.subject.name,
-          description: res.data.subject.description,
-          modules: res.data.modules
-        };
-        setGeneratedCourse(courseData);
+      const response = await apiClient.generateCurriculum(
+        inputTopic, // Use inputTopic or ensure topic state is updated
+        {
+          score: assessmentResult?.score || 0,
+          weakAreas: assessmentResult?.weakAreas || []
+        }
+      );
 
-        // Refresh sidebar to show new course
-        fetchVaultData();
+      if (response.success && response.data) {
+        setGeneratedCourse(response.data);
+        setStep('curriculum');
       }
-    } catch (e) {
-      console.error(e);
-      setStep('result'); // Go back on error
+    } catch (error) {
+      console.error("Failed to generate curriculum", error);
+    } finally {
+      setLoadingMessage('');
+    }
+  };
+
+  const handleStartLearning = async () => {
+    if (!generatedCourse) return;
+
+    setLoadingMessage('Setting up your learning environment...');
+
+    try {
+      // Create the subject and modules in the backend
+      const response = await apiClient.createLearningPath({
+        title: generatedCourse.title,
+        description: generatedCourse.description,
+        modules: generatedCourse.modules
+      });
+
+      if (response.success) {
+        // Refresh vault data to show new subject
+        await fetchVaultData();
+
+        // Start the first module
+        if (generatedCourse.modules.length > 0) {
+          // We need the ID of the created module.
+          // The API should return the created structure.
+          // For now, let's assume we can just start playing the first module from the generated course
+          // But ideally we want to play the *persisted* module.
+
+          // Let's find the newly created subject in the refreshed items
+          // This might be tricky due to async state updates.
+          // For immediate UX, we can just play the local module object,
+          // but we need the ID for chat.
+          // Let's assume the API returns the created IDs.
+          const createdModules = response.data.modules;
+          if (createdModules && createdModules.length > 0) {
+            setCurrentModule(createdModules[0]);
+            setStep('module');
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Failed to create learning path", error);
+    } finally {
+      setLoadingMessage('');
     }
   };
 
   const handleContinueExisting = () => {
     if (existingSubjectMatch) {
-      setSelectedItem(existingSubjectMatch);
+      // Switch to vault view and select the subject
       setViewMode('vault');
-      // Optionally expand sidebar item
-    }
-  };
-
-  const handleRegenerate = () => {
-    handleGenerateCourse();
-  };
-
-  const handleChatAboutCourse = () => {
-    setIsChatOpen(true);
-    // Ideally set context for chat
-  };
-
-  const handleStartCourse = () => {
-    if (generatedCourse && generatedCourse.modules.length > 0) {
-      setCurrentModule(generatedCourse.modules[0]);
-      setStep('module');
+      setSelectedItem(existingSubjectMatch);
     }
   };
 
   const handleModuleComplete = async (sessionData: any) => {
-    setStep('curriculum');
-  };
-
-  // --- Vault Actions ---
-  const handleVaultAction = (action: string, data?: any) => {
-    if (action === 'start_module') {
-      setViewMode('study');
-      setCurrentModule(data);
-      setStep('module');
-    }
-  };
-
-  const handleDeleteSubject = async (subjectId: string) => {
-    if (confirm('Are you sure you want to delete this course? This action cannot be undone.')) {
+    // Save progress, update backend
+    if (currentModule?.id) {
       try {
-        await apiClient.deleteLearningSubject(subjectId);
-        setItems(prev => prev.filter(item => item.id !== subjectId));
-        if (selectedItem?.id === subjectId) {
-          setSelectedItem(null);
-          setViewMode('study');
-          setStep('input');
-        }
-      } catch (error) {
-        console.error('Failed to delete subject', error);
-        alert('Failed to delete course');
-      }
-    }
-  };
-
-  // --- Render Content Area based on Mode ---
-  const renderContent = () => {
-    if (viewMode === 'vault') {
-      return <VaultContent selectedItem={selectedItem} onAction={handleVaultAction} viewMode="vault" onSelect={setSelectedItem} />;
-    }
-
-    // Study Mode Content
-    if (step === 'input') return <SkillInput onAnalyze={handleAnalyze} />;
-    if (step === 'assessment') {
-      if (assessmentQuestions.length === 0) return <LoadingState message={loadingMessage} />;
-      return <Assessment topic={topic} questions={assessmentQuestions} onComplete={handleAssessmentComplete} />;
-    }
-    if (step === 'result') {
-      if (!assessmentResult) return <div>Error: No result</div>;
-      return (
-        <AssessmentResultView
-          result={assessmentResult}
-          topic={topic}
-          existingSubject={existingSubjectMatch}
-          onGenerate={handleGenerateCourse}
-          onContinue={handleContinueExisting}
-        />
-      );
-    }
-    if (step === 'curriculum') {
-      if (!generatedCourse) return <LoadingState message={loadingMessage} />;
-      return (
-        <CurriculumPreview
-          course={generatedCourse}
-          onStart={handleStartCourse}
-          onRegenerate={handleRegenerate}
-          onChat={handleChatAboutCourse}
-        />
-      );
-    }
-    if (step === 'module') {
-      if (!currentModule) return <div>Error: No module selected</div>;
-      return <ModulePlayer module={currentModule} onBack={() => setStep('curriculum')} onComplete={handleModuleComplete} />;
-    }
-
-    return <div>Unknown step</div>;
-  };
-
-  const handleNotesUpdated = (moduleId: string, newNotes: string) => {
-    // Update items state
-    setItems(prevItems => {
-      return prevItems.map(subject => {
-        if (!subject.children) return subject;
-
-        const updatedModules = subject.children.map(module => {
-          if (module.id === moduleId) {
-            // Update module data
-            const updatedModuleData = { ...module.data, notes: newNotes };
-
-            // Update children (notes file)
-            const updatedChildren = module.children?.map(child => {
-              if (child.id === `${moduleId}-practice`) {
-                return {
-                  ...child,
-                  data: { ...child.data, content: newNotes, notes: newNotes }
-                };
-              }
-              return child;
-            });
-
-            const updatedModule: VaultItem = {
-              ...module,
-              data: updatedModuleData,
-              children: updatedChildren
-            };
-            return updatedModule;
-          }
-          return module;
+        await apiClient.updateModuleProgress(currentModule.id, {
+          status: 'completed',
+          sessionData
         });
-        return { ...subject, children: updatedModules };
-      });
-    });
-
-    // Update selected item if it matches
-    if (selectedItem) {
-      if (selectedItem.id === moduleId) {
-        setSelectedItem(prev => prev ? { ...prev, data: { ...prev.data, notes: newNotes } } : null);
-      } else if (selectedItem.id === `${moduleId}-practice`) {
-        setSelectedItem(prev => prev ? { ...prev, data: { ...prev.data, content: newNotes, notes: newNotes } } : null);
+      } catch (error) {
+        console.error("Failed to save progress", error);
       }
     }
+
+    // Move to next module or show course completion
+    // For now, just go back to curriculum or vault
+    setViewMode('vault');
+    fetchVaultData(); // Refresh status
   };
+
+  // --- Render ---
 
   return (
-    <DashboardLayout>
-      <div className="flex h-[calc(100dvh-160px)] md:h-[calc(100vh-100px)] bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-200 relative">
 
-        {/* Sidebar */}
-        <VaultSidebar
-          items={items}
-          onSelect={async (item) => {
-            setSelectedItem(item);
-
-            // Lazy load data if needed
-            if (item.type === 'module' || (item.type === 'note' && item.id.endsWith('-practice'))) {
-              const moduleId = item.type === 'module' ? item.id : item.data.id;
-              // Check if we need to load (simplified check, ideally check isLoaded flag from item)
-              // Since item comes from state, we can check data.isLoaded
-              if (item.data && !item.data.isLoaded) {
-                const loadedData = await loadModuleData(moduleId);
-                // Update the selected item with loaded data so the view updates immediately
-                if (loadedData) {
-                  setSelectedItem(prev => prev ? {
-                    ...prev,
-                    data: { ...prev.data, ...loadedData, isLoaded: true }
-                  } : null);
-                }
-              }
-            }
-
-            if (item.type !== 'subject') {
-              setViewMode('vault');
-            }
-          }}
-          selectedId={selectedItem?.id}
-          isOpen={isSidebarOpen}
-          onClose={() => setIsSidebarOpen(false)}
-          viewMode={viewMode}
-          onViewModeChange={setViewMode}
-          onDelete={handleDeleteSubject} // Pass delete handler
-        />
-
-        {/* Main Content Area */}
-        <div className="flex-1 flex flex-col min-w-0 bg-white relative">
-          {/* Toolbar */}
-          <div className="h-14 border-b border-slate-200 flex items-center justify-between px-4 bg-white">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                className="p-2 hover:bg-slate-100 rounded-lg text-slate-600"
-              >
-                <PanelLeft className="w-5 h-5" />
-              </button>
-              <div className="text-sm text-slate-500 breadcrumbs">
-                {viewMode === 'study' ? (
-                  <span className="font-medium text-slate-800">Study Session</span>
-                ) : (
-                  selectedItem ? (
-                    <span className="flex items-center gap-2">
-                      <span className="font-medium text-slate-800">{selectedItem.title}</span>
-                    </span>
-                  ) : (
-                    <span>Select a file</span>
-                  )
-                )}
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {viewMode === 'study' && (
-                <button
-                  onClick={() => setStep('input')}
-                  className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors"
-                >
-                  <BookOpen className="w-4 h-4" />
-                  Create Course
-                </button>
-              )}
-
-              {/* Only show global AI Assistant if NOT in module player (which has its own chat) */}
-              {!(viewMode === 'study' && step === 'module') && (
-                <button
-                  onClick={() => setIsChatOpen(!isChatOpen)}
-                  className={`p-2 rounded-lg transition-colors flex items-center gap-2 text-sm font-medium ${isChatOpen ? 'bg-purple-100 text-purple-700' : 'hover:bg-slate-100 text-slate-600'
-                    }`}
-                >
-                  <Sparkles className="w-4 h-4" />
-                  <span className="hidden md:inline">AI Assistant</span>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Content */}
-          <div className="flex-1 overflow-y-auto relative">
-            {isLoading ? (
-              <div className="flex items-center justify-center h-full">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-900"></div>
-              </div>
-            ) : (
-              viewMode === 'vault' ? (
-                <VaultContent
-                  selectedItem={selectedItem}
-                  onAction={handleVaultAction}
-                  viewMode="vault"
-                  onSelect={setSelectedItem}
-                />
-              ) : (
-                renderContent()
-              )
-            )}
+    <div className="h-[calc(100vh-8rem)] flex flex-col gap-6">
+      {/* Header / Mode Switcher */}
+      <div className="flex items-center justify-between px-1">
+        <div className="flex items-center gap-4">
+          <h1 className="text-2xl font-bold text-starlight-100 font-display">Learning Hub</h1>
+          <div className="flex bg-void-900 rounded-lg p-1 border border-starlight-100/10">
+            <button
+              onClick={() => setViewMode('study')}
+              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === 'study'
+                ? 'bg-neon-blue text-white shadow-lg shadow-neon-blue/20'
+                : 'text-starlight-400 hover:text-starlight-100'
+                }`}
+            >
+              AI Study Path
+            </button>
+            <button
+              onClick={() => setViewMode('vault')}
+              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${viewMode === 'vault'
+                ? 'bg-neon-blue text-white shadow-lg shadow-neon-blue/20'
+                : 'text-starlight-400 hover:text-starlight-100'
+                }`}
+            >
+              My Vault
+            </button>
           </div>
         </div>
-
-        {/* Chat Sidebar (Right) */}
-        <VaultChat
-          contextItem={selectedItem}
-          isOpen={isChatOpen}
-          onClose={() => setIsChatOpen(false)}
-          onNotesUpdated={handleNotesUpdated}
-        />
-
       </div>
-    </DashboardLayout>
+
+      {/* Main Content Area */}
+      <div className="flex-1 min-h-0">
+        {viewMode === 'study' ? (
+          <div className="h-full overflow-y-auto custom-scrollbar rounded-2xl bg-void-950 border border-starlight-100/5 shadow-inner">
+            {loadingMessage ? (
+              <LoadingState message={loadingMessage} />
+            ) : step === 'input' ? (
+              <SkillInput onAnalyze={handleAnalyze} />
+            ) : step === 'assessment' ? (
+              <Assessment
+                topic={topic}
+                questions={assessmentQuestions}
+                onComplete={handleAssessmentComplete}
+              />
+            ) : step === 'result' && assessmentResult ? (
+              <AssessmentResultView
+                result={assessmentResult}
+                topic={topic}
+                existingSubject={existingSubjectMatch}
+                onGenerate={handleGenerateCourse}
+                onContinue={handleContinueExisting}
+              />
+            ) : step === 'curriculum' && generatedCourse ? (
+              <CurriculumPreview
+                course={generatedCourse}
+                onStart={handleStartLearning}
+                onRegenerate={handleGenerateCourse}
+                onChat={() => { }}
+              />
+            ) : step === 'module' && currentModule ? (
+              <ModulePlayer
+                module={currentModule}
+                onBack={() => setStep('curriculum')}
+                onComplete={handleModuleComplete}
+              />
+            ) : null}
+          </div>
+        ) : (
+          <div className="flex h-full gap-6">
+            {/* Vault Sidebar */}
+            <div className={`
+                w-80 flex-shrink-0 bg-void-900 rounded-2xl border border-starlight-100/10 overflow-hidden flex flex-col
+                ${!isSidebarOpen && 'hidden'}
+              `}>
+              <div className="p-4 border-b border-starlight-100/10 flex items-center justify-between">
+                <h2 className="font-bold text-starlight-100 flex items-center gap-2">
+                  <Archive className="w-4 h-4 text-neon-blue" /> Library
+                </h2>
+                <button onClick={() => fetchVaultData()} className="p-1 text-starlight-500 hover:text-starlight-100">
+                  <RefreshCw className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-2">
+                <VaultSidebar
+                  items={items}
+                  onSelect={setSelectedItem}
+                  selectedItem={selectedItem}
+                />
+              </div>
+            </div>
+
+            {/* Toggle Sidebar Button (when closed) */}
+            {!isSidebarOpen && (
+              <button
+                onClick={() => setIsSidebarOpen(true)}
+                className="h-full w-8 bg-void-900 rounded-l-none rounded-r-2xl border-y border-r border-starlight-100/10 flex items-center justify-center text-starlight-500 hover:text-neon-blue hover:bg-void-800 transition-colors"
+              >
+                <PanelLeft className="w-4 h-4" />
+              </button>
+            )}
+
+            {/* Vault Content / Chat */}
+            <div className="flex-1 bg-void-900 rounded-2xl border border-starlight-100/10 overflow-hidden flex flex-col relative">
+              {selectedItem ? (
+                <>
+                  <div className="h-14 border-b border-starlight-100/10 flex items-center justify-between px-6 bg-void-900/50">
+                    <div className="flex items-center gap-3">
+                      {isSidebarOpen && (
+                        <button onClick={() => setIsSidebarOpen(false)} className="mr-2 text-starlight-500 hover:text-starlight-100">
+                          <PanelLeft className="w-4 h-4" />
+                        </button>
+                      )}
+                      <span className="font-bold text-starlight-100">{selectedItem.title}</span>
+                      {selectedItem.type === 'module' && (
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${selectedItem.data.status === 'completed' ? 'bg-neon-green/10 text-neon-green' : 'bg-neon-blue/10 text-neon-blue'}`}>
+                          {selectedItem.data.status}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setIsChatOpen(!isChatOpen)}
+                        className={`p-2 rounded-lg transition-colors ${isChatOpen ? 'bg-neon-blue/10 text-neon-blue' : 'text-starlight-400 hover:text-starlight-100 hover:bg-void-800'}`}
+                      >
+                        <MessageSquare className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 flex overflow-hidden">
+                    {/* Main Content View */}
+                    <div className={`flex-1 overflow-y-auto custom-scrollbar p-8 ${isChatOpen ? 'w-1/2' : 'w-full'}`}>
+                      <VaultContent
+                        selectedItem={selectedItem}
+                        viewMode="vault"
+                        onSelect={setSelectedItem}
+                        onAction={async (action, data) => {
+                          if (action === 'update_note') {
+                            try {
+                              await apiClient.updateResource(data.id, { content: data.content });
+                              // Refresh vault data to show updated content
+                              await fetchVaultData();
+                            } catch (error) {
+                              console.error("Failed to update note", error);
+                            }
+                          }
+                        }}
+                      />
+                    </div>
+
+                    {/* Chat Sidebar */}
+                    {isChatOpen && (
+                      <div className="w-[400px] border-l border-starlight-100/10 bg-void-950 flex flex-col">
+                        <VaultChat
+                          contextItem={selectedItem}
+                          isOpen={isChatOpen}
+                          onClose={() => setIsChatOpen(false)}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center text-starlight-500">
+                  <div className="w-16 h-16 bg-void-800 rounded-full flex items-center justify-center mb-4">
+                    <Archive className="w-8 h-8 text-starlight-600" />
+                  </div>
+                  <p>Select an item from the library to view</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 };
 

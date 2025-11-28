@@ -48,7 +48,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     };
 
     return (
-        <div className="min-h-screen bg-void-950 text-starlight-100 font-sans selection:bg-neon-blue selection:text-white flex">
+        <div className="h-screen bg-void-950 text-starlight-100 font-sans selection:bg-neon-blue selection:text-white flex overflow-hidden">
             {/* Mobile Sidebar Overlay */}
             {sidebarOpen && (
                 <div
@@ -179,7 +179,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
                 {/* Page Content */}
                 <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
-                    <div className="max-w-7xl mx-auto animate-fade-in">
+                    <div className="max-w-7xl mx-auto animate-fade-in h-full">
                         {children}
                     </div>
                 </main>

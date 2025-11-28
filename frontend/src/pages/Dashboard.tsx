@@ -170,7 +170,7 @@ const Dashboard: React.FC = () => {
           </div>
 
           <div className="bg-void-900/50 border border-starlight-100/5 rounded-2xl p-6 min-h-[400px]">
-            <ResourceGrid key={refreshKey} currentPage={1} itemsPerPage={6} sortBy="recent" />
+            <ResourceGrid key={refreshKey} currentPage={1} itemsPerPage={3} sortBy="recent" />
           </div>
         </div>
 

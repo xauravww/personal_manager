@@ -585,6 +585,41 @@ class ApiClient {
     });
   }
 
+  async createLearningPath(data: {
+    title: string;
+    description: string;
+    modules: any[];
+  }): Promise<ApiResponse<any>> {
+    // First create the subject
+    const subjectResponse = await this.createLearningSubject({
+      name: data.title,
+      description: data.description
+    });
+
+    if (!subjectResponse.success || !subjectResponse.data) {
+      return subjectResponse;
+    }
+
+    const subjectId = subjectResponse.data.id;
+
+    // Then create all modules
+    const modulePromises = data.modules.map((module, index) =>
+      this.createLearningModule({
+        subject_id: subjectId,
+        title: module.title,
+        description: module.description,
+        content: module.content, // Ensure content is passed if available
+        order_index: index,
+        estimated_time: module.estimated_time,
+        difficulty: module.difficulty
+      })
+    );
+
+    await Promise.all(modulePromises);
+
+    return subjectResponse;
+  }
+
   async updateProgress(progress: {
     module_id: string;
     status: string;

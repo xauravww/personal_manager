@@ -10,10 +10,37 @@ import {
 import { apiClient } from '../api/client';
 import LayoutComponent from '../components/Layout';
 import ReactMarkdown from 'react-markdown';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import VaultSidebar, { VaultItem } from '../components/vault/VaultSidebar';
 import VaultContent from '../components/vault/VaultContent';
 import VaultChat from '../components/vault/VaultChat';
 import KnowledgeGraph from '../components/learning/KnowledgeGraph';
+import { parseResponseContent, parseContent, extractStructuredData, ExtractedData } from '../utils/contentParser';
+
+// --- Types ---
+
+// Markdown components for syntax highlighting
+const markdownComponents = {
+  code({ node, inline, className, children, ...props }: any) {
+    const match = /language-(\w+)/.exec(className || '');
+    return !inline && match ? (
+      <SyntaxHighlighter
+        style={oneDark}
+        language={match[1]}
+        PreTag="div"
+        className="rounded-lg"
+        {...props}
+      >
+        {String(children).replace(/\n$/, '')}
+      </SyntaxHighlighter>
+    ) : (
+      <code className={`${className} bg-void-800 px-1 py-0.5 rounded text-sm`} {...props}>
+        {children}
+      </code>
+    );
+  },
+};
 
 // --- Types ---
 interface Question {
@@ -436,6 +463,8 @@ const ModulePlayer = ({ module, onBack, onComplete }: { module: Module, onBack: 
   const [codeSnippets, setCodeSnippets] = useState<any[]>([]);
   const [identifiedWeaknesses, setIdentifiedWeaknesses] = useState<string[]>([]);
 
+
+
   // Parse checkpoints
   const checkpoints = useMemo(() => {
     if (typeof module.checkpoints === 'string') {
@@ -487,13 +516,30 @@ const ModulePlayer = ({ module, onBack, onComplete }: { module: Module, onBack: 
         conversation_history: messages.map(m => ({ role: m.role, content: m.content }))
       });
 
-      const aiMsg: ChatMessage = {
-        role: 'assistant',
-        content: response.data?.response || "I'm processing that...",
-        timestamp: new Date(),
-        quiz: response.data?.quiz,
-        code: response.data?.code
-      };
+      console.log('API Response:', response);
+      console.log('Response data:', response.data);
+      console.log('Response text:', response.data?.response);
+
+       let quiz = response.data?.quiz;
+       let code = response.data?.code;
+       const responseText = response.data?.response || '';
+
+       // If backend didn't provide structured data, try to extract from response text
+       if (!quiz || !code) {
+         const extracted = extractStructuredData(responseText);
+         if (extracted) {
+           quiz = extracted.quiz || quiz;
+           code = extracted.code || code;
+         }
+       }
+
+       const aiMsg: ChatMessage = {
+         role: 'assistant',
+         content: responseText,
+         timestamp: new Date(),
+         quiz,
+         code
+       };
       setMessages(prev => [...prev, aiMsg]);
 
       if (response.data?.mastery_achieved) {
@@ -628,14 +674,31 @@ const ModulePlayer = ({ module, onBack, onComplete }: { module: Module, onBack: 
         <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar" ref={scrollRef}>
           {messages.map((msg, idx) => (
             <div key={idx} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-              <div className={`max-w-2xl rounded-2xl p-5 ${msg.role === 'user'
-                ? 'bg-neon-blue/10 text-starlight-100 border border-neon-blue/20'
-                : 'bg-void-800 text-starlight-200 border border-starlight-100/5'
-                }`}>
-                <div className={`prose prose-invert prose-sm max-w-none ${msg.role === 'user' ? 'text-starlight-100' : 'text-starlight-300'}`}>
-                  <ReactMarkdown>{msg.content}</ReactMarkdown>
-                </div>
-              </div>
+               <div className={`max-w-2xl rounded-2xl p-5 ${msg.role === 'user'
+                 ? 'bg-neon-blue/10 text-starlight-100 border border-neon-blue/20'
+                 : 'bg-void-800 text-starlight-200 border border-starlight-100/5'
+                 }`}>
+                 <div className={`prose prose-invert prose-sm max-w-none ${msg.role === 'user' ? 'text-starlight-100' : 'text-starlight-300'}`}>
+                   {parseContent(msg.content).map((part, idx) => {
+                     if (part.type === 'text') {
+                       return <ReactMarkdown key={idx} components={markdownComponents}>{part.content || ''}</ReactMarkdown>;
+                     } else if (part.type === 'code') {
+                       return (
+                         <div key={idx} className="mt-4 mb-4">
+                           <SyntaxHighlighter
+                             style={oneDark}
+                             language={part.language}
+                             className="rounded-lg"
+                           >
+                             {part.snippet || ''}
+                           </SyntaxHighlighter>
+                         </div>
+                       );
+                     }
+                     return null;
+                   })}
+                 </div>
+               </div>
               {msg.quiz && (
                 <div className="mt-4 max-w-2xl w-full bg-void-900 rounded-xl p-4 border border-starlight-100/10 shadow-lg">
                   <div className="flex items-center gap-2 mb-3 text-neon-purple font-semibold">
@@ -654,6 +717,21 @@ const ModulePlayer = ({ module, onBack, onComplete }: { module: Module, onBack: 
                       </button>
                     ))}
                   </div>
+                </div>
+              )}
+              {msg.code && (
+                <div className="mt-4 max-w-2xl w-full bg-void-900 rounded-xl p-4 border border-starlight-100/10 shadow-lg">
+                  <div className="flex items-center gap-2 mb-3 text-neon-green font-semibold">
+                    <div className="p-1 bg-neon-green/10 rounded-lg"><FileText className="w-4 h-4" /></div>
+                    Code Example
+                  </div>
+                  <SyntaxHighlighter
+                    style={oneDark}
+                    language={msg.code.language}
+                    className="rounded-lg"
+                  >
+                    {msg.code.snippet}
+                  </SyntaxHighlighter>
                 </div>
               )}
               {msg.action === 'next_topic' && (

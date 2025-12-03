@@ -4,6 +4,7 @@ import prisma from '../config/database';
 import { authenticateToken } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
 import aiService from '../services/aiService';
+import youtubeService from '../services/youtubeService';
 import { performWebSearch } from '../utils/webSearch';
 import { SearchResponse } from '../types';
 
@@ -728,6 +729,48 @@ router.get('/', [
       }
     }
 
+    // NEW: YouTube search for educational content
+    let youtubeResults: any[] = [];
+    if (searchQuery && youtubeService.shouldIncludeYouTubeResults(searchQuery)) {
+      try {
+        console.log('📺 Searching YouTube for educational content...');
+        const ytSearchResult = await youtubeService.searchYouTubeVideos(searchQuery, 5);
+
+        if (ytSearchResult.videos.length > 0) {
+          // Filter out videos that are already saved as resources to avoid duplicates
+          const existingVideoIds = resources
+            .filter(r => r.type === 'video' && r.url?.includes('youtube.com'))
+            .map(r => youtubeService.extractVideoId(r.url!))
+            .filter(Boolean);
+
+          const newVideos = ytSearchResult.videos.filter(
+            video => !existingVideoIds.includes(video.id)
+          );
+
+          youtubeResults = newVideos.map(video => ({
+            id: video.id,
+            type: 'youtube_video',
+            title: video.title,
+            description: video.description,
+            url: video.url,
+            metadata: {
+              thumbnail: video.thumbnail,
+              channelTitle: video.channelTitle,
+              duration: video.duration,
+              viewCount: video.viewCount,
+              publishedAt: video.publishedAt
+            },
+            fromCache: ytSearchResult.fromCache
+          }));
+
+          console.log(`✅ Found ${youtubeResults.length} YouTube videos (${ytSearchResult.fromCache ? 'cached' : 'fresh'})`);
+        }
+      } catch (youtubeError) {
+        console.warn('YouTube search failed, continuing without YouTube results:', youtubeError);
+        youtubeResults = [];
+      }
+    }
+
     // Perform web search if user explicitly enabled it via toggle
     if (forceWebSearch && aiEnhancedSearch) {
       try {
@@ -762,6 +805,7 @@ router.get('/', [
       has_more: offset + limit < total,
       webResults: webResults.length > 0 ? webResults : undefined,
       learningResults: learningResults.length > 0 ? learningResults : undefined,
+      youtubeResults: youtubeResults.length > 0 ? youtubeResults : undefined,
     };
 
 
@@ -822,7 +866,7 @@ router.get('/', [
     let aiSummary: string | null = null;
 
     // Check if we actually found anything
-    const hasResults = resources.length > 0 || webResults.length > 0 || learningResults.length > 0;
+    const hasResults = resources.length > 0 || webResults.length > 0 || learningResults.length > 0 || youtubeResults.length > 0;
 
     if (!isChat && searchQuery) {
       try {

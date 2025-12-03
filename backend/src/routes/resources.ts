@@ -5,6 +5,7 @@ import { authenticateToken } from '../middleware/auth';
 import { createError } from '../middleware/errorHandler';
 import { CreateResourceRequest } from '../types';
 import aiService from '../services/aiService';
+import youtubeService from '../services/youtubeService';
 
 const router = express.Router();
 
@@ -230,7 +231,51 @@ router.post('/', [
     }
 
     const userId = req.user!.id;
-    const { title, description, url, type, content, file_path, metadata, tag_names }: CreateResourceRequest = req.body;
+    let { title, description, url, type, content, file_path, metadata, tag_names }: CreateResourceRequest = req.body;
+
+    // NEW: Extract YouTube transcript if it's a YouTube video
+    if (type === 'video' && url && youtubeService.isYouTubeUrl(url)) {
+      try {
+        console.log('📺 Detecting YouTube video, extracting transcript...');
+        const videoId = youtubeService.extractVideoId(url);
+
+        if (videoId) {
+          const transcript = await youtubeService.extractVideoTranscript(videoId);
+
+          if (transcript) {
+            // Store transcript in content if not already provided
+            if (!content || content.trim().length === 0) {
+              content = transcript;
+              console.log(`✅ Extracted transcript (${transcript.length} characters)`);
+            } else {
+              // Append transcript to existing content
+              content = `${content}\n\n--- Video Transcript ---\n${transcript}`;
+              console.log(`✅ Appended transcript to existing content`);
+            }
+
+            // Add video metadata
+            const enhancedMetadata = {
+              ...(metadata || {}),
+              videoId,
+              hasTranscript: true,
+              transcriptLength: transcript.length
+            };
+            metadata = enhancedMetadata;
+          } else {
+            console.warn('⚠️ No captions available for this YouTube video');
+            const enhancedMetadata = {
+              ...(metadata || {}),
+              videoId,
+              hasTranscript: false
+            };
+            metadata = enhancedMetadata;
+          }
+        }
+      } catch (transcriptError) {
+        console.warn('Failed to extract YouTube transcript:', transcriptError);
+        // Continue with resource creation even if transcript extraction fails
+      }
+    }
 
     // Create resource with tags using Prisma transaction
     const resource = await prisma.$transaction(async (tx: any) => {
@@ -524,10 +569,10 @@ router.put('/:id', [
       });
     });
 
-      res.json({
-        success: true,
-        data: { resource },
-      });
+    res.json({
+      success: true,
+      data: { resource },
+    });
   } catch (error) {
     next(error);
   }

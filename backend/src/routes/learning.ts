@@ -8,7 +8,8 @@ import {
   SubmitAssignmentRequest,
   GenerateCourseRequest
 } from '../types';
-import { aiService } from '../services/aiService';
+import aiService from '../services/aiService';
+import youtubeService from '../services/youtubeService';
 import { analyzeModuleConnections } from '../services/connectionAnalyzer';
 
 const router = Router();
@@ -1901,6 +1902,163 @@ User's current message: ${message}
   }
 });
 
+// Streaming version of module chat for typing effect
+router.get('/modules/chat/stream', async (req, res) => {
+  try {
+    const userId = (req as any).user.id;
+    const { module_id, message, conversation_history, token } = req.query;
+
+    // Set headers for SSE
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('X-Accel-Buffering', 'no');
+
+    if (!module_id || !message) {
+      res.write(`data: ${JSON.stringify({ type: 'error', message: 'Missing required parameters' })}\n\n`);
+      res.end();
+      return;
+    }
+
+    // Verify module belongs to user's subject
+    const module = await prisma.learningModule.findFirst({
+      where: {
+        id: module_id as string,
+        subject: {
+          user_id: userId
+        }
+      },
+      include: {
+        subject: true,
+        assignments: true
+      }
+    });
+
+    if (!module) {
+      res.write(`data: ${JSON.stringify({ type: 'error', message: 'Module not found' })}\n\n`);
+      res.end();
+      return;
+    }
+
+    // Check if module is already completed
+    const existingProgress = await prisma.learningProgress.findFirst({
+      where: {
+        user_id: userId,
+        module_id: module_id as string
+      }
+    });
+
+    if (existingProgress?.status === 'completed') {
+      const completeResponse = "This module is already completed! 🎉 You can review the content or move on to the next module.";
+
+      // Send word by word for typing effect
+      const words = completeResponse.split(' ');
+      for (const word of words) {
+        res.write(`data: ${JSON.stringify({ type: 'content', content: word + ' ' })}\n\n`);
+        if (res.flush) res.flush();
+        await new Promise(resolve => setTimeout(resolve, 30));
+      }
+
+      res.write(`data: ${JSON.stringify({
+        type: 'complete',
+        mastery_achieved: true
+      })}\n\n`);
+      res.end();
+      return;
+    }
+
+    // Check assignments
+    const hasAssignments = module.assignments && module.assignments.length > 0;
+    let pendingAssignmentsCount = 0;
+
+    if (hasAssignments) {
+      const assignmentSubmissions = await prisma.assignmentSubmission.findMany({
+        where: {
+          user_id: userId,
+          assignment: {
+            module_id: module_id as string
+          }
+        }
+      });
+
+      const submittedAssignmentIds = assignmentSubmissions.map(sub => sub.assignment_id);
+      const allAssignmentIds = module.assignments.map(assignment => assignment.id);
+      pendingAssignmentsCount = allAssignmentIds.length - submittedAssignmentIds.length;
+    }
+
+    // Build context
+    const assignmentsInfo = hasAssignments
+      ? `Assignments: ${module.assignments.length} total, ${pendingAssignmentsCount} pending submissions`
+      : 'Assignments: None';
+
+    const parsedHistory = conversation_history ? JSON.parse(conversation_history as string) : [];
+
+    const context = `
+Module: ${module.title}
+Description: ${module.description || 'No description'}
+Content: ${module.content || 'No content'}
+Difficulty: ${module.difficulty || 'Not specified'}
+Subject: ${module.subject.name}
+Current Status: ${existingProgress?.status || 'not_started'}
+${assignmentsInfo}
+
+${hasAssignments && pendingAssignmentsCount > 0
+        ? `CRITICAL: This module has ${pendingAssignmentsCount} unsubmitted assignment(s). The user MUST complete and submit ALL assignments before they can mark this module as completed. Do not suggest completion until all assignments are submitted.`
+        : 'All assignments have been submitted - user can potentially complete this module.'}
+
+IMPORTANT: You can ONLY suggest that the user mark this module as completed when they demonstrate sufficient understanding AND have completed ALL assignments for this module.
+
+Conversation History:
+${parsedHistory ? parsedHistory.map((msg: any) => `${msg.role}: ${msg.content}`).join('\n') : 'No previous conversation'}
+
+User's current message: ${message}
+    `.trim();
+
+    // Generate AI response
+    const aiResponse = await aiService.chatWithModule(
+      message as string,
+      context,
+      parsedHistory || []
+    );
+
+    // Stream the response word by word for typing effect
+    const responseText = aiResponse.response || "I'm here to help you learn!";
+    const words = responseText.split(' ');
+
+    for (let i = 0; i < words.length; i++) {
+      const word = words[i];
+      res.write(`data: ${JSON.stringify({
+        type: 'content',
+        content: word + (i < words.length - 1 ? ' ' : '')
+      })}\n\n`);
+      if (res.flush) res.flush();
+
+      // Delay for typing effect (30ms per word)
+      await new Promise(resolve => setTimeout(resolve, 30));
+    }
+
+    // Send completion with quiz/code if available
+    res.write(`data: ${JSON.stringify({
+      type: 'complete',
+      quiz: aiResponse.quiz,
+      code: aiResponse.code,
+      mastery_achieved: aiResponse.mastery_achieved || false
+    })}\n\n`);
+
+    if (res.flush) res.flush();
+    res.end();
+
+  } catch (error) {
+    console.error('Error in streaming chat:', error);
+    res.write(`data: ${JSON.stringify({
+      type: 'error',
+      message: 'Failed to process message'
+    })}\n\n`);
+    res.end();
+  }
+});
+
 
 
 // Cross-domain learning analysis
@@ -2088,7 +2246,54 @@ router.post('/generate-curriculum', async (req, res) => {
       })
     ));
 
-    res.json({ subject, modules });
+    // NEW: Search for suggested YouTube videos for each module
+    const modulesWithVideos = await Promise.all(
+      modules.map(async (module, index) => {
+        try {
+          const searchQuery = `${topic} ${module.title} tutorial`;
+          console.log(`📹 Searching YouTube for module: ${module.title}`);
+
+          const ytResult = await youtubeService.searchYouTubeVideos(searchQuery, 3);
+
+          if (ytResult.videos.length > 0) {
+            // Store YouTube suggestions in module metadata
+            await prisma.learningModule.update({
+              where: { id: module.id },
+              data: {
+                content: `${module.description || ''}\n\n## Suggested Videos:\n${ytResult.videos.map(v =>
+                  `- [${v.title}](${v.url}) by ${v.channelTitle}`
+                ).join('\n')}`
+              }
+            });
+
+            console.log(`✅ Added ${ytResult.videos.length} video suggestions for "${module.title}"`);
+
+            return {
+              ...module,
+              suggestedVideos: ytResult.videos.map(v => ({
+                id: v.id,
+                title: v.title,
+                url: v.url,
+                thumbnail: v.thumbnail,
+                channelTitle: v.channelTitle,
+                duration: v.duration
+              }))
+            };
+          }
+        } catch (error) {
+          console.warn(`Failed to fetch YouTube videos for module "${module.title}":`, error);
+        }
+
+        return { ...module, suggestedVideos: [] };
+      })
+    );
+
+    res.json({
+      title: subject.name,
+      description: subject.description,
+      modules: modulesWithVideos,
+      id: subject.id
+    });
   } catch (error) {
     console.error('Error generating curriculum:', error);
     res.status(500).json({ error: 'Failed to generate curriculum' });

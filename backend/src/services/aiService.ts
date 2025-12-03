@@ -175,7 +175,7 @@ class AIService {
     this.client = axios.create({
       baseURL: this.config.proxyUrl,
       headers,
-      timeout: 30000, // 30 seconds
+      timeout: 120000, // 120 seconds (2 minutes) - increased for complex AI operations
     });
 
 
@@ -259,7 +259,7 @@ class AIService {
   /**
    * Generate embeddings for text using local model
    */
-  async createEmbeddings(text: string, model: string = 'text-embedding-ada-002') {
+  async createEmbeddings(text: string, _model: string = 'text-embedding-ada-002') {
     try {
       // Import locally to avoid circular dependencies
       const embeddingService = (await import('./embeddingService')).default;
@@ -327,7 +327,7 @@ class AIService {
             : 'note',
           summary: metadata.summary || metadata.description || ''
         };
-      } catch (parseError) {
+      } catch {
         console.warn('Failed to parse AI metadata response, using defaults');
         return {
           title: content.substring(0, 100).split('\n')[0] || 'Captured Content',
@@ -1041,32 +1041,41 @@ class AIService {
 
     Your goal is to help the user master the current topic.
     
-    CRITICAL INSTRUCTIONS FOR CODE:
-    1. NEVER write code as plain text.
-    2. ALWAYS use markdown code blocks for code snippets in the text (e.g., \`\`\`python ... \`\`\`).
-    3. CRITICAL: If your response involves ANY code (even a small snippet), you MUST populate the "code" field in the JSON response with that snippet.
-    4. CRITICAL: If you are asking a quiz question that involves code, you MUST populate the "quiz.codeSnippet" field.
-    5. Ensure code is syntactically correct and follows best practices.
-    - If you provide a 'code' object in the JSON response, do NOT include that same code block in the 'response' text. Only describe the code in the text.
-    - If you provide a 'quiz' object, do NOT include the question or options in the 'response' text.
-    - Do NOT ask the user if they are ready for the next topic/checkpoint UNLESS you are also setting "mastery_achieved": true in the same response.
-    - If "mastery_achieved" is false, you must continue teaching or testing the CURRENT topic.
-    - Only set "mastery_achieved": true when the user has explicitly demonstrated understanding (e.g., answered a quiz correctly or explained a concept).
-    Response Format (JSON):
-    {
-      "response": "Your conversational response here. Use markdown for formatting. Use bold for emphasis.",
-      "quiz": { // Optional: Only when checking understanding
-        "question": "Question text",
-        "options": ["Option A", "Option B", "Option C", "Option D"],
-        "correctAnswer": 0, // Index of correct option
-        "codeSnippet": "print('Hello')" // Optional: Code context for the question
-      },
-      "code": { // Optional: When explaining with code
-        "language": "python", // or javascript, etc.
-        "snippet": "print('Hello World')"
-      },
-      "mastery_achieved": boolean // Set to true ONLY when user demonstrates mastery of the CURRENT checkpoint/topic.
-    }
+     CRITICAL INSTRUCTIONS FOR RESPONSE FORMAT:
+     1. You MUST return a valid JSON object with this EXACT structure:
+        {
+          "response": "Your conversational response as plain text or markdown - DO NOT include the JSON structure here!",
+          "quiz": {
+            "question": "string",
+            "options": ["string1", "string2", "string3", "string4"],
+            "correctAnswer": 0
+          } (optional),
+          "code": {
+            "language": "python",
+            "snippet": "your code as a single multi-line string with \\n for line breaks"
+          } (optional),
+          "mastery_achieved": false
+        }
+     2. CRITICAL: The "response" field MUST contain ONLY plain text or markdown. NEVER include the entire JSON object in the response text.
+     3. CRITICAL: Do NOT echo back or repeat the JSON structure at the end of your response.
+     4. CRITICAL: If you want to include a quiz, put it in the "quiz" field ONLY, NOT in the "response" text.
+     5. CRITICAL: If you want to include code, put it in the "code" field with:
+        - "language" as a STRING (e.g., "python", "javascript")
+        - "snippet" as a STRING with newlines using \n (NOT as an array)
+     6. Use markdown formatting in the response field for formatting (bold, italic, inline code with backticks, etc.)
+     
+     
+     CRITICAL INSTRUCTIONS FOR CODE:
+     1. NEVER write code as plain text.
+     2. ALWAYS use markdown code blocks for code snippets in the text (e.g., \`\`\`python ... \`\`\`).
+     3. CRITICAL: If your response involves ANY code (even a small snippet), you MUST populate the "code" field in the JSON response with that snippet.
+     4. CRITICAL: If you are asking a quiz question that involves code, you MUST populate the "quiz.codeSnippet" field.
+     5. Ensure code is syntactically correct and follows best practices.
+     - If you provide a 'code' object in the JSON response, do NOT include that same code block in the 'response' text. Only describe the code in the text.
+     - If you provide a 'quiz' object, do NOT include the question or options in the 'response' text.
+     - Do NOT ask the user if they are ready for the next topic/checkpoint UNLESS you are also setting "mastery_achieved": true in the same response.
+     - If "mastery_achieved" is false, you must continue teaching or testing the CURRENT topic.
+     - Only set "mastery_achieved": true when the user has explicitly demonstrated understanding (e.g., answered a quiz correctly or explained a concept).
     
     INTERACTION GUIDELINES:
     - Keep responses concise and encouraging.
@@ -1087,12 +1096,218 @@ class AIService {
         temperature: 0.7,
         response_format: { type: "json_object" }
       });
-
       const content = (response as ChatCompletionResponse).choices[0]?.message?.content?.trim();
       if (!content) throw new Error('No content from AI');
 
       const jsonContent = content.replace(/```json\n?|\n?```/g, '');
-      return JSON.parse(jsonContent);
+
+      try {
+        // First check if the entire content is a stringified JSON (double-encoded)
+        let parsed = JSON.parse(jsonContent);
+
+        // If the parsed result is a string that looks like JSON, parse it again
+        if (typeof parsed === 'string' && (parsed.trim().startsWith('{') || parsed.trim().startsWith('['))) {
+          try {
+            parsed = JSON.parse(parsed);
+            console.log('🔧 Unwrapped double-stringified JSON');
+          } catch {
+            // Not double-stringified, continue
+          }
+        }
+
+        // Helper to unwrap potential double-stringified JSON or nested objects
+        const unwrapResponse = (data: any): any => {
+          if (typeof data === 'string') {
+            try {
+              // Try to parse string as JSON
+              const parsed = JSON.parse(data);
+              // If it parsed to an object or string, recurse
+              if (typeof parsed === 'object' && parsed !== null) {
+                return unwrapResponse(parsed);
+              } else if (typeof parsed === 'string') {
+                return unwrapResponse(parsed);
+              }
+              return parsed;
+            } catch {
+              // Not JSON, return as is
+              return data;
+            }
+          }
+
+          // If it's an object, check if it has a 'response' field that needs unwrapping
+          if (typeof data === 'object' && data !== null) {
+            // If it has a 'response' field, try to unwrap it
+            if (data.response && typeof data.response === 'string') {
+              // Try to parse the response field
+              try {
+                if (data.response.trim().startsWith('{') || data.response.trim().startsWith('[')) {
+                  const nested = JSON.parse(data.response);
+                  if (typeof nested === 'object' && nested !== null) {
+                    // If nested object has response or message, use that
+                    // Otherwise, DON'T stringify - just keep the original data.response
+                    if (nested.response || nested.message) {
+                      return {
+                        ...data,
+                        ...nested,
+                        response: nested.response || nested.message
+                      };
+                    }
+                    // If the nested object has quiz or code fields but no response,
+                    // merge them but keep the original response text
+                    if (nested.quiz || nested.code) {
+                      return {
+                        ...data,
+                        quiz: nested.quiz || data.quiz,
+                        code: nested.code || data.code,
+                        mastery_achieved: nested.mastery_achieved !== undefined ? nested.mastery_achieved : data.mastery_achieved
+                      };
+                    }
+                    // Otherwise, the response field contains invalid JSON structure
+                    // Return error message instead of stringified JSON
+                  }
+                }
+              } catch {
+                // response field is just text, which is fine
+              }
+            }
+            return data;
+          }
+
+          return data;
+        };
+
+        // Apply unwrapping logic
+        parsed = unwrapResponse(parsed);
+
+        // Clean up response if it contains the JSON structure at the end (AI hallucination)
+        if (parsed.response && typeof parsed.response === 'string') {
+          // First, detect if JSON structure was appended at the end (even after code blocks)
+          // Look for the LAST occurrence of a JSON structure start
+          const jsonStartPatterns = [
+            /\{[\s\n]*"response"[\s\n]*:/g,
+            /\{[\s\n]*"code"[\s\n]*:/g,
+            /\{[\s\n]*"quiz"[\s\n]*:/g,
+            /\{[\s\n]*"mastery_achieved"[\s\n]*:/g
+          ];
+
+          let latestJsonStart = -1;
+          for (const pattern of jsonStartPatterns) {
+            const matches = [...parsed.response.matchAll(pattern)];
+            if (matches.length > 0) {
+              // Get the LAST match (most likely the appended JSON)
+              const lastMatch = matches[matches.length - 1];
+              if (lastMatch.index !== undefined) {
+                // Only consider it if it's not at the very beginning (position > 50)
+                if (lastMatch.index > 50 && (latestJsonStart === -1 || lastMatch.index < latestJsonStart)) {
+                  latestJsonStart = lastMatch.index;
+                }
+              }
+            }
+          }
+
+          if (latestJsonStart > 0) {
+            // Try to parse from this position to the end
+            const potentialJson = parsed.response.substring(latestJsonStart);
+            try {
+              const extracted = JSON.parse(potentialJson);
+              if (extracted.response !== undefined || extracted.quiz || extracted.code || extracted.mastery_achieved !== undefined) {
+                // This is the duplicated structure - remove it!!
+                parsed.response = parsed.response.substring(0, latestJsonStart).trim();
+                console.log('🧹 Cleaned appended JSON structure from response (found at position', latestJsonStart, ')');
+              }
+            } catch {
+              // Not valid JSON at that position
+            }
+          }
+
+          // Check for JSON block at the end of the response string
+          const lastBrace = parsed.response.lastIndexOf('}');
+          const firstBrace = parsed.response.indexOf('{');
+
+          if (lastBrace > firstBrace && firstBrace >= 0) {
+            // Try to find a valid JSON object at the end
+            // We scan backwards from the last brace to find the matching opening brace
+            let balance = 0;
+            let start = -1;
+            for (let i = lastBrace; i >= firstBrace; i--) {
+              if (parsed.response[i] === '}') balance++;
+              else if (parsed.response[i] === '{') balance--;
+
+              if (balance === 0) {
+                start = i;
+                break;
+              }
+            }
+
+            if (start >= 0) {
+              const potentialJson = parsed.response.substring(start, lastBrace + 1);
+              try {
+                const extracted = JSON.parse(potentialJson);
+                // If it looks like a response object (has response, quiz, or code), remove it
+                if (extracted.response || extracted.quiz || extracted.code || extracted.mastery_achieved !== undefined) {
+                  parsed.response = parsed.response.substring(0, start).trim();
+                }
+              } catch {
+                // Not valid JSON
+              }
+            }
+          }
+        }
+
+        // Final safety check: if response field is itself a JSON string, parse it
+        if (parsed.response && typeof parsed.response === 'string') {
+          const trimmedResponse = parsed.response.trim();
+          if (trimmedResponse.startsWith('{') && trimmedResponse.endsWith('}')) {
+            try {
+              const nestedResponse = JSON.parse(trimmedResponse);
+              if (nestedResponse.response && typeof nestedResponse.response === 'string') {
+                // The response field contained a stringified response object!
+                console.log('🔧 Unwrapped JSON from response field');
+                parsed.response = nestedResponse.response;
+                // Also merge in any quiz or code from the nested object
+                if (nestedResponse.quiz) parsed.quiz = nestedResponse.quiz;
+                if (nestedResponse.code) parsed.code = nestedResponse.code;
+                if (nestedResponse.mastery_achieved !== undefined) parsed.mastery_achieved = nestedResponse.mastery_achieved;
+              }
+            } catch {
+              // Not a JSON string, which is fine
+            }
+          }
+        }
+
+        return {
+          response: typeof parsed.response === 'string' ? parsed.response : (typeof parsed === 'string' ? parsed : "I'm here to help you learn."),
+          quiz: parsed.quiz,
+          code: parsed.code,
+          mastery_achieved: parsed.mastery_achieved || false
+        };
+      } catch {
+        // Fallback for plain text responses
+        // Check if it contains JSON at the end
+        const jsonStart = content.lastIndexOf('{');
+        if (jsonStart > 0) {
+          try {
+            const textPart = content.substring(0, jsonStart).trim();
+            const jsonPart = content.substring(jsonStart);
+            const parsedJson = JSON.parse(jsonPart);
+            if (parsedJson.response) {
+              return {
+                response: textPart, // Don't append the JSON response if it's likely a duplicate
+                quiz: parsedJson.quiz,
+                code: parsedJson.code,
+                mastery_achieved: parsedJson.mastery_achieved || false
+              };
+            }
+          } catch {
+            // Not valid JSON at end
+          }
+        }
+
+        return {
+          response: content,
+          mastery_achieved: false
+        };
+      }
     } catch (error) {
       console.error('Error in chatWithModule:', error);
       return {

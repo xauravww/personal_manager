@@ -88,6 +88,7 @@ export interface SearchResponse {
   has_more: boolean;
   webResults?: WebSearchResult[];
   learningResults?: any[];
+  youtubeResults?: any[];
   ai?: {
     enhancedQuery: string;
     searchTerms: string[];
